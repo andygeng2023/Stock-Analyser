@@ -22,6 +22,10 @@ Deno.serve(async (req) => {
     const symbol = mode === "scan" ? "SCAN" : String(body.ticker ?? "").trim().toUpperCase();
     const period = mode === "scan" ? "2y" : (body.period ?? "5y");
     const horizon = mode === "scan" ? 30 : (body.horizon ?? 30);
+    const scanSource = mode === "scan" ? String(body.source ?? "both").toLowerCase() : "both";
+    if (mode === "scan" && !["yfinance", "nasdaq", "both"].includes(scanSource)) {
+      return json({ error: "Choose Yahoo Finance, Nasdaq, or both as the scan source." }, 400);
+    }
 
     if (mode === "analysis" && !/^[A-Z0-9.^=-]{1,20}$/.test(symbol)) {
       return json({ error: "Enter a valid stock ticker." }, 400);
@@ -43,6 +47,7 @@ Deno.serve(async (req) => {
     const { data: existing, error: existingError } = await admin.from("analysis_jobs")
       .select("id,status")
       .eq("job_type", mode)
+      .eq("scan_source", scanSource)
       .eq("ticker", symbol)
       .eq("period", period)
       .eq("horizon", horizon)
@@ -67,6 +72,7 @@ Deno.serve(async (req) => {
         period,
         horizon,
         job_type: mode,
+        scan_source: scanSource,
         status: "queued",
         client_ip_hash: "public-no-hourly-limit",
       })
