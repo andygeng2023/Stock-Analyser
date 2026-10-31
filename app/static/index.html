@@ -17,7 +17,7 @@
 <input id="ticker" value="AAPL" placeholder="Ticker symbol" maxlength="20" required aria-label="Stock ticker">
 <select id="period" aria-label="Historical period"><option>1y</option><option>2y</option><option selected>5y</option><option>10y</option><option>max</option></select>
 <select id="horizon" aria-label="Forecast horizon"><option value="5">5 days</option><option value="10">10 days</option><option value="20">20 days</option><option value="30" selected>30 days</option><option value="60">60 days</option></select>
-<button id="submit" type="submit">Analyse stock</button>
+<button id="submit" type="submit">Analyse stock</button>\n<button id="hard-rescan-search" class="secondary-button" type="button">Hard refresh</button>
 </form>
 <div class="job-progress" id="search-progress" hidden><div class="progress-track"><div id="search-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="search-progress-label">Queued</strong><span id="search-progress-percent">0%</span></div><p id="search-progress-stage" class="muted"></p></div><p id="status" role="status" aria-live="polite">Enter a ticker to begin.</p>
 <section id="results" hidden>
