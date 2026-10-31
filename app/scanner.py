@@ -201,12 +201,13 @@ def fast_filter(symbols, progress_callback=None):
             progress = 18 + int(42 * batch_number / total_batches)
             progress_callback(progress, "Fast market filter", f"Downloaded batch {batch_number}/{total_batches}; {len(ranked):,} stocks currently pass liquidity and history checks.")
     ranked.sort(key=lambda item: item["fast_score"], reverse=True)
-    return ranked[:FAST_CANDIDATES], len(ranked)
+    return ranked, len(ranked)
 
 
 def run_market_scan(source="both", progress_callback=None):
     symbols = load_universe(source, progress_callback)
     candidates, eligible_count = fast_filter(symbols, progress_callback)
+    candidates = candidates[:FAST_CANDIDATES]
     refined = []
     failures = []
     for candidate_index, item in enumerate(candidates, start=1):
