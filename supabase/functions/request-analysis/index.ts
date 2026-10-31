@@ -54,9 +54,9 @@ Deno.serve(async (req) => {
       .single();
     if (insertError) throw insertError;
 
-    const owner = Deno.env.get("GITHUB_OWNER") ?? "andygeng2023";
-    const repository = Deno.env.get("GITHUB_REPOSITORY") ?? "Stock-Analyser";
-    const workflow = Deno.env.get("GITHUB_ANALYSIS_WORKFLOW") ?? "analyze-stock.yml";
+    const owner = "andygeng2023";
+    const repository = "Stock-Analyser";
+    const workflow = "analyze-stock.yml";
     const dispatch = await fetch(
       `https://api.github.com/repos/${owner}/${repository}/actions/workflows/${workflow}/dispatches`,
       {
