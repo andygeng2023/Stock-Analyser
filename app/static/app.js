@@ -103,15 +103,18 @@ async function startScan(hard=false){
    $("scan-status").textContent="Market scan complete · "+(result.as_of||"");
   }
   renderScan(result);
+  if(request.id)latestScanId=request.id;
  }catch(error){$("scan-status").textContent=error.message;}
  finally{$("start-scan").disabled=false;$("hard-rescan").disabled=false;}
 }
 $("start-scan").addEventListener("click",()=>startScan(false));
 $("hard-rescan").addEventListener("click",()=>startScan(true));
 
-$("scan-source").addEventListener("change",()=>{latestScanLoaded=false;if(!$("scan-screen").hidden)loadLatestScan();});
+$("scan-source").addEventListener("change",()=>{latestScanLoaded=false;latestScanId=null;if(!$("scan-screen").hidden)loadLatestScan();});
 
 let latestScanLoaded=false;
+let latestScanId=null;
+let latestScanRefreshBusy=false;
 async function loadLatestScan(){
  if(latestScanLoaded)return;
  if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured.";return;}
@@ -126,6 +129,7 @@ async function loadLatestScan(){
   const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});
   const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve the latest scan.");
   renderScan(data.result);
+  latestScanId=request.id;
   updateProgress("scan",{status:"completed",progress:100,stage:"Latest shared scan · "+new Date(request.cache_created_at).toLocaleString()});
   $("scan-status").textContent="Showing the latest shared background scan · "+new Date(request.cache_created_at).toLocaleString();
  }catch(error){
@@ -133,3 +137,22 @@ async function loadLatestScan(){
   $("scan-status").textContent="Could not load the latest scan: "+error.message;
  }
 }
+
+
+async function refreshLatestScan(){
+ if($("scan-screen").hidden||latestScanRefreshBusy||!config.supabaseUrl||!config.supabasePublishableKey)return;
+ latestScanRefreshBusy=true;
+ try{
+  const request=await requestAnalysis(null,null,null,"scan",false,true);
+  if(request.id&&request.id!==latestScanId){
+   const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});
+   const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve the updated scan.");
+   renderScan(data.result);
+   latestScanId=request.id;
+   updateProgress("scan",{status:"completed",progress:100,stage:"New background scan · "+new Date(request.cache_created_at).toLocaleString()});
+   $("scan-status").textContent="Updated with the latest shared background scan · "+new Date(request.cache_created_at).toLocaleString();
+  }
+ }catch(error){$("scan-status").textContent="Could not refresh the latest scan: "+error.message;}
+ finally{latestScanRefreshBusy=false;}
+}
+setInterval(refreshLatestScan,60000);
