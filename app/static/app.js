@@ -56,7 +56,7 @@ function switchTab(tab){
  $("scan-screen").hidden=!scanning;
  $("nav-search").classList.toggle("active",!scanning);
  $("nav-scan").classList.toggle("active",scanning);
- if(scanning){$("nav-scan").setAttribute("aria-current","page");$("nav-search").removeAttribute("aria-current");}
+ if(scanning){$("nav-scan").setAttribute("aria-current","page");$("nav-search").removeAttribute("aria-current");loadLatestScan();}
  else{$("nav-search").setAttribute("aria-current","page");$("nav-scan").removeAttribute("aria-current");}
  window.scrollTo({top:0,behavior:"instant"});
 }
@@ -108,4 +108,25 @@ async function startScan(hard=false){
 }
 $("start-scan").addEventListener("click",()=>startScan(false));
 $("hard-rescan").addEventListener("click",()=>startScan(true));
-\n$("hard-rescan-search").addEventListener("click",()=>$("search").requestSubmit({submitter:$("hard-rescan-search")}));\n
+\n$("scan-source").addEventListener("change",()=>{latestScanLoaded=false;if(!$("scan-screen").hidden)loadLatestScan();});\n
+let latestScanLoaded=false;
+async function loadLatestScan(){
+ if(latestScanLoaded)return;
+ latestScanLoaded=true;
+ try{
+  $("scan-status").textContent="Loading the latest shared background scan…";
+  const request=await requestAnalysis(null,null,null,"scan",false,true);
+  if(!request.found&&!request.id){
+   $("scan-status").textContent="No completed background scan is available yet. A scan is scheduled to run automatically.";
+   return;
+  }
+  const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});
+  const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve the latest scan.");
+  renderScan(data.result);
+  updateProgress("scan",{status:"completed",progress:100,stage:"Latest shared scan · "+new Date(request.cache_created_at).toLocaleString()});
+  $("scan-status").textContent="Showing the latest shared background scan · "+new Date(request.cache_created_at).toLocaleString();
+ }catch(error){
+  latestScanLoaded=false;
+  $("scan-status").textContent="Could not load the latest scan: "+error.message;
+ }
+}
