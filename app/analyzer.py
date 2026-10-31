@@ -54,7 +54,7 @@ def _metrics(actual,predicted):
         "directional_accuracy":round(float(np.mean(np.sign(actual)==np.sign(predicted))*100),2),
     }
 
-def analyze_ticker(ticker,period="5y",horizon=30):
+def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
     ticker=ticker.strip().upper()
     if not ticker or len(ticker)>20 or not all(c.isalnum() or c in ".-^=" for c in ticker):
         raise AnalysisError("Enter a valid ticker.")
@@ -67,6 +67,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
         history=asset.history(period=period,auto_adjust=True)
         if history.empty or len(history)<100:
             raise AnalysisError("Insufficient price history. Check the ticker.")
+        if progress_callback: progress_callback(8, "Downloading price history", f"Loaded {len(history):,} historical rows.")
         close=history["Close"].dropna().astype(float)
         volume=history["Volume"].reindex(close.index).fillna(0)
         returns=np.log(close/close.shift(1)).dropna()
@@ -77,6 +78,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
         split=max(60,int(len(returns)*0.8))
         split=min(split,len(returns)-20)
         train_returns=returns.iloc[:split]
+        if progress_callback: progress_callback(20, "Fitting ARIMA model", "Selecting ARIMA parameters using the training window.")
         order,train_arima=_select_order(train_returns)
 
         # Generate genuine one-step-ahead ARIMA residuals throughout the holdout.
@@ -93,6 +95,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             # Keep appended observations on the same numeric index as the fitted model.
             state=state.append(np.asarray([actual],dtype=float),refit=False)
 
+        if progress_callback: progress_callback(42, "Validating model", "Running chronological one-step-ahead validation.")
         features=_feature_frame(close,volume,returns,residuals)
         target=residuals.reindex(close.index).shift(-1)
         data=features.assign(target=target).replace([np.inf,-np.inf],np.nan).dropna()
@@ -117,6 +120,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             "hybrid":_metrics(actual_returns,predicted_arima+predicted_residuals),
         }
 
+        if progress_callback: progress_callback(65, "Fitting SVR and final ARIMA model", "Training the hybrid model on the full history.")
         # Refit both components on all available observations for the live forecast.
         full_order,full_arima=_select_order(returns)
         full_residuals=pd.Series(np.asarray(full_arima.resid,dtype=float),index=returns.index)
@@ -127,6 +131,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             raise AnalysisError("Not enough clean observations for the final SVR model.")
         svr=make_model().fit(full_data.drop(columns="target"),full_data["target"])
 
+        if progress_callback: progress_callback(80, "Generating forecast", "Calculating the requested forecast horizon.")
         base=np.asarray(full_arima.forecast(horizon),dtype=float)
         recent=list(returns.iloc[-20:].to_numpy(dtype=float))
         errors=list(full_residuals.iloc[-3:].to_numpy(dtype=float))
@@ -157,6 +162,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             recent.append(next_return)
             errors.append(correction)
 
+        if progress_callback: progress_callback(90, "Loading company details", "Retrieving available company fundamentals.")
         info={}
         try:
             info=asset.get_info() or {}
