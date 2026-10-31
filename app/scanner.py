@@ -27,7 +27,13 @@ def load_universe():
     )
     with urllib.request.urlopen(request, timeout=45) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    rows = payload.get("data", {}).get("rows", [])
+    data = payload.get("data") or {}
+    # Nasdaq's screener response nests records under data.table.rows.
+    # Older/alternate responses have exposed data.rows directly.
+    table = data.get("table") or {}
+    rows = table.get("rows") or data.get("rows") or []
+    if not isinstance(rows, list):
+        rows = []
     symbols = []
     seen = set()
     for row in rows:
@@ -40,7 +46,13 @@ def load_universe():
         seen.add(symbol)
         symbols.append(symbol)
     if len(symbols) < MIN_UNIVERSE:
-        raise RuntimeError(f"Market universe returned only {len(symbols)} stocks; at least {MIN_UNIVERSE} are required.")
+        response_keys = ", ".join(sorted(str(key) for key in data.keys())) or "none"
+        table_keys = ", ".join(sorted(str(key) for key in table.keys())) or "none"
+        raise RuntimeError(
+            f"Nasdaq screener supplied {len(symbols)} symbols (data keys: {response_keys}; "
+            f"table keys: {table_keys}). Expected at least {MIN_UNIVERSE}; "
+            "the provider may have changed its response or temporarily blocked the request."
+        )
     return symbols
 
 
