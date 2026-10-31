@@ -34,9 +34,9 @@ async function waitForResult(id,statusElement=$("status"),prefix="search"){
 }
 $("search").onsubmit=async e=>{
  e.preventDefault();if(!config.supabaseUrl||!config.supabasePublishableKey){setStatus("Supabase is not configured. Add the project URL and publishable key to GitHub Actions variables.");return;}
- $("submit").disabled=true;$("results").hidden=true;
- try{setStatus("Creating analysis request…");const request=await requestAnalysis($("ticker").value.trim().toUpperCase(),$("period").value,Number($("horizon").value));$("search-progress").hidden=false;let d;if(request.status==="completed"&&request.cached){const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve cached analysis.");d=data.result;updateProgress("search",{status:"completed",progress:100,stage:"Shared cached analysis · "+new Date(request.cache_created_at).toLocaleString()});}else{d=await waitForResult(request.id,$("status"),"search");}render(d);$("results").hidden=false;setStatus("Analysis complete · "+d.as_of);}
- catch(err){setStatus(err.message);}finally{$("submit").disabled=false;}
+ $("submit").disabled=true;$("hard-rescan-search").disabled=true;$("results").hidden=true;
+ try{setStatus("Creating analysis request…");const request=await requestAnalysis($("ticker").value.trim().toUpperCase(),$("period").value,Number($("horizon").value),"analysis",e.submitter?.id==="hard-rescan-search");$("search-progress").hidden=false;let d;if(request.status==="completed"&&request.cached){const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve cached analysis.");d=data.result;updateProgress("search",{status:"completed",progress:100,stage:"Shared cached analysis · "+new Date(request.cache_created_at).toLocaleString()});}else{d=await waitForResult(request.id,$("status"),"search");}render(d);$("results").hidden=false;setStatus("Analysis complete · "+d.as_of);}
+ catch(err){setStatus(err.message);}finally{$("submit").disabled=false;$("hard-rescan-search").disabled=false;}
 };
 function render(d){
  const c=d.currency||"USD";$("symbol").textContent=d.ticker+" · "+(d.exchange||"");$("name").textContent=d.company||d.ticker;$("price").textContent=cash(d.price,c);$("change").textContent=pct(d.change_percent);
@@ -108,3 +108,4 @@ async function startScan(hard=false){
 }
 $("start-scan").addEventListener("click",()=>startScan(false));
 $("hard-rescan").addEventListener("click",()=>startScan(true));
+\n$("hard-rescan-search").addEventListener("click",()=>$("search").requestSubmit({submitter:$("hard-rescan-search")}));\n
