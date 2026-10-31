@@ -7,8 +7,13 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
-# Two independent shards process different portions of the same ranked universe.
+# Two independent shards rotate through the same universe; the primary shard dispatches a successor before the hosted-job ceiling.
+concurrency:
+  group: stock-market-indexer
+  cancel-in-progress: false
+
 jobs:
   index:
     runs-on: ubuntu-latest
@@ -33,4 +38,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           INDEX_SHARD: ${{ matrix.shard }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: python -m app.indexer
