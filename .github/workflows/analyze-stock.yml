@@ -1,0 +1,50 @@
+name: Analyse stock
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Supabase analysis job UUID
+        required: true
+        type: string
+      ticker:
+        description: Stock ticker
+        required: true
+        type: string
+      period:
+        description: Historical period
+        required: true
+        type: choice
+        options: [1y, 2y, 5y, 10y, max]
+      horizon:
+        description: Forecast horizon in trading days
+        required: true
+        type: choice
+        options: ["5", "10", "20", "30", "60"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stock-analysis-${{ inputs.job_id }}
+  cancel-in-progress: false
+
+jobs:
+  analyse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install analysis dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run analysis and save result
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m app.worker "${{ inputs.job_id }}" "${{ inputs.ticker }}" "${{ inputs.period }}" "${{ inputs.horizon }}"
