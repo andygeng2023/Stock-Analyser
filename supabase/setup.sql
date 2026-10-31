@@ -26,7 +26,7 @@ create index if not exists analysis_jobs_status_created_idx
 create or replace function public.claim_next_analysis_job()
 returns setof public.analysis_jobs
 language plpgsql
-security definer
+security invoker
 set search_path = public, pg_temp
 as $$
 declare
