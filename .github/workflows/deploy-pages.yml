@@ -28,9 +28,13 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Build static site and runtime configuration
         env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "Missing Supabase configuration. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY as Actions variables or secrets."
+            exit 1
+          fi
           mkdir -p site
           cp app/static/index.html app/static/style.css app/static/app.js site/
           python - <<'PY'
