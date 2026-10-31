@@ -44,6 +44,29 @@ def update_job(job_id: str, payload: dict) -> None:
     supabase_request(f"analysis_jobs?id=eq.{job_id}", method="PATCH", payload=payload)
 
 
+
+def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, result: dict) -> None:
+    fundamentals = result.get("fundamentals") or {}
+    market_cap = fundamentals.get("market_cap") or fundamentals.get("marketCap")
+    try:
+        market_cap = float(market_cap) if market_cap is not None else None
+    except (TypeError, ValueError):
+        market_cap = None
+    payload = {
+        "ticker": ticker, "period": period, "horizon": horizon, "result": result,
+        "source_job_id": job_id, "indexed_at": datetime.now(timezone.utc).isoformat(),
+        "market_cap": market_cap,
+        "priority": float(result.get("market_summary", {}).get("average_dollar_volume", 0) or 0),
+    }
+    base = os.environ["SUPABASE_URL"].rstrip("/")
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    request_json(
+        f"{base}/rest/v1/market_index?on_conflict=ticker,period,horizon",
+        method="POST", payload=payload,
+        headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "resolution=merge-duplicates,return=minimal"},
+    )
+
+
 def claim_next_job():
     rows = supabase_request("rpc/claim_next_analysis_job", method="POST", payload={})
     return rows[0] if rows else None
@@ -85,6 +108,11 @@ def process_job(job: dict) -> None:
         else:
             result = analyze_ticker(ticker, job["period"], int(job["horizon"]), progress_callback=report_progress)
         update_job(job_id, {"status": "completed", "result": result, "error": None, "progress": 100, "stage": "Complete"})
+        if job.get("job_type") != "scan":
+            try:
+                upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]), result)
+            except Exception as index_error:
+                print(f"Could not update market index for {ticker}: {index_error}", file=sys.stderr)
         print(f"Analysis completed for {ticker} ({job_id}).")
     except Exception as exc:
         message = str(exc)[:500] or "Analysis failed."
