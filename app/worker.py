@@ -77,17 +77,20 @@ def process_job(job: dict) -> None:
     ticker = job["ticker"]
     try:
         print(f"Starting {ticker} ({job_id}); attempt {job.get('attempts', 1)}.")
+        def report_progress(value, stage, detail):
+            update_job(job_id, {"progress": max(0, min(99, int(value))), "stage": f"{stage}: {detail}"})
+        report_progress(1, "Starting", "Preparing the requested analysis.")
         if job.get("job_type") == "scan":
-            result = run_market_scan(job.get("scan_source") or "both")
+            result = run_market_scan(job.get("scan_source") or "both", progress_callback=report_progress)
         else:
-            result = analyze_ticker(ticker, job["period"], int(job["horizon"]))
-        update_job(job_id, {"status": "completed", "result": result, "error": None})
+            result = analyze_ticker(ticker, job["period"], int(job["horizon"]), progress_callback=report_progress)
+        update_job(job_id, {"status": "completed", "result": result, "error": None, "progress": 100, "stage": "Complete"})
         print(f"Analysis completed for {ticker} ({job_id}).")
     except Exception as exc:
         message = str(exc)[:500] or "Analysis failed."
         print(f"Analysis failed for {ticker} ({job_id}): {message}", file=sys.stderr)
         try:
-            update_job(job_id, {"status": "failed", "error": message, "result": None})
+            update_job(job_id, {"status": "failed", "error": message, "result": None, "stage": "Failed"})
         except Exception as update_error:
             print(f"Could not persist failure status: {update_error}", file=sys.stderr)
 
