@@ -9,12 +9,23 @@ create table if not exists public.analysis_jobs (
   error text,
   client_ip_hash text not null,
   attempts smallint not null default 0 check (attempts between 0 and 3),
+  progress integer not null default 0 check (progress between 0 and 100),
+  stage text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.analysis_jobs
   add column if not exists attempts smallint not null default 0;
+alter table public.analysis_jobs
+  add column if not exists progress integer not null default 0 check (progress between 0 and 100);
+alter table public.analysis_jobs
+  add column if not exists stage text;
+create index if not exists analysis_jobs_cache_lookup_idx
+  on public.analysis_jobs (job_type, ticker, period, horizon, scan_source, status, created_at desc);
+create unique index if not exists analysis_jobs_one_active_key_idx
+  on public.analysis_jobs (job_type, ticker, period, horizon, scan_source)
+  where status in ('queued', 'running');
 alter table public.analysis_jobs
   add column if not exists job_type text not null default 'analysis';
 
