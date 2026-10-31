@@ -17,11 +17,19 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   try {
-    const { ticker, period = "5y", horizon = 30 } = await req.json();
-    const symbol = String(ticker ?? "").trim().toUpperCase();
-    if (!/^[A-Z0-9.^=-]{1,20}$/.test(symbol)) return json({ error: "Enter a valid stock ticker." }, 400);
+    const body = await req.json();
+    const mode = body.mode === "scan" ? "scan" : "analysis";
+    const symbol = mode === "scan" ? "SCAN" : String(body.ticker ?? "").trim().toUpperCase();
+    const period = mode === "scan" ? "2y" : (body.period ?? "5y");
+    const horizon = mode === "scan" ? 30 : (body.horizon ?? 30);
+
+    if (mode === "analysis" && !/^[A-Z0-9.^=-]{1,20}$/.test(symbol)) {
+      return json({ error: "Enter a valid stock ticker." }, 400);
+    }
     if (!["1y", "2y", "5y", "10y", "max"].includes(period)) return json({ error: "Invalid history period." }, 400);
-    if (!Number.isInteger(horizon) || horizon < 1 || horizon > 60) return json({ error: "Forecast horizon must be 1–60 trading days." }, 400);
+    if (!Number.isInteger(horizon) || horizon < 1 || horizon > 60) {
+      return json({ error: "Forecast horizon must be 1–60 trading days." }, 400);
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -32,11 +40,9 @@ Deno.serve(async (req) => {
     }
 
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-
-    // Reuse an existing queued/running analysis for the same inputs instead
-    // of consuming another runner slot for duplicate submissions.
     const { data: existing, error: existingError } = await admin.from("analysis_jobs")
       .select("id,status")
+      .eq("job_type", mode)
       .eq("ticker", symbol)
       .eq("period", period)
       .eq("horizon", horizon)
@@ -45,10 +51,8 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
     if (existingError) throw existingError;
-    if (existing) return json({ id: existing.id, status: existing.status, ticker: symbol, reused: true }, 202);
+    if (existing) return json({ id: existing.id, status: existing.status, ticker: symbol, mode, reused: true }, 202);
 
-    // Protect the shared free worker from an unbounded public backlog. This is
-    // a global queue safeguard, not an hourly per-visitor quota.
     const { count: queuedCount, error: queueCountError } = await admin.from("analysis_jobs")
       .select("id", { count: "exact", head: true })
       .eq("status", "queued");
@@ -58,13 +62,18 @@ Deno.serve(async (req) => {
     }
 
     const { data: job, error: insertError } = await admin.from("analysis_jobs")
-      .insert({ ticker: symbol, period, horizon, status: "queued", client_ip_hash: "public-no-hourly-limit" })
+      .insert({
+        ticker: symbol,
+        period,
+        horizon,
+        job_type: mode,
+        status: "queued",
+        client_ip_hash: "public-no-hourly-limit",
+      })
       .select("id")
       .single();
     if (insertError) throw insertError;
 
-    // Wake the shared worker lane. GitHub concurrency prevents multiple
-    // queue workers from running simultaneously.
     const owner = "andygeng2023";
     const repository = "Stock-Analyser";
     const workflow = "analyze-stock.yml";
@@ -85,13 +94,15 @@ Deno.serve(async (req) => {
     if (!dispatch.ok) {
       const detail = (await dispatch.text()).slice(0, 300);
       await admin.from("analysis_jobs").update({
-        status: "failed", error: "Could not start the analysis worker.", updated_at: new Date().toISOString(),
+        status: "failed",
+        error: "Could not start the analysis worker.",
+        updated_at: new Date().toISOString(),
       }).eq("id", job.id);
       console.error("GitHub worker dispatch failed:", dispatch.status, detail);
       return json({ error: "Could not start the analysis worker. Check the GitHub token and workflow setup." }, 502);
     }
 
-    return json({ id: job.id, status: "queued", ticker: symbol }, 202);
+    return json({ id: job.id, status: "queued", ticker: symbol, mode }, 202);
   } catch (error) {
     console.error("request-analysis error:", error);
     return json({ error: "Could not create the analysis request." }, 500);
