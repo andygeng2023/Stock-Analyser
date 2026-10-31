@@ -86,10 +86,12 @@ def analyze_ticker(ticker,period="5y",horizon=30):
         arima_predictions=[]
         test_returns=returns.iloc[split:]
         for date,actual in test_returns.items():
-            forecast=float(state.forecast(1).iloc[0])
+            # Array-backed ARIMA results return NumPy arrays, not pandas Series.
+            forecast=float(np.asarray(state.forecast(1),dtype=float).reshape(-1)[0])
             arima_predictions.append(forecast)
             residuals.loc[date]=float(actual)-forecast
-            state=state.append(returns.loc[[date]],refit=False)
+            # Keep appended observations on the same numeric index as the fitted model.
+            state=state.append(np.asarray([actual],dtype=float),refit=False)
 
         features=_feature_frame(close,volume,returns,residuals)
         target=residuals.reindex(close.index).shift(-1)
