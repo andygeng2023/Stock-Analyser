@@ -11,42 +11,64 @@ from .analyzer import analyze_ticker
 
 POLL_SECONDS = 5
 IDLE_TIMEOUT_SECONDS = 120
-MAX_RUNTIME_SECONDS = 345 * 60  # Leave a five-minute margin under the 350-minute job timeout.
+# GitHub's hosted-job hard limit is six hours. The workflow timeout is 350m;
+# hand off at 345m to leave time for the dispatch request and graceful exit.
+MAX_RUNTIME_SECONDS = 345 * 60
 
 
-def supabase_request(path: str, *, method: str = "GET", payload=None):
-    base = os.environ["SUPABASE_URL"].rstrip("/")
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+def request_json(url: str, *, method: str = "GET", payload=None, headers=None):
     body = None if payload is None else json.dumps(payload).encode()
-    request = urllib.request.Request(
-        f"{base}/rest/v1/{path}",
-        data=body,
-        method=method,
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-    )
+    request_headers = {"Content-Type": "application/json"}
+    if headers:
+        request_headers.update(headers)
+    request = urllib.request.Request(url, data=body, method=method, headers=request_headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         raw = response.read()
         return json.loads(raw) if raw else None
 
 
+def supabase_request(path: str, *, method: str = "GET", payload=None):
+    base = os.environ["SUPABASE_URL"].rstrip("/")
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    return request_json(
+        f"{base}/rest/v1/{path}",
+        method=method,
+        payload=payload,
+        headers={"apikey": key, "Authorization": f"Bearer {key}"},
+    )
+
+
 def update_job(job_id: str, payload: dict) -> None:
     payload = {**payload, "updated_at": datetime.now(timezone.utc).isoformat()}
-    supabase_request(
-        f"analysis_jobs?id=eq.{job_id}",
-        method="PATCH",
-        payload=payload,
-    )
+    supabase_request(f"analysis_jobs?id=eq.{job_id}", method="PATCH", payload=payload)
 
 
 def claim_next_job():
     rows = supabase_request("rpc/claim_next_analysis_job", method="POST", payload={})
-    if not rows:
-        return None
-    return rows[0]
+    return rows[0] if rows else None
+
+
+def queue_has_pending_jobs() -> bool:
+    rows = supabase_request("analysis_jobs?select=id&status=eq.queued&limit=1")
+    return bool(rows)
+
+
+def dispatch_successor() -> None:
+    token = os.environ["GITHUB_TOKEN"]
+    repository = os.environ["GITHUB_REPOSITORY"]
+    ref = os.environ.get("GITHUB_REF_NAME", "main")
+    url = f"https://api.github.com/repos/{repository}/actions/workflows/analyze-stock.yml/dispatches"
+    request_json(
+        url,
+        method="POST",
+        payload={"ref": ref},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    print("Successor worker dispatched; GitHub concurrency will start it after this run exits.")
 
 
 def process_job(job: dict) -> None:
@@ -72,7 +94,19 @@ def main() -> int:
     completed = 0
     print("Stock Analyser queue worker started.")
 
-    while time.monotonic() - started_at < MAX_RUNTIME_SECONDS:
+    while True:
+        elapsed = time.monotonic() - started_at
+        if elapsed >= MAX_RUNTIME_SECONDS:
+            try:
+                if queue_has_pending_jobs():
+                    dispatch_successor()
+                else:
+                    print("Runtime hand-off reached with an empty queue; no successor needed.")
+                return 0
+            except Exception as exc:
+                print(f"Could not hand off to successor worker: {exc}", file=sys.stderr)
+                return 1
+
         try:
             job = claim_next_job()
         except Exception as exc:
@@ -91,9 +125,6 @@ def main() -> int:
             print(f"Queue idle for {IDLE_TIMEOUT_SECONDS}s; stopping after {completed} analyses.")
             return 0
         time.sleep(POLL_SECONDS)
-
-    print(f"Worker reached its safe runtime limit after {completed} analyses.")
-    return 0
 
 
 if __name__ == "__main__":
