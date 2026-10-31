@@ -21,3 +21,14 @@ body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
 @media(max-width:700px){main{padding-bottom:24px}.scan-intro{padding:19px}.scan-result{padding:14px}.scan-result .scan-return strong{font-size:17px}}
 
 .source-control{display:flex;flex-direction:column;gap:7px;max-width:360px;margin:16px 0;color:#aab8ce;font-size:13px}.source-control select{width:100%}
+
+.job-progress{margin:16px 0;padding:15px 16px;background:#141f32;border:1px solid #263650;border-radius:10px}
+.progress-track{height:9px;background:#263650;border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;width:0;background:#39c99a;border-radius:99px;transition:width .35s ease}
+.progress-detail{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:13px}
+.progress-detail span{color:#91a0b8;font-variant-numeric:tabular-nums}
+.job-progress p{margin:7px 0 0}
+.scan-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.scan-intro .scan-actions button{margin-top:0}
+.secondary-button{background:#1a2942;color:#e8eef9;border-color:#405574}
+button:disabled{opacity:.55;cursor:wait}
