@@ -15,7 +15,44 @@ FINAL_RESULTS = 10
 MIN_UNIVERSE = 1000
 
 
-def load_universe():
+def _clean_symbol(value):
+    symbol = str(value or "").strip().upper()
+    if not symbol or len(symbol) > 12:
+        return None
+    if any(mark in symbol for mark in ("$", "/", " ", "^", "=")):
+        return None
+    return symbol
+
+
+def _load_yfinance_universe():
+    """Build a broad ticker set from Yahoo Finance's own screener endpoints."""
+    screens = (
+        "most_actives",
+        "day_gainers",
+        "day_losers",
+        "growth_technology_stocks",
+        "undervalued_growth_stocks",
+        "aggressive_small_caps",
+        "small_cap_gainers",
+        "portfolio_anchors",
+    )
+    symbols = set()
+    errors = []
+    for screen_name in screens:
+        try:
+            result = yf.screen(screen_name, offset=0, size=250)
+            quotes = result.get("quotes", []) if isinstance(result, dict) else []
+            for quote in quotes:
+                if isinstance(quote, dict):
+                    symbol = _clean_symbol(quote.get("symbol") or quote.get("ticker"))
+                    if symbol:
+                        symbols.add(symbol)
+        except Exception as exc:
+            errors.append(f"{screen_name}: {str(exc)[:100]}")
+    return sorted(symbols), errors
+
+
+def _load_nasdaq_universe():
     request = urllib.request.Request(
         NASDAQ_URL,
         headers={
@@ -28,55 +65,56 @@ def load_universe():
     with urllib.request.urlopen(request, timeout=45) as response:
         payload = json.loads(response.read().decode("utf-8"))
     data = payload.get("data") or {}
-    # Nasdaq's screener response nests records under data.table.rows.
-    # Older/alternate responses have exposed data.rows directly.
     table = data.get("table") or {}
     rows = table.get("rows") or data.get("rows") or []
-    if not isinstance(rows, list):
-        rows = []
-    symbols = []
-    seen = set()
-    for row in rows:
+    headers = table.get("headers") or []
+    header_names = [
+        str(item.get("name", "") if isinstance(item, dict) else item).strip().lower()
+        for item in headers
+    ]
+    symbols = set()
+    for row in rows if isinstance(rows, list) else []:
+        raw_symbol = None
         if isinstance(row, dict):
-            # Provider field casing and aliases have varied between screener responses.
             fields = {str(key).strip().lower(): value for key, value in row.items()}
             raw_symbol = fields.get("symbol") or fields.get("ticker") or fields.get("nasdaq symbol")
-        elif isinstance(row, (list, tuple)) and row:
-            # Some tabular responses provide values in header order.
-            headers = table.get("headers") or []
-            header_names = [
-                str(item.get("name", "") if isinstance(item, dict) else item).strip().lower()
-                for item in headers
-            ]
-            try:
-                raw_symbol = row[header_names.index("symbol")]
-            except (ValueError, IndexError):
-                raw_symbol = None
-        else:
-            raw_symbol = None
-        symbol = str(raw_symbol or "").strip().upper()
-        if not symbol or symbol in seen or len(symbol) > 12:
-            continue
-        # Exclude warrants, units, rights and other non-common-stock suffixes.
-        if any(mark in symbol for mark in ("$", "/", " ", "^")):
-            continue
-        seen.add(symbol)
-        symbols.append(symbol)
+        elif isinstance(row, (list, tuple)):
+            for candidate in ("symbol", "ticker"):
+                try:
+                    raw_symbol = row[header_names.index(candidate)]
+                    break
+                except (ValueError, IndexError):
+                    continue
+        symbol = _clean_symbol(raw_symbol)
+        if symbol:
+            symbols.add(symbol)
+    return sorted(symbols)
+
+
+def load_universe():
+    # Combine Yahoo Finance's live screener results with Nasdaq when available.
+    # Yahoo is independent of Nasdaq, so a Nasdaq block/schema change is non-fatal.
+    symbols, yahoo_errors = _load_yfinance_universe()
+    nasdaq_count = 0
+    nasdaq_error = None
+    try:
+        nasdaq_symbols = _load_nasdaq_universe()
+        nasdaq_count = len(nasdaq_symbols)
+        symbols = sorted(set(symbols).union(nasdaq_symbols))
+    except Exception as exc:
+        nasdaq_error = str(exc)[:180]
+
     if len(symbols) < MIN_UNIVERSE:
-        response_keys = ", ".join(sorted(str(key) for key in data.keys())) or "none"
-        table_keys = ", ".join(sorted(str(key) for key in table.keys())) or "none"
-        first_row = rows[0] if rows else None
-        first_row_keys = (
-            ", ".join(sorted(str(key) for key in first_row.keys()))
-            if isinstance(first_row, dict) else "not-an-object"
-        )
-        total_records = data.get("totalrecords", table.get("totalrecords", "unknown"))
-        raise RuntimeError(
-            f"Nasdaq screener parsed {len(symbols)} symbols from {len(rows)} rows "
-            f"(reported total: {total_records}; data keys: {response_keys}; "
-            f"table keys: {table_keys}; first-row keys: {first_row_keys}). "
-            f"Expected at least {MIN_UNIVERSE}; provider response may have changed or be incomplete."
-        )
+        details = [
+            f"Yahoo Finance screener supplied {len(symbols) - nasdaq_count} unique symbols",
+            f"Nasdaq supplied {nasdaq_count}",
+            f"combined total {len(symbols)} (minimum {MIN_UNIVERSE})",
+        ]
+        if yahoo_errors:
+            details.append("Yahoo errors: " + " | ".join(yahoo_errors[:3]))
+        if nasdaq_error:
+            details.append("Nasdaq error: " + nasdaq_error)
+        raise RuntimeError("; ".join(details))
     return symbols
 
 
