@@ -216,7 +216,7 @@ def run_market_scan(source="both", progress_callback=None):
             progress_callback(60 + int(35 * (candidate_index - 1) / max(1, len(candidates))), "ARIMA–SVR refinement", f"Refining candidate {candidate_index}/{len(candidates)}: {ticker}.")
         try:
             # Keep the detailed model identical to the Search screen's baseline.
-            analysis = analyze_ticker(ticker, period="2y", horizon=30, progress_callback=lambda p, stage, detail: progress_callback(60 + int(0.35 * p), stage, f"{ticker}: {detail}") if progress_callback else None)
+            analysis = analyze_ticker(ticker, period="5y", horizon=30, progress_callback=lambda p, stage, detail: progress_callback(60 + int(0.35 * p), stage, f"{ticker}: {detail}") if progress_callback else None)
             metrics = analysis.get("model", {}).get("metrics", {}).get("hybrid", {})
             forecast = analysis.get("forecast", {}).get("expected_change_percent")
             if forecast is None or not math.isfinite(float(forecast)):
