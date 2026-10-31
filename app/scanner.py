@@ -91,30 +91,40 @@ def _load_nasdaq_universe():
     return sorted(symbols)
 
 
-def load_universe():
-    # Combine Yahoo Finance's live screener results with Nasdaq when available.
-    # Yahoo is independent of Nasdaq, so a Nasdaq block/schema change is non-fatal.
-    symbols, yahoo_errors = _load_yfinance_universe()
-    nasdaq_count = 0
-    nasdaq_error = None
-    try:
-        nasdaq_symbols = _load_nasdaq_universe()
-        nasdaq_count = len(nasdaq_symbols)
-        symbols = sorted(set(symbols).union(nasdaq_symbols))
-    except Exception as exc:
-        nasdaq_error = str(exc)[:180]
+def load_universe(source="both"):
+    source = str(source or "both").lower()
+    if source not in ("yfinance", "nasdaq", "both"):
+        raise ValueError("Choose yfinance, nasdaq or both as the market data source.")
 
+    symbols = set()
+    errors = []
+    yahoo_count = 0
+    nasdaq_count = 0
+
+    if source in ("yfinance", "both"):
+        yahoo_symbols, yahoo_errors = _load_yfinance_universe()
+        yahoo_count = len(yahoo_symbols)
+        symbols.update(yahoo_symbols)
+        errors.extend("Yahoo Finance: " + item for item in yahoo_errors[:3])
+
+    if source in ("nasdaq", "both"):
+        try:
+            nasdaq_symbols = _load_nasdaq_universe()
+            nasdaq_count = len(nasdaq_symbols)
+            symbols.update(nasdaq_symbols)
+        except Exception as exc:
+            errors.append("Nasdaq: " + str(exc)[:180])
+
+    symbols = sorted(symbols)
     if len(symbols) < MIN_UNIVERSE:
-        details = [
-            f"Yahoo Finance screener supplied {len(symbols) - nasdaq_count} unique symbols",
-            f"Nasdaq supplied {nasdaq_count}",
-            f"combined total {len(symbols)} (minimum {MIN_UNIVERSE})",
-        ]
-        if yahoo_errors:
-            details.append("Yahoo errors: " + " | ".join(yahoo_errors[:3]))
-        if nasdaq_error:
-            details.append("Nasdaq error: " + nasdaq_error)
-        raise RuntimeError("; ".join(details))
+        detail = (
+            f"Selected source: {source}. Yahoo Finance supplied {yahoo_count}; "
+            f"Nasdaq supplied {nasdaq_count}; {len(symbols)} unique symbols total. "
+            f"At least {MIN_UNIVERSE} are required."
+        )
+        if errors:
+            detail += " Provider details: " + " | ".join(errors)
+        raise RuntimeError(detail)
     return symbols
 
 
@@ -186,8 +196,8 @@ def fast_filter(symbols):
     return ranked[:FAST_CANDIDATES], len(ranked)
 
 
-def run_market_scan():
-    symbols = load_universe()
+def run_market_scan(source="both"):
+    symbols = load_universe(source)
     candidates, eligible_count = fast_filter(symbols)
     refined = []
     failures = []
@@ -225,6 +235,7 @@ def run_market_scan():
     refined.sort(key=lambda item: item["score"], reverse=True)
     return {
         "scan_type": "two_stage_arima_svr",
+        "source": source,
         "universe_size": len(symbols),
         "eligible_after_fast_filter": eligible_count,
         "arima_svr_refined": len(refined),
