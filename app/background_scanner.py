@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import threading
 from datetime import datetime, timezone
 
 from .scanner import run_market_scan
@@ -62,7 +63,16 @@ def dispatch_successor():
     print("Successor background scanner dispatched; workflow concurrency will hand it off after this run.")
 
 
+def _handoff_after_runtime():
+    time.sleep(340 * 60)
+    try:
+        dispatch_successor()
+    except Exception as exc:
+        print(f"Could not dispatch successor background scanner: {exc}", file=sys.stderr)
+
+
 def main():
+    threading.Thread(target=_handoff_after_runtime, daemon=True).start()
     started = time.monotonic()
     scans = 0
     while time.monotonic() - started < MAX_RUNTIME_SECONDS:
@@ -75,10 +85,8 @@ def main():
         except Exception as exc:
             print(f"Background scan cycle failed: {str(exc)[:300]}", file=sys.stderr)
             time.sleep(60)
-    print("Approaching the hosted-job runtime ceiling; handing scanning to a successor workflow.")
-    dispatch_successor()
+    print("Background scanner reached its graceful exit window.")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
