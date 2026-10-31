@@ -44,7 +44,7 @@ jobs:
               "supabasePublishableKey": os.environ.get("SUPABASE_PUBLISHABLE_KEY", ""),
           }
           with open("site/config.js", "w", encoding="utf-8") as f:
-              f.write("window.STOCK_ANALYSER_CONFIG = " + json.dumps(config) + ";\\n")
+              f.write("window.STOCK_ANALYSER_CONFIG = " + json.dumps(config) + ";\n")
           PY
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
