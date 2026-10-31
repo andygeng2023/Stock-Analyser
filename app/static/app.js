@@ -108,10 +108,13 @@ async function startScan(hard=false){
 }
 $("start-scan").addEventListener("click",()=>startScan(false));
 $("hard-rescan").addEventListener("click",()=>startScan(true));
-\n$("scan-source").addEventListener("change",()=>{latestScanLoaded=false;if(!$("scan-screen").hidden)loadLatestScan();});\n
+
+$("scan-source").addEventListener("change",()=>{latestScanLoaded=false;if(!$("scan-screen").hidden)loadLatestScan();});
+
 let latestScanLoaded=false;
 async function loadLatestScan(){
  if(latestScanLoaded)return;
+ if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured.";return;}
  if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured.";return;}
  latestScanLoaded=true;
  try{
