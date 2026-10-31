@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const mode = body.mode === "scan" ? "scan" : "analysis";
     const symbol = mode === "scan" ? "SCAN" : String(body.ticker ?? "").trim().toUpperCase();
-    const period = mode === "scan" ? "2y" : (body.period ?? "5y");
+    const period = mode === "scan" ? "5y" : (body.period ?? "5y");
     const horizon = mode === "scan" ? 30 : (body.horizon ?? 30);
     const scanSource = mode === "scan" ? String(body.source ?? "both").toLowerCase() : "both";
     if (mode === "scan" && !["yfinance", "nasdaq", "both"].includes(scanSource)) {
@@ -44,6 +44,22 @@ Deno.serve(async (req) => {
     }
 
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+
+    if (mode === "scan" && body.latest_only === true) {
+      const { data: latest, error: latestError } = await admin.from("analysis_jobs")
+        .select("id,created_at")
+        .eq("job_type", "scan").eq("ticker", "SCAN")
+        .eq("period", "5y").eq("horizon", 30)
+        .eq("scan_source", scanSource).eq("status", "completed")
+        .not("result", "is", null)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (latestError) throw latestError;
+      if (!latest) return json({ found: false, mode, source: scanSource });
+      return json({
+        id: latest.id, status: "completed", ticker: "SCAN", mode,
+        cached: true, cache_created_at: latest.created_at,
+      });
+    }
 
     const hardRescan = body.hard_rescan === true;
     if (mode === "analysis" && !hardRescan) {
