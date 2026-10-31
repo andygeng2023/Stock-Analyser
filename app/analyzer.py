@@ -7,50 +7,25 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from .errors import AnalysisError
 
 ORDERS = [(1,0,0),(0,0,1),(1,0,1),(2,0,1),(2,0,2)]
 
-def _fit_arima(values, order):
-    # Array-backed models avoid unsupported frequency inference on Yahoo's
-    # irregular trading-session DatetimeIndex.
-    return ARIMA(
-        np.asarray(values, dtype=float),
-        order=order,
-        enforce_stationarity=False,
-        enforce_invertibility=False,
-    ).fit()
-
-
 def _select_order(series):
-    """Select ARIMA order by expanding-window, one-step-ahead validation."""
-    values = np.asarray(series, dtype=float)
-    validation_size = min(30, max(10, len(values) // 5))
-    initial_size = len(values) - validation_size
-    if initial_size < 50:
-        raise AnalysisError("Not enough observations for ARIMA model selection.")
-
-    candidates = []
+    candidates=[]
     for order in ORDERS:
         try:
-            state = _fit_arima(values[:initial_size], order)
-            errors = []
-            for actual in values[initial_size:]:
-                prediction = float(np.asarray(state.forecast(1), dtype=float).reshape(-1)[0])
-                errors.append(abs(float(actual) - prediction))
-                state = state.append(np.asarray([actual], dtype=float), refit=False)
-            score = float(np.mean(errors))
-            if np.isfinite(score):
-                candidates.append((score, order))
+            # Use a numeric index: Yahoo Finance DatetimeIndex values often have
+            # no fixed frequency, which prevents statsmodels append() from
+            # extending the fitted model during one-step-ahead validation.
+            fitted=ARIMA(np.asarray(series,dtype=float),order=order,enforce_stationarity=False,enforce_invertibility=False).fit()
+            candidates.append((float(fitted.aic),order,fitted))
         except Exception:
             continue
-
     if not candidates:
-        raise AnalysisError("ARIMA fitting failed for all candidate orders.")
-
-    _, best_order = min(candidates, key=lambda item: item[0])
-    return best_order, _fit_arima(values, best_order)
+        raise AnalysisError("ARIMA fitting failed.")
+    _,order,fitted=min(candidates,key=lambda item:item[0])
+    return order,fitted
 
 def _feature_frame(close,volume,returns,residuals):
     r=returns.reindex(close.index)
@@ -129,65 +104,17 @@ def analyze_ticker(ticker,period="5y",horizon=30):
         if len(train_data)<40:
             raise AnalysisError("Not enough clean observations to train the SVR model.")
 
-        def make_model(parameters=None):
-            parameters = parameters or {"svr__C": 10, "svr__epsilon": 0.001}
-            return make_pipeline(
-                StandardScaler(),
-                SVR(kernel="rbf", C=parameters["svr__C"], epsilon=parameters["svr__epsilon"]),
-            )
-
-        # Tune only on the chronological training segment. The untouched final
-        # holdout remains reserved for honest out-of-sample reporting.
-        search = GridSearchCV(
-            make_model(),
-            param_grid={
-                "svr__C": [1, 10, 30],
-                "svr__epsilon": [0.001, 0.01, 0.05],
-            },
-            scoring="neg_mean_absolute_error",
-            cv=TimeSeriesSplit(n_splits=3),
-            n_jobs=1,
-            refit=True,
-        )
-        search.fit(train_data.drop(columns="target"), train_data["target"])
-        selected_svr_parameters = {
-            "svr__C": float(search.best_params_["svr__C"]),
-            "svr__epsilon": float(search.best_params_["svr__epsilon"]),
-        }
-        svr_validation = search.best_estimator_
+        def make_model():
+            return make_pipeline(StandardScaler(),SVR(kernel="rbf",C=10,epsilon=0.001))
+        svr_validation=make_model().fit(train_data.drop(columns="target"),train_data["target"])
         predicted_residuals=svr_validation.predict(test_data.drop(columns="target"))
         actual_returns=test_returns.to_numpy(dtype=float)
         actual_residuals=residuals.loc[test_returns.index].to_numpy(dtype=float)
         predicted_arima=np.asarray(arima_predictions,dtype=float)
-
-        # Calibrate the SVR correction weight on the first half of the holdout,
-        # then report metrics only on the untouched second half.
-        calibration_size=max(5,len(actual_returns)//2)
-        calibration_actual=actual_returns[:calibration_size]
-        calibration_arima=predicted_arima[:calibration_size]
-        calibration_svr=predicted_residuals[:calibration_size]
-        blend_candidates=[0.0,0.25,0.5,0.75,1.0]
-        correction_weight=min(
-            blend_candidates,
-            key=lambda weight: mean_absolute_error(
-                calibration_actual,
-                calibration_arima + weight*calibration_svr,
-            ),
-        )
-        evaluation=slice(calibration_size,None)
-        evaluation_actual=actual_returns[evaluation]
-        evaluation_arima=predicted_arima[evaluation]
-        evaluation_svr=predicted_residuals[evaluation]
-        evaluation_residuals=actual_residuals[evaluation]
         metrics={
-            "arima":_metrics(evaluation_actual,evaluation_arima),
-            "svm_residual":_metrics(evaluation_residuals,evaluation_svr),
-            "hybrid":_metrics(
-                evaluation_actual,
-                evaluation_arima+correction_weight*evaluation_svr,
-            ),
-            "evaluation_observations":len(evaluation_actual),
-            "blend_calibration_observations":calibration_size,
+            "arima":_metrics(actual_returns,predicted_arima),
+            "svm_residual":_metrics(actual_residuals,predicted_residuals),
+            "hybrid":_metrics(actual_returns,predicted_arima+predicted_residuals),
         }
 
         # Refit both components on all available observations for the live forecast.
@@ -198,9 +125,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
         full_data=full_features.assign(target=full_target).replace([np.inf,-np.inf],np.nan).dropna()
         if len(full_data)<45:
             raise AnalysisError("Not enough clean observations for the final SVR model.")
-        svr=make_model(selected_svr_parameters).fit(
-            full_data.drop(columns="target"), full_data["target"]
-        )
+        svr=make_model().fit(full_data.drop(columns="target"),full_data["target"])
 
         base=np.asarray(full_arima.forecast(horizon),dtype=float)
         recent=list(returns.iloc[-20:].to_numpy(dtype=float))
@@ -223,7 +148,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             }
             correction=float(svr.predict(pd.DataFrame([row],columns=full_data.drop(columns="target").columns))[0])
             arima_path.append(float(close.iloc[-1])*float(np.exp(np.sum(base[:i+1]))))
-            next_return=float(base[i]+correction_weight*correction)
+            next_return=float(base[i]+correction)
             last*=float(np.exp(next_return))
             forecast_path.append(last)
             band=1.96*sigma*np.sqrt(i+1)
@@ -289,12 +214,6 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             },
             "model":{
                 "arima_order":list(full_order),
-                "svr_parameters":{
-                    "C":selected_svr_parameters["svr__C"],
-                    "epsilon":selected_svr_parameters["svr__epsilon"],
-                },
-                "selection_method":"expanding-window ARIMA validation + time-series SVR grid search",
-                "svr_correction_weight":correction_weight,
                 "adf_p_value":round(float(adfuller(returns)[1]),6),
                 "observations":len(returns),
                 "validation_observations":len(actual_returns),
