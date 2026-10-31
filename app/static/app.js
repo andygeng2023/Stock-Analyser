@@ -9,7 +9,7 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function rows(obj){return Object.entries(obj).map(([k,v])=>'<div class="row"><span>'+esc(k.replaceAll("_"," "))+'</span><strong>'+esc(v==null?"—":v)+'</strong></div>').join("");}
 function setStatus(s){$("status").textContent=s;}
 async function requestAnalysis(ticker,period,horizon,mode="analysis"){
- const payload=mode==="scan"?{mode:"scan"}:{ticker,period,horizon};
+ const payload=mode==="scan"?{mode:"scan",source:$("scan-source").value}:{ticker,period,horizon};
  const r=await fetch(api("request-analysis"),{method:"POST",headers:headers(),body:JSON.stringify(payload)});
  const d=await r.json();if(!r.ok)throw Error(d.error||"Could not start analysis.");return d.id;
 }
