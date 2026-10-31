@@ -26,6 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Build static site and runtime configuration
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
