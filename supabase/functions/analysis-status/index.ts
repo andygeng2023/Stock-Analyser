@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     if (!url || !key) return json({ error: "The analysis service is not configured." }, 503);
     const admin = createClient(url, key, { auth: { persistSession: false } });
     const { data, error } = await admin.from("analysis_jobs")
-      .select("id,ticker,status,result,error,created_at,updated_at")
+      .select("id,ticker,status,result,error,created_at,updated_at,progress,stage")
       .eq("id", id).maybeSingle();
     if (error) throw error;
     if (!data) return json({ error: "Analysis request not found." }, 404);
