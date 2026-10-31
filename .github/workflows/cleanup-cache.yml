@@ -2,7 +2,7 @@ name: Expire shared analysis cache
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
