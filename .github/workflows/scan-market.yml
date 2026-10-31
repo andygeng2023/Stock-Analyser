@@ -1,6 +1,12 @@
 name: Continuous background market scanning
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/scan-market.yml"
+      - "app/background_scanner.py"
+      - "app/scanner.py"
   schedule:
     - cron: "20 */6 * * *"
   workflow_dispatch:
