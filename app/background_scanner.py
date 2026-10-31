@@ -67,10 +67,14 @@ def main():
     scans = 0
     while time.monotonic() - started < MAX_RUNTIME_SECONDS:
         print(f"Starting background scan cycle {scans + 1}.")
-        result = run_market_scan("both")
-        save_scan(result)
-        scans += 1
-        print(f"Background scan cycle {scans} completed.")
+        try:
+            result = run_market_scan("both")
+            save_scan(result)
+            scans += 1
+            print(f"Background scan cycle {scans} completed.")
+        except Exception as exc:
+            print(f"Background scan cycle failed: {str(exc)[:300]}", file=sys.stderr)
+            time.sleep(60)
     print("Approaching the hosted-job runtime ceiling; handing scanning to a successor workflow.")
     dispatch_successor()
     return 0
