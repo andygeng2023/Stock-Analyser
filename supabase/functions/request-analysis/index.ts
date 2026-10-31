@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: job, error: insertError } = await admin.from("analysis_jobs")
-      .insert({ ticker: symbol, period, horizon, status: "queued" })
+      .insert({ ticker: symbol, period, horizon, status: "queued", client_ip_hash: "public-no-hourly-limit" })
       .select("id")
       .single();
     if (insertError) throw insertError;
