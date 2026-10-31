@@ -91,7 +91,7 @@ def _load_nasdaq_universe():
     return sorted(symbols)
 
 
-def load_universe(source="both"):
+def load_universe(source="both", progress_callback=None):
     source = str(source or "both").lower()
     if source not in ("yfinance", "nasdaq", "both"):
         raise ValueError("Choose yfinance, nasdaq or both as the market data source.")
@@ -101,11 +101,13 @@ def load_universe(source="both"):
     yahoo_count = 0
     nasdaq_count = 0
 
+    if progress_callback: progress_callback(4, "Discovering stock universe", "Querying selected stock-universe providers.")
     if source in ("yfinance", "both"):
         yahoo_symbols, yahoo_errors = _load_yfinance_universe()
         yahoo_count = len(yahoo_symbols)
         symbols.update(yahoo_symbols)
         errors.extend("Yahoo Finance: " + item for item in yahoo_errors[:3])
+        if progress_callback: progress_callback(10, "Discovering stock universe", f"Yahoo Finance supplied {yahoo_count:,} unique symbols.")
 
     if source in ("nasdaq", "both"):
         try:
@@ -114,6 +116,7 @@ def load_universe(source="both"):
             symbols.update(nasdaq_symbols)
         except Exception as exc:
             errors.append("Nasdaq: " + str(exc)[:180])
+        if progress_callback: progress_callback(14, "Discovering stock universe", f"Combined universe currently contains {len(symbols):,} symbols.")
 
     symbols = sorted(symbols)
     if len(symbols) < MIN_UNIVERSE:
@@ -125,6 +128,7 @@ def load_universe(source="both"):
         if errors:
             detail += " Provider details: " + " | ".join(errors)
         raise RuntimeError(detail)
+    if progress_callback: progress_callback(18, "Stock universe ready", f"{len(symbols):,} unique symbols will be screened.")
     return symbols
 
 
@@ -146,11 +150,12 @@ def _extract_frame(data, symbol):
     return close.astype(float), volume.astype(float)
 
 
-def fast_filter(symbols):
+def fast_filter(symbols, progress_callback=None):
     """Rank a broad universe using price history only; no per-company info calls."""
     ranked = []
     chunk_size = 150
-    for start in range(0, len(symbols), chunk_size):
+    total_batches = max(1, math.ceil(len(symbols) / chunk_size))
+    for batch_number, start in enumerate(range(0, len(symbols), chunk_size), start=1):
         batch = symbols[start:start + chunk_size]
         data = yf.download(
             tickers=" ".join(batch),
@@ -192,20 +197,25 @@ def fast_filter(symbols):
                 })
             except Exception:
                 continue
+        if progress_callback:
+            progress = 18 + int(42 * batch_number / total_batches)
+            progress_callback(progress, "Fast market filter", f"Downloaded batch {batch_number}/{total_batches}; {len(ranked):,} stocks currently pass liquidity and history checks.")
     ranked.sort(key=lambda item: item["fast_score"], reverse=True)
     return ranked[:FAST_CANDIDATES], len(ranked)
 
 
-def run_market_scan(source="both"):
-    symbols = load_universe(source)
-    candidates, eligible_count = fast_filter(symbols)
+def run_market_scan(source="both", progress_callback=None):
+    symbols = load_universe(source, progress_callback)
+    candidates, eligible_count = fast_filter(symbols, progress_callback)
     refined = []
     failures = []
-    for item in candidates:
+    for candidate_index, item in enumerate(candidates, start=1):
         ticker = item["ticker"]
+        if progress_callback:
+            progress_callback(60 + int(35 * (candidate_index - 1) / max(1, len(candidates))), "ARIMA–SVR refinement", f"Refining candidate {candidate_index}/{len(candidates)}: {ticker}.")
         try:
             # Keep the detailed model identical to the Search screen's baseline.
-            analysis = analyze_ticker(ticker, period="2y", horizon=30)
+            analysis = analyze_ticker(ticker, period="2y", horizon=30, progress_callback=lambda p, stage, detail: progress_callback(60 + int(0.35 * p), stage, f"{ticker}: {detail}") if progress_callback else None)
             metrics = analysis.get("model", {}).get("metrics", {}).get("hybrid", {})
             forecast = analysis.get("forecast", {}).get("expected_change_percent")
             if forecast is None or not math.isfinite(float(forecast)):
@@ -233,6 +243,7 @@ def run_market_scan(source="both"):
         except Exception as exc:
             failures.append({"ticker": ticker, "error": str(exc)[:120]})
     refined.sort(key=lambda item: item["score"], reverse=True)
+    if progress_callback: progress_callback(100, "Ranking complete", f"Ranked {min(len(refined), FINAL_RESULTS)} results from {len(refined)} successful refinements.")
     return {
         "scan_type": "two_stage_arima_svr",
         "source": source,
