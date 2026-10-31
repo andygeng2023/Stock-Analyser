@@ -78,7 +78,7 @@ def process_job(job: dict) -> None:
     try:
         print(f"Starting {ticker} ({job_id}); attempt {job.get('attempts', 1)}.")
         if job.get("job_type") == "scan":
-            result = run_market_scan()
+            result = run_market_scan(job.get("scan_source") or "both")
         else:
             result = analyze_ticker(ticker, job["period"], int(job["horizon"]))
         update_job(job_id, {"status": "completed", "result": result, "error": None})
