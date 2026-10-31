@@ -5,6 +5,7 @@ recently indexed names, and computes a bounded number of full baseline analyses.
 """
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 import yfinance as yf
@@ -159,12 +160,12 @@ def dispatch_successor():
 
 def main():
     shard = int(os.environ.get("INDEX_SHARD", "0"))
-    started = __import__("time").monotonic()
-    while __import__("time").monotonic() - started < 345 * 60:
+    started = time.monotonic()
+    while time.monotonic() - started < 345 * 60:
         run(shard)
         if __import__("time").monotonic() - started < 345 * 60:
             print("Indexing cycle complete; pausing 90 seconds before the next rotation.")
-            __import__("time").sleep(90)
+            time.sleep(90)
     if shard == 0:
         dispatch_successor()
     else:
