@@ -8,16 +8,25 @@ const headers=()=>({"Content-Type":"application/json","apikey":config.supabasePu
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function rows(obj){return Object.entries(obj).map(([k,v])=>'<div class="row"><span>'+esc(k.replaceAll("_"," "))+'</span><strong>'+esc(v==null?"—":v)+'</strong></div>').join("");}
 function setStatus(s){$("status").textContent=s;}
-async function requestAnalysis(ticker,period,horizon,mode="analysis"){
- const payload=mode==="scan"?{mode:"scan",source:$("scan-source").value}:{ticker,period,horizon};
+async function requestAnalysis(ticker,period,horizon,mode="analysis",hardRescan=false){
+ const payload=mode==="scan"?{mode:"scan",source:$("scan-source").value,hard_rescan:hardRescan}:{ticker,period,horizon};
  const r=await fetch(api("request-analysis"),{method:"POST",headers:headers(),body:JSON.stringify(payload)});
- const d=await r.json();if(!r.ok)throw Error(d.error||"Could not start analysis.");return d.id;
+ const d=await r.json();if(!r.ok)throw Error(d.error||"Could not start analysis.");return d;
 }
-async function waitForResult(id,statusElement=$("status")){
+function updateProgress(prefix,d){
+ const wrap=$(prefix+"-progress");wrap.hidden=false;
+ const value=Math.max(0,Math.min(100,Number(d.progress)||0));
+ $(prefix+"-progress-fill").style.width=value+"%";
+ $(prefix+"-progress-percent").textContent=value+"%";
+ $(prefix+"-progress-label").textContent=d.status==="queued"?"Queued":d.status==="completed"?"Complete":d.status==="failed"?"Failed":"Processing";
+ $(prefix+"-progress-stage").textContent=d.stage|| (d.status==="queued"?"Waiting for a worker…":"Working…");
+}
+async function waitForResult(id,statusElement=$("status"),prefix="search"){
  const started=Date.now();
  while(Date.now()-started<15*60*1000){
   const r=await fetch(api("analysis-status")+"?id="+encodeURIComponent(id),{headers:{"apikey":config.supabasePublishableKey}});
   const d=await r.json();if(!r.ok)throw Error(d.error||"Could not retrieve analysis status.");
+  updateProgress(prefix,d);
   if(d.status==="completed")return d.result;if(d.status==="failed")throw Error(d.error||"The analysis failed.");
   statusElement.textContent=d.status==="running"?"The worker is processing this job…":"Queued; waiting for the shared GitHub Actions worker…";await wait(2500);
  }
@@ -26,7 +35,7 @@ async function waitForResult(id,statusElement=$("status")){
 $("search").onsubmit=async e=>{
  e.preventDefault();if(!config.supabaseUrl||!config.supabasePublishableKey){setStatus("Supabase is not configured. Add the project URL and publishable key to GitHub Actions variables.");return;}
  $("submit").disabled=true;$("results").hidden=true;
- try{setStatus("Creating analysis request…");const id=await requestAnalysis($("ticker").value.trim().toUpperCase(),$("period").value,Number($("horizon").value));const d=await waitForResult(id,$("status"));render(d);$("results").hidden=false;setStatus("Analysis complete · "+d.as_of);}
+ try{setStatus("Creating analysis request…");const request=await requestAnalysis($("ticker").value.trim().toUpperCase(),$("period").value,Number($("horizon").value));$("search-progress").hidden=false;let d;if(request.status==="completed"&&request.cached){const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve cached analysis.");d=data.result;updateProgress("search",{status:"completed",progress:100,stage:"Shared cached analysis · "+new Date(request.cache_created_at).toLocaleString()});}else{d=await waitForResult(request.id,$("status"),"search");}render(d);$("results").hidden=false;setStatus("Analysis complete · "+d.as_of);}
  catch(err){setStatus(err.message);}finally{$("submit").disabled=false;}
 };
 function render(d){
@@ -75,16 +84,27 @@ function renderScan(data){
  });
  if(!results.length)$("scan-status").textContent="The scan completed but could not produce ten valid refinements. Try again later.";
 }
-$("start-scan").addEventListener("click",async()=>{
+async function startScan(hard=false){
  if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured. Add the project URL and publishable key to GitHub Actions variables.";return;}
- $("start-scan").disabled=true;$("scan-results").hidden=true;
+ $("start-scan").disabled=true;$("hard-rescan").disabled=true;
  try{
-  $("scan-status").textContent="Creating market scan request…";
-  const id=await requestAnalysis(null,null,null,"scan");
-  $("scan-status").textContent="Scan queued. The fast filter and ARIMA–SVR refinement will run on the shared worker.";
-  const result=await waitForResult(id,$("scan-status"));
+  $("scan-status").textContent=hard?"Requesting a fresh market scan…":"Checking the shared eight-hour cache…";
+  const request=await requestAnalysis(null,null,null,"scan",hard);
+  $("scan-progress").hidden=false;
+  let result;
+  if(request.status==="completed"&&request.cached){
+   const response=await fetch(api("analysis-status")+"?id="+encodeURIComponent(request.id),{headers:{"apikey":config.supabasePublishableKey}});
+   const data=await response.json();if(!response.ok)throw Error(data.error||"Could not retrieve cached scan.");
+   result=data.result;updateProgress("scan",{status:"completed",progress:100,stage:"Shared cached result · generated "+new Date(request.cache_created_at).toLocaleString()});
+   $("scan-status").textContent="Loaded shared scan from cache. No new scan was run.";
+  }else{
+   $("scan-status").textContent=request.reused?"A scan is already running. Joining its progress…":"Scan queued. Other visitors can use the last completed cache while this runs.";
+   result=await waitForResult(request.id,$("scan-status"),"scan");
+   $("scan-status").textContent="Market scan complete · "+(result.as_of||"");
+  }
   renderScan(result);
-  $("scan-status").textContent="Market scan complete · "+(result.as_of||"");
  }catch(error){$("scan-status").textContent=error.message;}
- finally{$("start-scan").disabled=false;}
-});
+ finally{$("start-scan").disabled=false;$("hard-rescan").disabled=false;}
+}
+$("start-scan").addEventListener("click",()=>startScan(false));
+$("hard-rescan").addEventListener("click",()=>startScan(true));
