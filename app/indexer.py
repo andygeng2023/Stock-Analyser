@@ -15,10 +15,10 @@ from .analyzer import analyze_ticker
 from .scanner import load_universe, fast_filter
 from .worker import request_json
 
-PER_SHARD_LIMIT = 15
+PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "15"))
 MARKET_CAP_LOOKUPS = 250
-PRIORITY_REFRESH_COUNT = 20
-REFRESH_AFTER_HOURS = 6.0
+PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"))
+REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
 PERIOD = "5y"
 HORIZON = 30
 
@@ -124,7 +124,7 @@ def run(shard):
                 hi = mid
         return lo / len(ordered)
 
-    cap_values = [float(x.get("market_cap")) for x in ranked if x.get("market_cap") is not None]
+    cap_values = [float(x.get("market_cap") or catalog.get(x["ticker"], {}).get("market_cap")) for x in ranked if (x.get("market_cap") or catalog.get(x["ticker"], {}).get("market_cap")) is not None]
     volume_values = [float(x.get("dollar_volume") or 0) for x in ranked]
     momentum_values = [float(x.get("fast_score") or 0) for x in ranked]
     for item in ranked:
@@ -157,8 +157,8 @@ def run(shard):
     # Track B: spend remaining compute expanding coverage. The persistent
     # catalogue cursor prevents the same names being chosen repeatedly, while
     # market-cap/liquidity/fast-screen quality breaks ties.
-    elite_tickers = {item["ticker"] for item in elite}
-    discovery = [item for item in ranked if item["ticker"] not in {x["ticker"] for x in refresh_due}]
+    refresh_tickers = {item["ticker"] for item in refresh_due}
+    discovery = [item for item in ranked if item["ticker"] not in refresh_tickers]
     def discovery_key(item):
         last = parse_time(catalog.get(item["ticker"], {}).get("last_indexed_at"))
         # Never/least-recently processed names first; stronger names win ties.
