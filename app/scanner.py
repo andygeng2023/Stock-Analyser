@@ -37,7 +37,24 @@ def load_universe():
     symbols = []
     seen = set()
     for row in rows:
-        symbol = str(row.get("symbol", "")).strip().upper()
+        if isinstance(row, dict):
+            # Provider field casing and aliases have varied between screener responses.
+            fields = {str(key).strip().lower(): value for key, value in row.items()}
+            raw_symbol = fields.get("symbol") or fields.get("ticker") or fields.get("nasdaq symbol")
+        elif isinstance(row, (list, tuple)) and row:
+            # Some tabular responses provide values in header order.
+            headers = table.get("headers") or []
+            header_names = [
+                str(item.get("name", "") if isinstance(item, dict) else item).strip().lower()
+                for item in headers
+            ]
+            try:
+                raw_symbol = row[header_names.index("symbol")]
+            except (ValueError, IndexError):
+                raw_symbol = None
+        else:
+            raw_symbol = None
+        symbol = str(raw_symbol or "").strip().upper()
         if not symbol or symbol in seen or len(symbol) > 12:
             continue
         # Exclude warrants, units, rights and other non-common-stock suffixes.
@@ -48,10 +65,17 @@ def load_universe():
     if len(symbols) < MIN_UNIVERSE:
         response_keys = ", ".join(sorted(str(key) for key in data.keys())) or "none"
         table_keys = ", ".join(sorted(str(key) for key in table.keys())) or "none"
+        first_row = rows[0] if rows else None
+        first_row_keys = (
+            ", ".join(sorted(str(key) for key in first_row.keys()))
+            if isinstance(first_row, dict) else "not-an-object"
+        )
+        total_records = data.get("totalrecords", table.get("totalrecords", "unknown"))
         raise RuntimeError(
-            f"Nasdaq screener supplied {len(symbols)} symbols (data keys: {response_keys}; "
-            f"table keys: {table_keys}). Expected at least {MIN_UNIVERSE}; "
-            "the provider may have changed its response or temporarily blocked the request."
+            f"Nasdaq screener parsed {len(symbols)} symbols from {len(rows)} rows "
+            f"(reported total: {total_records}; data keys: {response_keys}; "
+            f"table keys: {table_keys}; first-row keys: {first_row_keys}). "
+            f"Expected at least {MIN_UNIVERSE}; provider response may have changed or be incomplete."
         )
     return symbols
 
