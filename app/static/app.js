@@ -78,6 +78,8 @@ function renderScan(data){
  $("scan-list").querySelectorAll("[data-ticker]").forEach(button=>{
   button.addEventListener("click",()=>{
    $("ticker").value=button.dataset.ticker;
+   $("period").value="5y";
+   $("horizon").value="30";
    switchTab("search");
    $("search").requestSubmit();
   });
