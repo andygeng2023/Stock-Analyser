@@ -17,6 +17,8 @@ from .worker import request_json
 
 PER_SHARD_LIMIT = 15
 MARKET_CAP_LOOKUPS = 250
+PRIORITY_REFRESH_COUNT = 20
+REFRESH_AFTER_HOURS = 6.0
 PERIOD = "5y"
 HORIZON = 30
 
@@ -73,9 +75,9 @@ def run(shard):
         if cap is not None:
             catalog.setdefault(item["ticker"], {})["market_cap"] = cap
 
-    # Keep the rotation cursor in the catalogue after the eight-hour result
-    # itself expires, so the same mega-caps are not re-indexed every cycle.
-    now = datetime.now(timezone.utc).isoformat()
+    # Keep catalogue metadata after cache expiry, and use it as the fair-rotation cursor.
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
     metadata = []
     for item in ranked:
         ticker = item["ticker"]
@@ -91,20 +93,89 @@ def run(shard):
     for start in range(0, len(metadata), 500):
         db_post("market_index_catalog", metadata[start:start + 500], conflict="ticker")
 
-    def sort_key(item):
-        last = catalog.get(item["ticker"], {}).get("last_indexed_at")
-        # Never indexed first, then oldest index timestamp, then market value
-        # and liquidity. This gradually rotates through the eligible universe.
-        return (
-            last or "",
-            -(item.get("market_cap") or 0),
-            -(item.get("dollar_volume") or 0),
-            -(item.get("fast_score") or 0),
+    # Read the live cache separately from the catalogue. The catalogue survives
+    # the eight-hour expiry; market_index tells us whether a usable result exists.
+    live_rows = db_get(
+        f"market_index?select=ticker,indexed_at,market_cap,avg_dollar_volume,priority"
+        f"&period=eq.{PERIOD}&horizon=eq.{HORIZON}&limit=10000"
+    )
+    live_index = {row["ticker"]: row for row in (live_rows or [])}
+
+    def parse_time(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+
+    # Composite quality rank: market value and liquidity dominate; recent
+    # momentum/trend is a smaller tie-breaker, not a forecast recommendation.
+    def percentile(values, value):
+        if value is None or not values:
+            return 0.0
+        ordered = sorted(values)
+        lo, hi = 0, len(ordered)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if ordered[mid] <= value:
+                lo = mid + 1
+            else:
+                hi = mid
+        return lo / len(ordered)
+
+    cap_values = [float(x.get("market_cap")) for x in ranked if x.get("market_cap") is not None]
+    volume_values = [float(x.get("dollar_volume") or 0) for x in ranked]
+    momentum_values = [float(x.get("fast_score") or 0) for x in ranked]
+    for item in ranked:
+        old = catalog.get(item["ticker"], {})
+        cap = item.get("market_cap") or old.get("market_cap")
+        item["_quality"] = (
+            0.45 * percentile(cap_values, float(cap) if cap is not None else None)
+            + 0.35 * percentile(volume_values, float(item.get("dollar_volume") or 0))
+            + 0.20 * percentile(momentum_values, float(item.get("fast_score") or 0))
+        )
+        live = live_index.get(item["ticker"])
+        indexed_at = parse_time((live or {}).get("indexed_at"))
+        item["_indexed_at"] = indexed_at
+        item["_age_hours"] = (
+            (now_dt - indexed_at).total_seconds() / 3600 if indexed_at else None
         )
 
-    candidates = sorted(ranked, key=sort_key)
-    shard_candidates = candidates[shard::shard_count][:PER_SHARD_LIMIT]
-    print(f"Universe={len(symbols)}, eligible={eligible}, shard candidates={len(shard_candidates)}.")
+    # Track A: protect a small high-value/high-liquidity cohort. Refresh its
+    # entries at six hours, leaving a two-hour margin before the cache expires.
+    elite = sorted(ranked, key=lambda x: x["_quality"], reverse=True)[:PRIORITY_REFRESH_COUNT]
+    refresh_due = [
+        item for item in elite
+        if item["_indexed_at"] is None or item["_age_hours"] >= REFRESH_AFTER_HOURS
+    ]
+    refresh_due.sort(key=lambda x: (
+        -(x["_age_hours"] if x["_age_hours"] is not None else 9999),
+        -x["_quality"],
+    ))
+
+    # Track B: spend remaining compute expanding coverage. The persistent
+    # catalogue cursor prevents the same names being chosen repeatedly, while
+    # market-cap/liquidity/fast-screen quality breaks ties.
+    elite_tickers = {item["ticker"] for item in elite}
+    discovery = [item for item in ranked if item["ticker"] not in {x["ticker"] for x in refresh_due}]
+    def discovery_key(item):
+        last = parse_time(catalog.get(item["ticker"], {}).get("last_indexed_at"))
+        # Never/least-recently processed names first; stronger names win ties.
+        age = (now_dt - last).total_seconds() if last else float("inf")
+        return (-age, -item["_quality"])
+    discovery.sort(key=discovery_key)
+
+    ordered = refresh_due + discovery
+    # Stable two-way sharding keeps workers disjoint. Each cycle takes a small
+    # batch; main() repeats batches until the pre-timeout hand-off window.
+    candidates = ordered[shard::shard_count]
+    shard_candidates = candidates[:PER_SHARD_LIMIT]
+    print(
+        f"Universe={len(symbols)}, eligible={eligible}, "
+        f"priority refresh due={len(refresh_due)}, "
+        f"elite cohort={len(elite)}, shard candidates={len(shard_candidates)}."
+    )
     completed = 0
     for position, item in enumerate(shard_candidates, start=1):
         ticker = item["ticker"]
