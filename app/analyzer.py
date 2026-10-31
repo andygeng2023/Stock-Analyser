@@ -159,10 +159,35 @@ def analyze_ticker(ticker,period="5y",horizon=30):
         actual_returns=test_returns.to_numpy(dtype=float)
         actual_residuals=residuals.loc[test_returns.index].to_numpy(dtype=float)
         predicted_arima=np.asarray(arima_predictions,dtype=float)
+
+        # Calibrate the SVR correction weight on the first half of the holdout,
+        # then report metrics only on the untouched second half.
+        calibration_size=max(5,len(actual_returns)//2)
+        calibration_actual=actual_returns[:calibration_size]
+        calibration_arima=predicted_arima[:calibration_size]
+        calibration_svr=predicted_residuals[:calibration_size]
+        blend_candidates=[0.0,0.25,0.5,0.75,1.0]
+        correction_weight=min(
+            blend_candidates,
+            key=lambda weight: mean_absolute_error(
+                calibration_actual,
+                calibration_arima + weight*calibration_svr,
+            ),
+        )
+        evaluation=slice(calibration_size,None)
+        evaluation_actual=actual_returns[evaluation]
+        evaluation_arima=predicted_arima[evaluation]
+        evaluation_svr=predicted_residuals[evaluation]
+        evaluation_residuals=actual_residuals[evaluation]
         metrics={
-            "arima":_metrics(actual_returns,predicted_arima),
-            "svm_residual":_metrics(actual_residuals,predicted_residuals),
-            "hybrid":_metrics(actual_returns,predicted_arima+predicted_residuals),
+            "arima":_metrics(evaluation_actual,evaluation_arima),
+            "svm_residual":_metrics(evaluation_residuals,evaluation_svr),
+            "hybrid":_metrics(
+                evaluation_actual,
+                evaluation_arima+correction_weight*evaluation_svr,
+            ),
+            "evaluation_observations":len(evaluation_actual),
+            "blend_calibration_observations":calibration_size,
         }
 
         # Refit both components on all available observations for the live forecast.
@@ -198,7 +223,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
             }
             correction=float(svr.predict(pd.DataFrame([row],columns=full_data.drop(columns="target").columns))[0])
             arima_path.append(float(close.iloc[-1])*float(np.exp(np.sum(base[:i+1]))))
-            next_return=float(base[i]+correction)
+            next_return=float(base[i]+correction_weight*correction)
             last*=float(np.exp(next_return))
             forecast_path.append(last)
             band=1.96*sigma*np.sqrt(i+1)
@@ -269,6 +294,7 @@ def analyze_ticker(ticker,period="5y",horizon=30):
                     "epsilon":selected_svr_parameters["svr__epsilon"],
                 },
                 "selection_method":"expanding-window ARIMA validation + time-series SVR grid search",
+                "svr_correction_weight":correction_weight,
                 "adf_p_value":round(float(adfuller(returns)[1]),6),
                 "observations":len(returns),
                 "validation_observations":len(actual_returns),
