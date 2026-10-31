@@ -3,6 +3,7 @@
 Each scheduled shard ranks the current liquid universe, prioritises never/least
 recently indexed names, and computes a bounded number of full baseline analyses.
 """
+import hashlib
 import os
 import sys
 import time
@@ -169,7 +170,12 @@ def run(shard):
     ordered = refresh_due + discovery
     # Stable two-way sharding keeps workers disjoint. Each cycle takes a small
     # batch; main() repeats batches until the pre-timeout hand-off window.
-    candidates = ordered[shard::shard_count]
+    # Stable ticker hashing prevents shard overlap even when one shard updates
+    # timestamps and re-sorts the universe before the other shard's next cycle.
+    candidates = [
+        item for item in ordered
+        if hashlib.sha256(item["ticker"].encode()).digest()[0] % shard_count == shard
+    ]
     shard_candidates = candidates[:PER_SHARD_LIMIT]
     print(
         f"Universe={len(symbols)}, eligible={eligible}, "
