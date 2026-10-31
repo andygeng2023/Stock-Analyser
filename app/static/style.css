@@ -19,3 +19,5 @@ body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
 .scan-result .scan-return small{display:block;margin:4px 0 8px}
 .scan-result button{padding:8px 11px;font-size:12px}
 @media(max-width:700px){main{padding-bottom:24px}.scan-intro{padding:19px}.scan-result{padding:14px}.scan-result .scan-return strong{font-size:17px}}
+
+.source-control{display:flex;flex-direction:column;gap:7px;max-width:360px;margin:16px 0;color:#aab8ce;font-size:13px}.source-control select{width:100%}
