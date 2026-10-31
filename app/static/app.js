@@ -8,8 +8,8 @@ const headers=()=>({"Content-Type":"application/json","apikey":config.supabasePu
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function rows(obj){return Object.entries(obj).map(([k,v])=>'<div class="row"><span>'+esc(k.replaceAll("_"," "))+'</span><strong>'+esc(v==null?"—":v)+'</strong></div>').join("");}
 function setStatus(s){$("status").textContent=s;}
-async function requestAnalysis(ticker,period,horizon,mode="analysis",hardRescan=false){
- const payload=mode==="scan"?{mode:"scan",source:$("scan-source").value,hard_rescan:hardRescan}:{ticker,period,horizon};
+async function requestAnalysis(ticker,period,horizon,mode="analysis",hardRescan=false,latestOnly=false){
+ const payload=mode==="scan"?{mode:"scan",source:$("#scan-source").value,hard_rescan:hardRescan,latest_only:latestOnly}:{ticker,period,horizon,hard_rescan:hardRescan};
  const r=await fetch(api("request-analysis"),{method:"POST",headers:headers(),body:JSON.stringify(payload)});
  const d=await r.json();if(!r.ok)throw Error(d.error||"Could not start analysis.");return d;
 }
@@ -112,6 +112,7 @@ $("hard-rescan").addEventListener("click",()=>startScan(true));
 let latestScanLoaded=false;
 async function loadLatestScan(){
  if(latestScanLoaded)return;
+ if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured.";return;}
  latestScanLoaded=true;
  try{
   $("scan-status").textContent="Loading the latest shared background scan…";
