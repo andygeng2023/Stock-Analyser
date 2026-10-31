@@ -45,7 +45,18 @@ Deno.serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
-    const hardRescan = mode === "scan" && body.hard_rescan === true;
+    const hardRescan = body.hard_rescan === true;
+    if (mode === "analysis" && !hardRescan) {
+      const { data: indexed, error: indexError } = await admin.from("market_index")
+        .select("source_job_id,indexed_at")
+        .eq("ticker", symbol).eq("period", period).eq("horizon", horizon)
+        .gte("indexed_at", new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString())
+        .not("source_job_id", "is", null).maybeSingle();
+      if (indexError) throw indexError;
+      if (indexed?.source_job_id) {
+        return json({ id: indexed.source_job_id, status: "completed", ticker: symbol, mode, cached: true, cache_source: "market_index", cache_created_at: indexed.indexed_at }, 200);
+      }
+    }
     if (!hardRescan) {
       const { data: cached, error: cacheError } = await admin.from("analysis_jobs")
         .select("id,created_at")
