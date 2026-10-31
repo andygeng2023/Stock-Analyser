@@ -10,11 +10,7 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: cors });
 
-async function sha256(value: string) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+const MAX_QUEUED_JOBS = 100;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -36,27 +32,39 @@ Deno.serve(async (req) => {
     }
 
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-      ?? req.headers.get("x-real-ip") ?? "unknown";
-    const ipHash = await sha256(forwarded + (Deno.env.get("RATE_LIMIT_SALT") ?? serviceKey.slice(0, 24)));
 
-    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count, error: countError } = await admin.from("analysis_jobs")
+    // Reuse an existing queued/running analysis for the same inputs instead
+    // of consuming another runner slot for duplicate submissions.
+    const { data: existing, error: existingError } = await admin.from("analysis_jobs")
+      .select("id,status")
+      .eq("ticker", symbol)
+      .eq("period", period)
+      .eq("horizon", horizon)
+      .in("status", ["queued", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) return json({ id: existing.id, status: existing.status, ticker: symbol, reused: true }, 202);
+
+    // Protect the shared free worker from an unbounded public backlog. This is
+    // a global queue safeguard, not an hourly per-visitor quota.
+    const { count: queuedCount, error: queueCountError } = await admin.from("analysis_jobs")
       .select("id", { count: "exact", head: true })
-      .eq("client_ip_hash", ipHash)
-      .gte("created_at", since);
-    if (countError) throw countError;
-    if ((count ?? 0) >= 5) return json({ error: "Hourly analysis limit reached. Try again later." }, 429);
+      .eq("status", "queued");
+    if (queueCountError) throw queueCountError;
+    if ((queuedCount ?? 0) >= MAX_QUEUED_JOBS) {
+      return json({ error: "The analysis queue is currently full. Please try again shortly." }, 503);
+    }
 
     const { data: job, error: insertError } = await admin.from("analysis_jobs")
-      .insert({ ticker: symbol, period, horizon, status: "queued", client_ip_hash: ipHash })
+      .insert({ ticker: symbol, period, horizon, status: "queued" })
       .select("id")
       .single();
     if (insertError) throw insertError;
 
-    // Every request wakes the shared worker lane. GitHub concurrency ensures
-    // only one worker runs at a time and retains one pending successor while
-    // the current worker is draining the database queue.
+    // Wake the shared worker lane. GitHub concurrency prevents multiple
+    // queue workers from running simultaneously.
     const owner = "andygeng2023";
     const repository = "Stock-Analyser";
     const workflow = "analyze-stock.yml";
