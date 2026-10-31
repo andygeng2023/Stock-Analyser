@@ -35,6 +35,13 @@
 <small>MARKET-WIDE DISCOVERY</small>
 <h2>Scan the market</h2>
 <p>Screen 1,000+ listed stocks with a fast momentum, trend, volatility and liquidity filter. The strongest candidates are then evaluated by the existing ARIMA–SVR model.</p>
+<label class="source-control" for="scan-source">Stock universe source
+<select id="scan-source">
+<option value="both" selected>Both Yahoo Finance and Nasdaq</option>
+<option value="yfinance">Yahoo Finance only</option>
+<option value="nasdaq">Nasdaq only</option>
+</select>
+</label>
 <button id="start-scan" type="button">Start market scan</button>
 </div>
 <p id="scan-status" role="status" aria-live="polite">A scan is processed by the same shared analysis queue.</p>
