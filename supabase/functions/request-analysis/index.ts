@@ -54,6 +54,9 @@ Deno.serve(async (req) => {
       .single();
     if (insertError) throw insertError;
 
+    // Every request wakes the shared worker lane. GitHub concurrency ensures
+    // only one worker runs at a time and retains one pending successor while
+    // the current worker is draining the database queue.
     const owner = "andygeng2023";
     const repository = "Stock-Analyser";
     const workflow = "analyze-stock.yml";
@@ -67,10 +70,7 @@ Deno.serve(async (req) => {
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ref: "main",
-          inputs: { job_id: job.id, ticker: symbol, period, horizon: String(horizon) },
-        }),
+        body: JSON.stringify({ ref: "main" }),
       },
     );
 
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       await admin.from("analysis_jobs").update({
         status: "failed", error: "Could not start the analysis worker.", updated_at: new Date().toISOString(),
       }).eq("id", job.id);
-      console.error("GitHub workflow dispatch failed:", dispatch.status, detail);
+      console.error("GitHub worker dispatch failed:", dispatch.status, detail);
       return json({ error: "Could not start the analysis worker. Check the GitHub token and workflow setup." }, 502);
     }
 
