@@ -19,7 +19,7 @@
 <select id="horizon" aria-label="Forecast horizon"><option value="5">5 days</option><option value="10">10 days</option><option value="20">20 days</option><option value="30" selected>30 days</option><option value="60">60 days</option></select>
 <button id="submit" type="submit">Analyse stock</button>
 </form>
-<p id="status" role="status" aria-live="polite">Enter a ticker to begin.</p>
+<div class="job-progress" id="search-progress" hidden><div class="progress-track"><div id="search-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="search-progress-label">Queued</strong><span id="search-progress-percent">0%</span></div><p id="search-progress-stage" class="muted"></p></div><p id="status" role="status" aria-live="polite">Enter a ticker to begin.</p>
 <section id="results" hidden>
 <div class="company"><div><small id="symbol"></small><h2 id="name"></h2></div><div><strong id="price"></strong><p id="change"></p></div></div>
 <div class="cards" id="summary"></div>
@@ -42,9 +42,9 @@
 <option value="nasdaq">Nasdaq only</option>
 </select>
 </label>
-<button id="start-scan" type="button">Start market scan</button>
+<div class="scan-actions"><button id="start-scan" type="button">Start market scan</button><button id="hard-rescan" class="secondary-button" type="button">Hard rescan</button></div>
 </div>
-<p id="scan-status" role="status" aria-live="polite">A scan is processed by the same shared analysis queue.</p>
+<div class="job-progress" id="scan-progress" hidden><div class="progress-track"><div id="scan-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="scan-progress-label">Queued</strong><span id="scan-progress-percent">0%</span></div><p id="scan-progress-stage" class="muted"></p></div><p id="scan-status" role="status" aria-live="polite">A scan is processed by the same shared analysis queue.</p>
 <section id="scan-results" hidden>
 <div class="scan-meta" id="scan-meta"></div>
 <div id="scan-list"></div>
