@@ -43,18 +43,19 @@ def analyze_ticker(ticker, period="5y", horizon=30):
         split=int(len(data)*.8)
         def make_model(): return make_pipeline(StandardScaler(),SVR(kernel="rbf",C=10,epsilon=.001))
         # Strict chronological walk-forward validation: each prediction only sees prior rows.
-        actual=[]; pred_resid=[]; pred_arima=[]
+        actual_returns=[]; actual_residuals=[]; pred_resid=[]; pred_arima=[]
         for i in range(split,len(data)):
             prior=data.iloc[:i]; m=make_model().fit(prior.drop(columns="target"),prior.target)
             pred_resid.append(float(m.predict(data.drop(columns="target").iloc[[i]])[0]))
-            actual.append(float(data.target.iloc[i]))
+            actual_residuals.append(float(data.target.iloc[i]))
+            actual_returns.append(float(ret.shift(-1).loc[data.index[i]]))
             loc=ret.index.get_loc(data.index[i])
             af=ARIMA(ret.iloc[:loc],order=order,enforce_stationarity=False,enforce_invertibility=False).fit()
             pred_arima.append(float(af.forecast(1).iloc[0]))
-        actual=np.array(actual); pred_resid=np.array(pred_resid); pred_arima=np.array(pred_arima)
+        actual_returns=np.array(actual_returns); actual_residuals=np.array(actual_residuals); pred_resid=np.array(pred_resid); pred_arima=np.array(pred_arima)
         def metrics(y,p):
             return {"mae":round(float(mean_absolute_error(y,p)),7),"rmse":round(float(np.sqrt(mean_squared_error(y,p))),7),"directional_accuracy":round(float(np.mean(np.sign(y)==np.sign(p))*100),2)}
-        metrics_out={"arima":metrics(actual,pred_arima),"svm_residual":metrics(actual,pred_resid),"hybrid":metrics(actual,pred_arima+pred_resid)}
+        metrics_out={"arima":metrics(actual_returns,pred_arima),"svm_residual":metrics(actual_residuals,pred_resid),"hybrid":metrics(actual_returns,pred_arima+pred_resid)}
         resid=pd.Series(np.asarray(arima.resid),index=ret.index)
         for lag in range(1,4): x[f"e{lag}"]=resid.reindex(close.index).shift(lag)
         target=resid.reindex(close.index).shift(-1); full=x.assign(target=target).replace([np.inf,-np.inf],np.nan).dropna()
