@@ -65,6 +65,16 @@ def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, res
         method="POST", payload=payload,
         headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "resolution=merge-duplicates,return=minimal"},
     )
+    request_json(
+        f"{base}/rest/v1/market_index_catalog?on_conflict=ticker",
+        method="POST",
+        payload={
+            "ticker": ticker, "market_cap": market_cap,
+            "priority": payload["priority"], "last_indexed_at": payload["indexed_at"],
+            "updated_at": payload["indexed_at"],
+        },
+        headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "resolution=merge-duplicates,return=minimal"},
+    )
 
 
 def claim_next_job():
