@@ -115,7 +115,6 @@ let latestScanLoaded=false;
 async function loadLatestScan(){
  if(latestScanLoaded)return;
  if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured.";return;}
- if(!config.supabaseUrl||!config.supabasePublishableKey){$("scan-status").textContent="Supabase is not configured.";return;}
  latestScanLoaded=true;
  try{
   $("scan-status").textContent="Loading the latest shared background scan…";
