@@ -6,6 +6,7 @@ recently indexed names, and computes a bounded number of full baseline analyses.
 import os
 import sys
 import time
+import threading
 from datetime import datetime, timezone
 
 import yfinance as yf
@@ -158,19 +159,28 @@ def dispatch_successor():
     print("Successor indexer workflow dispatched for a graceful six-hour hand-off.")
 
 
+def _handoff_after_runtime():
+    time.sleep(340 * 60)
+    try:
+        dispatch_successor()
+    except Exception as exc:
+        print(f"Could not dispatch successor indexer: {exc}", file=sys.stderr)
+
+
 def main():
     shard = int(os.environ.get("INDEX_SHARD", "0"))
+    if shard == 0:
+        threading.Thread(target=_handoff_after_runtime, daemon=True).start()
     started = time.monotonic()
     while time.monotonic() - started < 345 * 60:
-        run(shard)
-        if __import__("time").monotonic() - started < 345 * 60:
+        try:
+            run(shard)
+        except Exception as exc:
+            print(f"Indexing cycle failed: {str(exc)[:300]}", file=sys.stderr)
+        if time.monotonic() - started < 345 * 60:
             print("Indexing cycle complete; pausing 90 seconds before the next rotation.")
             time.sleep(90)
-    if shard == 0:
-        dispatch_successor()
-    else:
-        print("Secondary shard reached its hand-off window; primary shard dispatches the successor.")
-
+    print("Indexer reached its graceful exit window.")
 
 if __name__ == "__main__":
     raise SystemExit(main())
