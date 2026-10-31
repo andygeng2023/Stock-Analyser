@@ -15,7 +15,10 @@ def _select_order(series):
     candidates=[]
     for order in ORDERS:
         try:
-            fitted=ARIMA(series,order=order,enforce_stationarity=False,enforce_invertibility=False).fit()
+            # Use a numeric index: Yahoo Finance DatetimeIndex values often have
+            # no fixed frequency, which prevents statsmodels append() from
+            # extending the fitted model during one-step-ahead validation.
+            fitted=ARIMA(np.asarray(series,dtype=float),order=order,enforce_stationarity=False,enforce_invertibility=False).fit()
             candidates.append((float(fitted.aic),order,fitted))
         except Exception:
             continue
