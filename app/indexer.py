@@ -140,5 +140,36 @@ def run(shard):
     return 0
 
 
+def dispatch_successor():
+    token = os.environ["GITHUB_TOKEN"]
+    repository = os.environ["GITHUB_REPOSITORY"]
+    ref = os.environ.get("GITHUB_REF_NAME", "main")
+    request_json(
+        f"https://api.github.com/repos/{repository}/actions/workflows/index-market.yml/dispatches",
+        method="POST",
+        payload={"ref": ref},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    print("Successor indexer workflow dispatched for a graceful six-hour hand-off.")
+
+
+def main():
+    shard = int(os.environ.get("INDEX_SHARD", "0"))
+    started = __import__("time").monotonic()
+    while __import__("time").monotonic() - started < 345 * 60:
+        run(shard)
+        if __import__("time").monotonic() - started < 345 * 60:
+            print("Indexing cycle complete; pausing 90 seconds before the next rotation.")
+            __import__("time").sleep(90)
+    if shard == 0:
+        dispatch_successor()
+    else:
+        print("Secondary shard reached its hand-off window; primary shard dispatches the successor.")
+
+
 if __name__ == "__main__":
-    raise SystemExit(run(int(os.environ.get("INDEX_SHARD", "0"))))
+    raise SystemExit(main())
