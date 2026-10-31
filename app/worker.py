@@ -8,6 +8,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 from .analyzer import analyze_ticker
+from .scanner import run_market_scan
 
 POLL_SECONDS = 5
 IDLE_TIMEOUT_SECONDS = 120
@@ -76,7 +77,10 @@ def process_job(job: dict) -> None:
     ticker = job["ticker"]
     try:
         print(f"Starting {ticker} ({job_id}); attempt {job.get('attempts', 1)}.")
-        result = analyze_ticker(ticker, job["period"], int(job["horizon"]))
+        if job.get("job_type") == "scan":
+            result = run_market_scan()
+        else:
+            result = analyze_ticker(ticker, job["period"], int(job["horizon"]))
         update_job(job_id, {"status": "completed", "result": result, "error": None})
         print(f"Analysis completed for {ticker} ({job_id}).")
     except Exception as exc:
