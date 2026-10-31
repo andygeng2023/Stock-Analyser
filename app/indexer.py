@@ -22,6 +22,7 @@ PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"
 REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
 PERIOD = "5y"
 HORIZON = 30
+_UNIVERSE_SNAPSHOT = None
 
 
 def db_get(path):
@@ -53,13 +54,22 @@ def market_cap_for(ticker):
         return None
 
 
+def _get_universe_snapshot():
+    global _UNIVERSE_SNAPSHOT
+    if _UNIVERSE_SNAPSHOT is None:
+        print("Building a fresh six-hour universe snapshot.")
+        symbols = load_universe("both")
+        ranked, eligible = fast_filter(symbols)
+        _UNIVERSE_SNAPSHOT = (ranked, len(symbols), eligible)
+    return _UNIVERSE_SNAPSHOT
+
+
 def run(shard):
     shard_count = 2
     if shard < 0 or shard >= shard_count:
         raise ValueError("Invalid indexer shard.")
-    print(f"Market indexer shard {shard + 1}/{shard_count} discovering universe.")
-    symbols = load_universe("both")
-    ranked, eligible = fast_filter(symbols)
+    print(f"Market indexer shard {shard + 1}/{shard_count} preparing candidates.")
+    ranked, universe_size, eligible = _get_universe_snapshot()
     if not ranked:
         print("No eligible stocks found; nothing to index.")
         return 0
@@ -178,7 +188,7 @@ def run(shard):
     ]
     shard_candidates = candidates[:PER_SHARD_LIMIT]
     print(
-        f"Universe={len(symbols)}, eligible={eligible}, "
+        f"Universe={universe_size}, eligible={eligible}, "
         f"priority refresh due={len(refresh_due)}, "
         f"elite cohort={len(elite)}, shard candidates={len(shard_candidates)}."
     )
