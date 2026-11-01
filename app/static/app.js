@@ -649,38 +649,26 @@ async function waitForResult(id, statusElement, prefix = "search") {
 function stockSparkline(stock) {
   const history = (Array.isArray(stock.history_preview) ? stock.history_preview : [])
     .map(Number).filter(Number.isFinite);
-  const future = (Array.isArray(stock.forecast_preview) ? stock.forecast_preview : [])
-    .map(Number).filter(Number.isFinite);
-  if (!history.length) {
-    return '<div class="stock-chart-placeholder">Indexed chart unavailable</div>';
-  }
+  if (!history.length) return '<div class="stock-chart-placeholder">Loading...</div>';
 
-  const all = history.concat(future);
-  const min = Math.min(...all);
-  const max = Math.max(...all);
+  const min = Math.min(...history);
+  const max = Math.max(...history);
   const spread = max - min || Math.max(Math.abs(max) * 0.01, 1);
   const width = 280;
   const height = 54;
   const pad = 5;
-  const total = Math.max(2, history.length + future.length);
+  const total = Math.max(2, history.length);
   const point = (value, index) => {
     const x = (index / (total - 1)) * width;
     const y = height - pad - ((value - min) / spread) * (height - pad * 2);
     return [x, y];
   };
-  const pathFor = (values, offset = 0) => values.map((value, index) => {
-    const [x, y] = point(value, index + offset);
+  const historyPath = history.map((value, index) => {
+    const [x, y] = point(value, index);
     return (index ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1);
   }).join(" ");
-  const historyPath = pathFor(history);
-  const forecastValues = future.length ? [history[history.length - 1], ...future] : [];
-  const forecastPath = forecastValues.length ? pathFor(forecastValues, history.length - 1) : "";
-  const forecastClass = Number(stock.expected_change_percent) < 0 ? "negative" : "positive";
-
-  return '<svg class="stock-sparkline" viewBox="0 0 280 54" preserveAspectRatio="none" role="img" aria-label="Historical price and indexed model forecast">' +
-    '<path class="stock-history-line" d="' + historyPath + '"></path>' +
-    (forecastPath ? '<path class="stock-forecast-line ' + forecastClass + '" d="' + forecastPath + '"></path>' : '') +
-    '</svg>';
+  return '<svg class="stock-sparkline" viewBox="0 0 280 54" preserveAspectRatio="none" role="img" aria-label="Historical prices only">' +
+    '<path class="stock-history-line" d="' + historyPath + '"></path></svg>';
 }
 
 function stockCard(stock) {
@@ -779,7 +767,7 @@ function watchlistCard(item) {
     '<button type="button" class="watchlist-v2-open ' + className +
       '" data-watch-open="' + ticker + '" aria-label="' + esc(label) + '">' + content + '</button>';
 
-  return '<article class="watchlist-v2-item">' +
+  return '<article class="watchlist-v2-item" data-watch-ticker="' + ticker + '">' +
     openButton(
       "watchlist-v2-identity",
       '<strong class="watchlist-v2-ticker">' + ticker + '</strong>' +
@@ -802,7 +790,7 @@ function renderWatchlist() {
     root.innerHTML = '<div class="empty-feed watchlist-empty">Your watchlist is empty. Open a stock analysis and select “Add to watchlist” to save it here.</div>';
     return;
   }
-  root.innerHTML = watchlistItems.map(watchlistCard).join("");
+  root.innerHTML = watchlistItems.map(item => watchlistCard({ ...item, _watchTicker: item.ticker })).join("");
   root.querySelectorAll("[data-watch-open]").forEach(button => {
     button.addEventListener("click", () => openStockDetails(button.dataset.watchOpen, { returnScreen: "watchlist" }));
   });
@@ -907,6 +895,50 @@ function bindStockButtons(root) {
     button.addEventListener("click", () => openStockDetails(button.dataset.ticker));
   });
 }
+let visibleMarketRefreshBusy = false;
+let visibleMarketRefreshAt = 0;
+async function refreshVisibleMarketCards(force = false) {
+  if (visibleMarketRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (!force && Date.now() - visibleMarketRefreshAt < 55_000) return;
+  const visible = [...document.querySelectorAll(".stock-card[data-ticker], .watchlist-v2-item[data-watch-ticker]")]
+    .filter(el => el.offsetParent !== null);
+  const tickers = [...new Set(visible.map(el => el.dataset.ticker || el.dataset.watchTicker).filter(Boolean))].slice(0, 60);
+  if (!tickers.length) return;
+  visibleMarketRefreshBusy = true;
+  try {
+    const response = await fetch(api("stock-market-data"), {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ tickers })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw Error(payload.error || "Could not refresh market data.");
+    const byTicker = new Map((payload.items || []).map(item => [item.ticker, item]));
+    for (const card of visible) {
+      const ticker = card.dataset.ticker || card.dataset.watchTicker;
+      const live = byTicker.get(ticker);
+      if (!live) continue;
+      const history = Array.isArray(live.history_preview) ? live.history_preview : [];
+      const chart = stockSparkline({ history_preview: history });
+      const chartNode = card.querySelector(".stock-sparkline, .stock-chart-placeholder");
+      if (chartNode && history.length) chartNode.outerHTML = chart;
+      const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
+      if (priceNode && live.price != null) priceNode.textContent = cash(live.price, live.currency);
+      const dailyNode = card.querySelector(".stock-daily-change, .watchlist-v2-daily");
+      if (dailyNode && live.change_percent != null) {
+        dailyNode.textContent = pct(live.change_percent);
+        dailyNode.classList.toggle("negative", Number(live.change_percent) < 0);
+        dailyNode.classList.toggle("positive", Number(live.change_percent) >= 0);
+      }
+    }
+    visibleMarketRefreshAt = Date.now();
+  } catch (error) {
+    console.warn("Live market refresh unavailable:", error);
+  } finally {
+    visibleMarketRefreshBusy = false;
+  }
+}
+
 
 function fillStockGrid(id, stocks, tag = "") {
   const root = $(id);
@@ -917,6 +949,7 @@ function fillStockGrid(id, stocks, tag = "") {
   }
   root.innerHTML = stocks.map(stockCard).join("");
   bindStockButtons(root);
+  refreshVisibleMarketCards();
 }
 
 function renderMarketFeed(data) {
@@ -931,6 +964,7 @@ function renderMarketFeed(data) {
     ? latest.slice(0, 6).map(stockCard).join("")
     : '<div class="empty-feed">No completed background scan is available yet. The section will populate after the next shared scan finishes.</div>';
   bindStockButtons($("home-latest-scan"));
+  refreshVisibleMarketCards();
 
   fillStockGrid("home-recommended", data.recommended, "Research shortlist");
   fillStockGrid("home-trending", data.trending, "Trending");
@@ -997,6 +1031,7 @@ function switchScreen(screen) {
 
   window.scrollTo({ top: 0, behavior: "instant" });
   if (screen === "home" || screen === "search" || screen === "discover") loadMarketFeed();
+  if (screen === "home" || screen === "search" || screen === "discover" || screen === "watchlist") refreshVisibleMarketCards(true);
   if (screen === "discover") loadLatestScan();
   if (screen === "watchlist") loadWatchlist(true);
 }
@@ -1500,7 +1535,8 @@ const requestedTab = new URLSearchParams(window.location.search).get("tab");
 switchScreen(["home", "search", "discover", "watchlist", "settings"].includes(requestedTab) ? requestedTab : "home");
 initializeAuth();
 setInterval(() => {
-  if (currentScreen === "home" || currentScreen === "discover") loadMarketFeed(true);
+  if (currentScreen === "home" || currentScreen === "search" || currentScreen === "discover") loadMarketFeed(true);
+  if (currentScreen === "home" || currentScreen === "search" || currentScreen === "discover" || currentScreen === "watchlist") refreshVisibleMarketCards(true);
   if (currentScreen === "watchlist") loadWatchlist(true);
   refreshLatestScan();
 }, 60_000);
