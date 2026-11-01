@@ -2087,3 +2087,38 @@ html[data-theme="light"] #settings-screen #account-password-form input::placehol
   .nav-tab-icon{width:18px;height:18px;flex-basis:18px}
   .nav-tab-icon svg{width:17px;height:17px}
 }
+
+
+/* Account settings: keep every form and its surrounding layout wrappers clear
+   in light mode. Only the actual input controls receive a filled surface. */
+#settings-screen .settings-v2-account-block,
+#settings-screen .settings-v2-account-controls,
+#settings-screen .settings-v2-profile-form,
+#settings-screen .settings-v2-form,
+#settings-screen .settings-v2-control-row {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+html[data-theme="light"] #settings-screen .settings-v2-account-block,
+html[data-theme="light"] #settings-screen .settings-v2-account-controls,
+html[data-theme="light"] #settings-screen .settings-v2-profile-form,
+html[data-theme="light"] #settings-screen .settings-v2-form,
+html[data-theme="light"] #settings-screen .settings-v2-control-row,
+html[data-theme="light"] #settings-screen #account-profile-form,
+html[data-theme="light"] #settings-screen #account-email-form,
+html[data-theme="light"] #settings-screen #account-password-form {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+html[data-theme="light"] #settings-screen #account-profile-form input,
+html[data-theme="light"] #settings-screen #account-email-form input,
+html[data-theme="light"] #settings-screen #account-password-form input {
+  background: #edf2f8 !important;
+  border: 1px solid #d3dce8 !important;
+  color: #172235 !important;
+  box-shadow: none !important;
+}
