@@ -900,6 +900,7 @@ let visibleMarketRefreshAt = 0;
 async function refreshVisibleMarketCards(force = false) {
   if (visibleMarketRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
   if (!force && Date.now() - visibleMarketRefreshAt < 55_000) return;
+  await Promise.resolve();
   const visible = [...document.querySelectorAll(".stock-card[data-ticker], .watchlist-v2-item[data-watch-ticker]")]
     .filter(el => el.offsetParent !== null);
   const tickers = [...new Set(visible.map(el => el.dataset.ticker || el.dataset.watchTicker).filter(Boolean))].slice(0, 60);
@@ -1407,6 +1408,7 @@ function renderScan(data) {
   ).join("");
   $("scan-results").hidden = results.length === 0;
   bindStockButtons($("scan-list"));
+  refreshVisibleMarketCards(true);
   if (!results.length) $("scan-status").textContent = "The scan completed but could not produce valid refinements. Try again later.";
 }
 
