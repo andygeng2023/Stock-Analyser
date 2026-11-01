@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1120">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("stock-analyser-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}</script>
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=settings-categories-05">
+<link rel="stylesheet" href="./style.css?v=settings-spacing-06">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
 <script src="./config.js"></script>
@@ -163,99 +163,170 @@
   <div id="watchlist-grid" class="watchlist-grid"></div>
 </section>
 <section id="settings-screen" class="app-screen" hidden>
-  <div class="page-heading"><div><small>APP PREFERENCES</small><h2>Settings</h2></div></div>
+  <div class="page-heading">
+    <div><small>APP PREFERENCES</small><h2>Settings</h2></div>
+  </div>
+  <p class="settings-v2-intro">Manage your account, appearance and application information.</p>
 
-  <div class="settings-home-grid">
-    <section class="feed-section settings-group settings-account-group">
-      <div class="section-title"><div><h3>Account</h3><p>Manage your account and synced research</p></div></div>
-      <div class="settings-row settings-account-primary">
-        <div class="settings-row-copy">
-          <strong>Sign in and sync</strong>
-          <small id="settings-account-status">Sign in to sync your watchlist across devices.</small>
+  <div class="settings-v2-layout">
+    <section class="settings-v2-section" aria-labelledby="settings-account-heading">
+      <div class="settings-v2-heading">
+        <div><h3 id="settings-account-heading">Account</h3><p>Sign-in, security and your saved research.</p></div>
+      </div>
+
+      <div class="settings-v2-row">
+        <span class="settings-v2-icon" aria-hidden="true">♙</span>
+        <div class="settings-v2-copy">
+          <strong>Account and watchlist sync</strong>
+          <small id="settings-account-status">Sign in to save and sync your watchlist across devices.</small>
         </div>
-        <button id="settings-account-button" class="settings-action-button" type="button">Sign in or create account</button>
+        <button id="settings-account-button" class="settings-v2-button" type="button">Sign in or create account</button>
       </div>
-      <div id="account-signed-out-note" class="settings-row">
-        <div class="settings-row-copy"><strong>Account management</strong><small>Sign in to manage your profile, password and saved data.</small></div>
-        <button id="account-signin" class="settings-action-button secondary-button" type="button">Sign in</button>
+
+      <div id="account-signed-out-note" class="settings-v2-row settings-v2-secondary-row">
+        <span class="settings-v2-icon" aria-hidden="true">⌁</span>
+        <div class="settings-v2-copy">
+          <strong>Account management</strong>
+          <small>Sign in to manage your profile, password and saved data.</small>
+        </div>
+        <button id="account-signin" class="settings-v2-button secondary-button" type="button">Sign in</button>
       </div>
-      <details class="settings-account-details">
-        <summary>Manage account settings <span>Profile, security and saved data</span></summary>
-        <div id="account-controls" class="settings-account-controls" hidden>
-          <div class="settings-subheading">Profile</div>
-          <div class="settings-row settings-profile-row">
-            <div class="settings-row-copy"><strong>Account details</strong><small>Email verification and account activity</small></div>
-            <button id="account-refresh" class="settings-action-button secondary-button" type="button">Refresh details</button>
+
+      <details class="settings-v2-details">
+        <summary>
+          <span class="settings-v2-icon" aria-hidden="true">⚙</span>
+          <span class="settings-v2-copy"><strong>Manage account settings</strong><small>Profile, sign-in details, sessions and saved data</small></span>
+          <span class="settings-v2-chevron" aria-hidden="true">＋</span>
+        </summary>
+        <div id="account-controls" class="settings-v2-account-controls" hidden>
+          <div class="settings-v2-subheading">Profile</div>
+          <div class="settings-v2-row">
+            <span class="settings-v2-icon" aria-hidden="true">◎</span>
+            <div class="settings-v2-copy">
+              <strong>Account details</strong>
+              <small>Email verification and account activity.</small>
+            </div>
+            <button id="account-refresh" class="settings-v2-button secondary-button" type="button">Refresh details</button>
           </div>
-          <dl class="account-facts">
+
+          <dl class="settings-v2-facts">
             <div><dt>Email address</dt><dd id="account-current-email">—</dd></div>
             <div><dt>Email status</dt><dd id="account-email-status">—</dd></div>
             <div><dt>Account created</dt><dd id="account-created">—</dd></div>
             <div><dt>Last sign-in</dt><dd id="account-last-signin">—</dd></div>
           </dl>
-          <form id="account-profile-form" class="account-form">
+
+          <form id="account-profile-form" class="settings-v2-profile-form">
             <label for="account-display-name">Display name</label>
             <input id="account-display-name" type="text" maxlength="80" placeholder="Add a display name">
-            <button type="submit" class="settings-action-button">Save profile</button>
+            <button type="submit" class="settings-v2-button">Save profile</button>
           </form>
 
-          <div class="settings-subheading">Sign-in details</div>
-          <div class="settings-row settings-form-row">
-            <div class="settings-row-copy"><strong>Change email address</strong><small>Confirm the new address to complete the change.</small></div>
-            <form id="account-email-form" class="account-inline-form">
+          <div class="settings-v2-subheading">Sign-in details</div>
+          <div class="settings-v2-control-row">
+            <span class="settings-v2-icon" aria-hidden="true">@</span>
+            <div class="settings-v2-copy">
+              <strong>Change email address</strong>
+              <small>Confirm the new address to complete the change.</small>
+            </div>
+            <form id="account-email-form" class="settings-v2-form">
               <input id="account-new-email" type="email" required maxlength="254" autocomplete="email" placeholder="New email address">
-              <button type="submit" class="settings-action-button">Update email</button>
-            </form>
-          </div>
-          <div class="settings-row settings-form-row">
-            <div class="settings-row-copy"><strong>Change password</strong><small>Set a new password or request a reset email.</small></div>
-            <form id="account-password-form" class="account-inline-form account-password-inline">
-              <input id="account-new-password" type="password" required minlength="8" autocomplete="new-password" placeholder="New password">
-              <input id="account-confirm-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password">
-              <button type="submit" class="settings-action-button">Update password</button>
-              <button id="account-password-reset" class="settings-action-button secondary-button" type="button">Send reset email</button>
+              <button type="submit" class="settings-v2-button">Update email</button>
             </form>
           </div>
 
-          <div class="settings-subheading">Sessions and saved data</div>
-          <div class="settings-row">
-            <div class="settings-row-copy"><strong>Signed-in devices</strong><small>Sign out other devices or every device.</small></div>
-            <div class="settings-row-actions">
-              <button id="account-signout-others" class="settings-action-button secondary-button" type="button">Sign out other devices</button>
-              <button id="account-signout-all" class="settings-action-button danger-button" type="button">Sign out all devices</button>
+          <div class="settings-v2-control-row">
+            <span class="settings-v2-icon" aria-hidden="true">◆</span>
+            <div class="settings-v2-copy">
+              <strong>Change password</strong>
+              <small>Set a new password or request a reset email.</small>
+            </div>
+            <form id="account-password-form" class="settings-v2-form settings-v2-password-form">
+              <input id="account-new-password" type="password" required minlength="8" autocomplete="new-password" placeholder="New password">
+              <input id="account-confirm-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password">
+              <button type="submit" class="settings-v2-button">Update password</button>
+              <button id="account-password-reset" class="settings-v2-button secondary-button" type="button">Send reset email</button>
+            </form>
+          </div>
+
+          <div class="settings-v2-subheading">Sessions and saved data</div>
+          <div class="settings-v2-control-row">
+            <span class="settings-v2-icon" aria-hidden="true">⇄</span>
+            <div class="settings-v2-copy">
+              <strong>Signed-in devices</strong>
+              <small>Sign out other devices or end every session.</small>
+            </div>
+            <div class="settings-v2-actions">
+              <button id="account-signout-others" class="settings-v2-button secondary-button" type="button">Sign out other devices</button>
+              <button id="account-signout-all" class="settings-v2-button danger-button" type="button">Sign out all devices</button>
             </div>
           </div>
-          <div class="settings-row">
-            <div class="settings-row-copy"><strong>Watchlist data</strong><small>Export your saved tickers or clear your watchlist.</small></div>
-            <div class="settings-row-actions">
-              <button id="account-export-watchlist" class="settings-action-button secondary-button" type="button">Export CSV</button>
-              <button id="account-clear-watchlist" class="settings-action-button danger-button" type="button">Clear watchlist</button>
+
+          <div class="settings-v2-control-row">
+            <span class="settings-v2-icon" aria-hidden="true">▤</span>
+            <div class="settings-v2-copy">
+              <strong>Watchlist data</strong>
+              <small>Export your saved tickers or clear your watchlist.</small>
+            </div>
+            <div class="settings-v2-actions">
+              <button id="account-export-watchlist" class="settings-v2-button secondary-button" type="button">Export CSV</button>
+              <button id="account-clear-watchlist" class="settings-v2-button danger-button" type="button">Clear watchlist</button>
             </div>
           </div>
         </div>
       </details>
-      <p id="account-settings-feedback" class="account-settings-feedback" role="status" aria-live="polite"></p>
+      <p id="account-settings-feedback" class="settings-v2-feedback" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="feed-section settings-group">
-      <div class="section-title"><div><h3>Appearance</h3><p>Choose how Stock Analyser looks</p></div></div>
-      <div class="settings-row">
-        <div class="settings-row-copy"><strong>Colour theme</strong><small id="theme-status">Dark mode is active.</small></div>
-        <button id="theme-toggle" class="settings-action-button secondary-button" type="button">Switch to light mode</button>
+    <section class="settings-v2-section" aria-labelledby="settings-appearance-heading">
+      <div class="settings-v2-heading">
+        <div><h3 id="settings-appearance-heading">Appearance</h3><p>Adjust how the application looks on this device.</p></div>
+      </div>
+      <div class="settings-v2-row">
+        <span class="settings-v2-icon" aria-hidden="true">◐</span>
+        <div class="settings-v2-copy">
+          <strong>Colour theme</strong>
+          <small id="theme-status">Dark mode is active on this device.</small>
+        </div>
+        <button id="theme-toggle" class="settings-v2-button secondary-button" type="button">Switch to light mode</button>
       </div>
     </section>
 
-    <section class="feed-section settings-group">
-      <div class="section-title"><div><h3>Legal</h3><p>Policies and service information</p></div></div>
-      <a class="settings-row settings-row-link" href="./privacy.html"><span class="settings-row-copy"><strong>Privacy Policy</strong><small>How account and application information is handled</small></span><span class="settings-row-trailing">Open ↗</span></a>
-      <a class="settings-row settings-row-link" href="./terms.html"><span class="settings-row-copy"><strong>Terms of Service</strong><small>Conditions for using Stock Analyser</small></span><span class="settings-row-trailing">Open ↗</span></a>
+    <section class="settings-v2-section" aria-labelledby="settings-legal-heading">
+      <div class="settings-v2-heading">
+        <div><h3 id="settings-legal-heading">Legal</h3><p>Read the policies that apply when using Stock Analyser.</p></div>
+      </div>
+      <a class="settings-v2-row settings-v2-link" href="./privacy.html">
+        <span class="settings-v2-icon" aria-hidden="true">▤</span>
+        <span class="settings-v2-copy"><strong>Privacy Policy</strong><small>How account and application information is handled.</small></span>
+        <span class="settings-v2-trailing">Open <span aria-hidden="true">↗</span></span>
+      </a>
+      <a class="settings-v2-row settings-v2-link" href="./terms.html">
+        <span class="settings-v2-icon" aria-hidden="true">§</span>
+        <span class="settings-v2-copy"><strong>Terms of Service</strong><small>Conditions for using Stock Analyser.</small></span>
+        <span class="settings-v2-trailing">Open <span aria-hidden="true">↗</span></span>
+      </a>
     </section>
 
-    <section class="feed-section settings-group">
-      <div class="section-title"><div><h3>About and support</h3><p>Project details and developer resources</p></div></div>
-      <a class="settings-row settings-row-link" href="./about.html"><span class="settings-row-copy"><strong>About Stock Analyser</strong><small>Product overview and indexer information</small></span><span class="settings-row-trailing">Open ↗</span></a>
-      <a class="settings-row settings-row-link" href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer"><span class="settings-row-copy"><strong>GitHub repository</strong><small>Source code and project history</small></span><span class="settings-row-trailing">Open ↗</span></a>
-      <a class="settings-row settings-row-link" href="https://github.com/andygeng2023/Stock-Analyser/actions" target="_blank" rel="noopener noreferrer"><span class="settings-row-copy"><strong>GitHub Actions</strong><small>Background jobs, tests and deployments</small></span><span class="settings-row-trailing">Open ↗</span></a>
+    <section class="settings-v2-section" aria-labelledby="settings-about-heading">
+      <div class="settings-v2-heading">
+        <div><h3 id="settings-about-heading">About and support</h3><p>Project information and developer resources.</p></div>
+      </div>
+      <a class="settings-v2-row settings-v2-link" href="./about.html">
+        <span class="settings-v2-icon" aria-hidden="true">ⓘ</span>
+        <span class="settings-v2-copy"><strong>About Stock Analyser</strong><small>Product overview and indexer information.</small></span>
+        <span class="settings-v2-trailing">Open <span aria-hidden="true">↗</span></span>
+      </a>
+      <a class="settings-v2-row settings-v2-link" href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer">
+        <span class="settings-v2-icon settings-v2-icon-text" aria-hidden="true">GH</span>
+        <span class="settings-v2-copy"><strong>GitHub repository</strong><small>Source code and project history.</small></span>
+        <span class="settings-v2-trailing">Open <span aria-hidden="true">↗</span></span>
+      </a>
+      <a class="settings-v2-row settings-v2-link" href="https://github.com/andygeng2023/Stock-Analyser/actions" target="_blank" rel="noopener noreferrer">
+        <span class="settings-v2-icon" aria-hidden="true">↻</span>
+        <span class="settings-v2-copy"><strong>GitHub Actions</strong><small>Background jobs, tests and deployments.</small></span>
+        <span class="settings-v2-trailing">Open <span aria-hidden="true">↗</span></span>
+      </a>
     </section>
   </div>
 </section>
