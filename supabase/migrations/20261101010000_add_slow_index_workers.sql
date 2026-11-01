@@ -2,7 +2,7 @@
 alter table public.market_index_catalog
   add column if not exists last_slow_indexed_at timestamptz;
 
--- SlowIndex stores full-history models with a two-year (504 trading-session) forecast.
+-- SlowIndex stores full-history models with a one-year (252 trading-session) forecast.
 alter table public.analysis_jobs drop constraint if exists analysis_jobs_horizon_check;
 alter table public.analysis_jobs add constraint analysis_jobs_horizon_check
   check (horizon between 1 and 504);
@@ -23,8 +23,8 @@ declare
   expired_jobs integer;
 begin
   delete from public.market_index
-   where (period = 'max' and horizon = 504 and indexed_at < now() - interval '30 days')
-      or ((period <> 'max' or horizon <> 504) and indexed_at < now() - interval '8 hours');
+   where (indexer = 'SlowIndex' and indexed_at < now() - interval '30 days')
+      or (indexer <> 'SlowIndex' and indexed_at < now() - interval '8 hours');
   get diagnostics expired_index = row_count;
 
   delete from public.analysis_jobs
