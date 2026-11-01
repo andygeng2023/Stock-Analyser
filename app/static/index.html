@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1120">
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=queue-corner-no-gap-03">
+<link rel="stylesheet" href="./style.css?v=detail-indexer-switch-02">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="./config.js"></script>
 </head>
@@ -61,16 +61,13 @@
 
 <section id="search-screen" class="app-screen" hidden>
   <div class="page-heading"><div><small>INDIVIDUAL STOCK RESEARCH</small><h2>Search</h2></div></div>
-  <form id="search" autocomplete="off">
+  <form id="search" class="quick-search" autocomplete="off">
+    <span aria-hidden="true" class="search-glyph">⌕</span>
     <label class="sr-only" for="ticker">Search stocks</label>
-    <div class="autocomplete-wrap search-autocomplete-wrap">
+    <div class="autocomplete-wrap">
       <input id="ticker" placeholder="Search tickers or company names…" maxlength="60" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-suggestions">
       <div id="search-suggestions" class="autocomplete-dropdown" role="listbox" hidden></div>
     </div>
-    <label class="sr-only" for="period">Historical period</label>
-    <select id="period" aria-label="Historical period"><option>1y</option><option>2y</option><option selected>5y</option><option>10y</option><option>max</option></select>
-    <label class="sr-only" for="horizon">Forecast horizon</label>
-    <select id="horizon" aria-label="Forecast horizon"><option value="5">5 days</option><option value="10">10 days</option><option value="20">20 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="504">2 years · SlowIndex</option></select>
   </form>
   <p class="helper-text">Start typing a ticker or company name and select a match to open its analysis.</p>
 
@@ -140,7 +137,7 @@
     <div class="company"><div><small id="symbol"></small><h2 id="name"></h2></div><div><strong id="price"></strong><p id="change"></p></div></div>
     <div class="cards" id="summary"></div>
     <article><h3>Historical price</h3><div id="history" class="chart"></div></article>
-    <article><h3>ARIMA–SVR forecast</h3><div class="cards" id="forecast-summary"></div><div id="forecast" class="chart"></div><p class="muted">Approximate residual-dispersion band, not a calibrated confidence interval.</p></article>
+    <article><div class="detail-indexer-heading"><div><h3>ARIMA–SVR forecast</h3><p class="muted">Switch indexers to compare the forecast and its underlying history.</p></div><div id="detail-indexer-switch" class="indexer-switch" role="group" aria-label="Choose prediction indexer"><button type="button" class="indexer-option active" data-indexer="rapidIndex" aria-pressed="true">rapidIndex</button><button type="button" class="indexer-option" data-indexer="SlowIndex" aria-pressed="false">SlowIndex</button></div></div><div class="cards" id="forecast-summary"></div><div id="forecast" class="chart"></div><p class="muted">Approximate residual-dispersion band, not a calibrated confidence interval.</p></article>
     <div class="columns"><article><h3>Technical indicators</h3><div id="technicals"></div></article><article><h3>Fundamentals</h3><div id="fundamentals"></div></article></div>
     <article><h3>Model diagnostics · chronological holdout</h3><div id="metrics"></div><p id="model-note" class="muted"></p></article>
     <p class="disclaimer">Experimental statistical estimates only. Not personalised investment advice. Yahoo Finance data may be delayed, incomplete or rate-limited.</p>
@@ -153,6 +150,6 @@
   <button class="nav-tab" id="nav-search" type="button"><span aria-hidden="true">⌕</span>Search</button>
   <button class="nav-tab" id="nav-discover" type="button"><span aria-hidden="true">◫</span>Discover</button>
 </nav>
-<script src="./app.js?v=slow-index-option-01"></script>
+<script src="./app.js?v=detail-indexer-switch-02"></script>
 </body>
 </html>
