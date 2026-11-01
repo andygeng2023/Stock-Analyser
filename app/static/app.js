@@ -77,6 +77,9 @@ function setAuthMode(mode) {
       : signup
         ? "Create an account to keep your watchlist synced across devices."
         : "Sign in to access your saved watchlist from any device.";
+  $("auth-email-label").hidden = update;
+  $("auth-email").required = !update;
+  if (update && authUser?.email) $("auth-email").value = authUser.email;
   $("auth-password-label").hidden = reset;
   $("auth-password").required = !reset;
   $("auth-password").autocomplete = signup || update ? "new-password" : "current-password";
