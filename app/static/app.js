@@ -597,7 +597,7 @@ function rows(obj) {
 
 async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardRescan = false, latestOnly = false, saveToIndexer = "rapidIndex") {
   const payload = mode === "scan"
-    ? { mode: "scan", source: $("scan-source").value, hard_rescan: hardRescan, latest_only: latestOnly }
+    ? { mode: "scan", source: "both", hard_rescan: hardRescan, latest_only: latestOnly }
     : { ticker, period, horizon, hard_rescan: hardRescan, save_to_indexer: saveToIndexer };
   const response = await fetch(api("request-analysis"), {
     method: "POST",
@@ -1015,9 +1015,26 @@ function fillStockGrid(id, stocks, tag = "") {
     root.innerHTML = '<div class="empty-feed">No stocks currently meet this screen. The lists update as new market results are indexed.</div>';
     return;
   }
-  root.innerHTML = stocks.map(stockCard).join("");
-  bindStockButtons(root);
-  refreshVisibleMarketCards();
+
+  // Append cards in small batches so the first results become usable immediately.
+  const renderToken = String((Number(root.dataset.renderToken) || 0) + 1);
+  root.dataset.renderToken = renderToken;
+  root.innerHTML = "";
+  const batchSize = 6;
+  let offset = 0;
+  const appendBatch = () => {
+    if (!root.isConnected || root.dataset.renderToken !== renderToken) return;
+    const batch = stocks.slice(offset, offset + batchSize);
+    if (!batch.length) return;
+    const template = document.createElement("template");
+    template.innerHTML = batch.map(stockCard).join("");
+    root.appendChild(template.content);
+    bindStockButtons(root);
+    refreshVisibleMarketCards(true);
+    offset += batch.length;
+    if (offset < stocks.length) window.setTimeout(appendBatch, 0);
+  };
+  appendBatch();
 }
 
 function renderMarketFeed(data) {
@@ -1484,7 +1501,6 @@ async function startScan(hard = false) {
     $("scan-status").textContent = "Supabase is not configured. Add the project URL and publishable key to the app deployment variables.";
     return;
   }
-  $("start-scan").disabled = true;
   $("hard-rescan").disabled = true;
   try {
     $("scan-status").textContent = hard
@@ -1521,19 +1537,11 @@ async function startScan(hard = false) {
   } catch (error) {
     $("scan-status").textContent = error.message;
   } finally {
-    $("start-scan").disabled = false;
     $("hard-rescan").disabled = false;
   }
 }
 
-$("start-scan").addEventListener("click", () => startScan(false));
 $("hard-rescan").addEventListener("click", () => startScan(true));
-
-$("scan-source").addEventListener("change", () => {
-  latestScanLoaded = false;
-  latestScanId = null;
-  if (currentScreen === "discover") loadLatestScan();
-});
 
 async function loadLatestScan() {
   if (latestScanLoaded || !config.supabaseUrl || !config.supabasePublishableKey) return;
@@ -1608,4 +1616,4 @@ setInterval(() => {
   if (currentScreen === "home" || currentScreen === "search" || currentScreen === "discover" || currentScreen === "watchlist") refreshVisibleMarketCards(true);
   if (currentScreen === "watchlist") loadWatchlist(true);
   refreshLatestScan();
-}, 60_000);
+}, 5 * 60_000);
