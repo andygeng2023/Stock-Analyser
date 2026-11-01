@@ -11,50 +11,141 @@
 </head>
 <body>
 <main>
-<header><div><small>QUANTITATIVE RESEARCH</small><h1>Stock Analyser</h1></div><span>ARIMA + Support Vector Regression</span></header>
-<section id="search-screen">
-<form id="search">
-<input id="ticker" value="AAPL" placeholder="Ticker symbol" maxlength="20" required aria-label="Stock ticker">
-<select id="period" aria-label="Historical period"><option>1y</option><option>2y</option><option selected>5y</option><option>10y</option><option>max</option></select>
-<select id="horizon" aria-label="Forecast horizon"><option value="5">5 days</option><option value="10">10 days</option><option value="20">20 days</option><option value="30" selected>30 days</option><option value="60">60 days</option></select>
-<button id="submit" type="submit">Analyse stock</button>\n<button id="hard-rescan-search" class="secondary-button" type="submit">Hard refresh</button>
-</form>
-<div class="job-progress" id="search-progress" hidden><div class="progress-track"><div id="search-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="search-progress-label">Queued</strong><span id="search-progress-percent">0%</span></div><p id="search-progress-stage" class="muted"></p></div><p id="status" role="status" aria-live="polite">Enter a ticker to begin.</p>
-<section id="results" hidden>
-<div class="company"><div><small id="symbol"></small><h2 id="name"></h2></div><div><strong id="price"></strong><p id="change"></p></div></div>
-<div class="cards" id="summary"></div>
-<article><h3>Historical price</h3><div id="history" class="chart"></div></article>
-<article><h3>ARIMA–SVR forecast</h3><div class="cards" id="forecast-summary"></div><div id="forecast" class="chart"></div><p class="muted">Approximate residual-dispersion band, not a calibrated confidence interval.</p></article>
-<div class="columns"><article><h3>Technical indicators</h3><div id="technicals"></div></article><article><h3>Fundamentals</h3><div id="fundamentals"></div></article></div>
-<article><h3>Model diagnostics · chronological holdout</h3><div id="metrics"></div><p id="model-note" class="muted"></p></article>
-<p class="muted">Experimental statistical estimates only. Not investment advice. Yahoo Finance data may be delayed, incomplete or rate-limited.</p>
+<header id="app-header">
+  <div><small>QUANTITATIVE RESEARCH</small><h1>Stock Analyser</h1></div>
+  <span>ARIMA + Support Vector Regression</span>
+</header>
+
+<section id="home-screen" class="app-screen">
+  <div class="page-heading">
+    <div><small>MARKET OVERVIEW</small><h2>Home</h2></div>
+    <span id="market-feed-updated" class="muted"></span>
+  </div>
+
+  <form id="quick-search" class="quick-search">
+    <label class="sr-only" for="quick-ticker">Quick stock search</label>
+    <span aria-hidden="true" class="search-glyph">⌕</span>
+    <input id="quick-ticker" placeholder="Search a company or ticker…" maxlength="40" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
+  <p class="helper-text">Search takes you to the full stock search page.</p>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Latest market scan</h3><p>Most recent completed background scan</p></div><span class="live-dot" aria-label="Shared results"></span></div>
+    <div id="home-latest-scan" class="compact-list"><p class="muted">Loading latest scan…</p></div>
+  </section>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Recommended</h3><p>Research shortlist using liquidity, fundamentals and model validation</p></div></div>
+    <div id="home-recommended" class="stock-grid"><p class="muted">Loading market data…</p></div>
+  </section>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Trending</h3><p>Strongest recent one-month price momentum in the indexed universe</p></div></div>
+    <div id="home-trending" class="stock-grid"></div>
+  </section>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Popular</h3><p>Larger and more actively traded companies in the shared index</p></div></div>
+    <div id="home-popular" class="stock-grid"></div>
+  </section>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Opportunities</h3><p>Smaller companies passing the current quality and liquidity screen</p></div></div>
+    <div id="home-opportunities" class="stock-grid"></div>
+  </section>
+  <p class="disclaimer">Market lists are screening outputs for further research, not personalised investment recommendations. Model forecasts are experimental and can be wrong.</p>
 </section>
+
+<section id="search-screen" class="app-screen" hidden>
+  <div class="page-heading"><div><small>INDIVIDUAL STOCK RESEARCH</small><h2>Search</h2></div></div>
+  <form id="search">
+    <label class="sr-only" for="ticker">Ticker symbol</label>
+    <input id="ticker" value="AAPL" placeholder="Ticker symbol" maxlength="20" required>
+    <label class="sr-only" for="period">Historical period</label>
+    <select id="period" aria-label="Historical period"><option>1y</option><option>2y</option><option selected>5y</option><option>10y</option><option>max</option></select>
+    <label class="sr-only" for="horizon">Forecast horizon</label>
+    <select id="horizon" aria-label="Forecast horizon"><option value="5">5 days</option><option value="10">10 days</option><option value="20">20 days</option><option value="30" selected>30 days</option><option value="60">60 days</option></select>
+    <button id="submit" type="submit">Analyse</button>
+    <button id="hard-rescan-search" class="secondary-button" type="submit">Hard refresh</button>
+  </form>
+  <p class="helper-text">Select a ticker below to open its dedicated analysis page.</p>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Trending stocks</h3><p>Recent price momentum</p></div></div>
+    <div id="search-trending" class="stock-grid"><p class="muted">Loading market data…</p></div>
+  </section>
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Popular stocks</h3><p>Market size and trading activity</p></div></div>
+    <div id="search-popular" class="stock-grid"></div>
+  </section>
 </section>
-<section id="scan-screen" hidden>
-<div class="scan-intro">
-<small>MARKET-WIDE DISCOVERY</small>
-<h2>Scan the market</h2>
-<p>Screen 1,000+ listed stocks with a fast momentum, trend, volatility and liquidity filter. The strongest candidates are then evaluated by the existing ARIMA–SVR model.</p>
-<label class="source-control" for="scan-source">Stock universe source
-<select id="scan-source">
-<option value="both" selected>Both Yahoo Finance and Nasdaq</option>
-<option value="yfinance">Yahoo Finance only</option>
-<option value="nasdaq">Nasdaq only</option>
-</select>
-</label>
-<div class="scan-actions"><button id="start-scan" type="button">Start market scan</button><button id="hard-rescan" class="secondary-button" type="button">Hard rescan</button></div>
-</div>
-<div class="job-progress" id="scan-progress" hidden><div class="progress-track"><div id="scan-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="scan-progress-label">Queued</strong><span id="scan-progress-percent">0%</span></div><p id="scan-progress-stage" class="muted"></p></div><p id="scan-status" role="status" aria-live="polite">A scan is processed by the same shared analysis queue.</p>
-<section id="scan-results" hidden>
-<div class="scan-meta" id="scan-meta"></div>
-<div id="scan-list"></div>
-<p class="muted">Rankings are experimental statistical outputs, not investment recommendations. A forecast is uncertain and should not be used as the sole basis for a financial decision.</p>
+
+<section id="discover-screen" class="app-screen" hidden>
+  <div class="page-heading"><div><small>EXPLORE THE MARKET</small><h2>Discover</h2></div></div>
+  <div class="discover-intro">
+    <p>Explore smaller listed companies, momentum screens and model-ranked research candidates. Lists use the latest available shared market index.</p>
+    <div id="discover-stats" class="discover-stats">
+      <div><strong>—</strong><span>Indexed stocks</span></div>
+      <div><strong>—</strong><span>Smaller companies</span></div>
+      <div><strong>—</strong><span>Quality-screened</span></div>
+    </div>
+  </div>
+
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Smaller companies</h3><p>Market capitalisation from $100m to $2bn, with minimum average dollar volume of $2m</p></div></div>
+    <div id="discover-smaller" class="stock-grid"><p class="muted">Loading smaller-company data…</p></div>
+  </section>
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Potential opportunities</h3><p>Smaller companies with positive recent returns, profitability, return on equity and moderated historical volatility</p></div></div>
+    <div id="discover-opportunities" class="stock-grid"></div>
+  </section>
+  <section class="feed-section">
+    <div class="section-title"><div><h3>Momentum leaders</h3><p>Liquid stocks with the strongest recent one-month returns</p></div></div>
+    <div id="discover-trending" class="stock-grid"></div>
+  </section>
+
+  <section class="scan-panel">
+    <div class="section-title"><div><h3>Run a market scan</h3><p>Two-stage universe filter followed by ARIMA–SVR refinement</p></div></div>
+    <label class="source-control" for="scan-source">Stock universe source
+      <select id="scan-source">
+        <option value="both" selected>Both Yahoo Finance and Nasdaq</option>
+        <option value="yfinance">Yahoo Finance only</option>
+        <option value="nasdaq">Nasdaq only</option>
+      </select>
+    </label>
+    <div class="scan-actions"><button id="start-scan" type="button">Start scan</button><button id="hard-rescan" class="secondary-button" type="button">Hard rescan</button></div>
+    <div class="job-progress" id="scan-progress" hidden><div class="progress-track"><div id="scan-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="scan-progress-label">Queued</strong><span id="scan-progress-percent">0%</span></div><p id="scan-progress-stage" class="muted"></p></div>
+    <p id="scan-status" role="status" aria-live="polite">The latest shared background scan is shown on Home.</p>
+    <section id="scan-results" hidden>
+      <div class="scan-meta" id="scan-meta"></div>
+      <div id="scan-list"></div>
+      <p class="muted">Experimental statistical outputs only. A model estimate is not a prediction guarantee or a personalised investment recommendation.</p>
+    </section>
+  </section>
+  <p class="disclaimer">Smaller-company screens do not remove the additional risks associated with smaller or less-established businesses. Check the underlying company information independently.</p>
 </section>
+
+<section id="detail-screen" class="app-screen" hidden>
+  <div class="detail-top"><button id="detail-back" class="back-button" type="button"><span aria-hidden="true">←</span> Back</button></div>
+  <div class="job-progress" id="search-progress" hidden><div class="progress-track"><div id="search-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="search-progress-label">Queued</strong><span id="search-progress-percent">0%</span></div><p id="search-progress-stage" class="muted"></p></div>
+  <p id="detail-status" role="status" aria-live="polite">Select a stock to view its analysis.</p>
+  <section id="results" hidden>
+    <div class="company"><div><small id="symbol"></small><h2 id="name"></h2></div><div><strong id="price"></strong><p id="change"></p></div></div>
+    <div class="cards" id="summary"></div>
+    <article><h3>Historical price</h3><div id="history" class="chart"></div></article>
+    <article><h3>ARIMA–SVR forecast</h3><div class="cards" id="forecast-summary"></div><div id="forecast" class="chart"></div><p class="muted">Approximate residual-dispersion band, not a calibrated confidence interval.</p></article>
+    <div class="columns"><article><h3>Technical indicators</h3><div id="technicals"></div></article><article><h3>Fundamentals</h3><div id="fundamentals"></div></article></div>
+    <article><h3>Model diagnostics · chronological holdout</h3><div id="metrics"></div><p id="model-note" class="muted"></p></article>
+    <p class="disclaimer">Experimental statistical estimates only. Not personalised investment advice. Yahoo Finance data may be delayed, incomplete or rate-limited.</p>
+  </section>
 </section>
 </main>
+
 <nav class="bottom-nav" aria-label="Main navigation">
-<button class="nav-tab active" id="nav-search" type="button" aria-current="page"><span aria-hidden="true">⌕</span>Search</button>
-<button class="nav-tab" id="nav-scan" type="button"><span aria-hidden="true">◫</span>Scan</button>
+  <button class="nav-tab active" id="nav-home" type="button" aria-current="page"><span aria-hidden="true">⌂</span>Home</button>
+  <button class="nav-tab" id="nav-search" type="button"><span aria-hidden="true">⌕</span>Search</button>
+  <button class="nav-tab" id="nav-discover" type="button"><span aria-hidden="true">◫</span>Discover</button>
 </nav>
 <script src="./app.js"></script>
 </body>
