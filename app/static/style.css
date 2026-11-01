@@ -2523,3 +2523,120 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   }
   #settings-screen .settings-v2-actions button { width: 100%; }
 }
+
+
+/* Settings: a single vertical list with consistently aligned account controls. */
+#settings-screen .settings-v2-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 30px;
+}
+#settings-screen .settings-v2-section {
+  width: 100%;
+  max-width: none;
+}
+#settings-screen .settings-v2-section[aria-labelledby="settings-account-heading"],
+#settings-screen .settings-v2-section[aria-labelledby="settings-about-heading"] {
+  grid-column: auto;
+}
+#settings-screen .settings-v2-profile-form {
+  display: grid;
+  grid-template-columns: 42px minmax(180px, .8fr) minmax(260px, 1.2fr);
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--border, #29384e);
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#settings-screen .settings-v2-profile-form .settings-v2-copy label {
+  display: block;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+#settings-screen .settings-v2-profile-form .settings-v2-copy strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+#settings-screen .settings-v2-profile-fields {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+#settings-screen .settings-v2-profile-fields input {
+  flex: 1 1 220px;
+  width: 100%;
+  min-width: 0;
+  max-width: 360px;
+}
+#settings-screen .settings-v2-profile-fields button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+#settings-screen .settings-v2-subheading {
+  display: none;
+}
+#settings-screen .settings-v2-control-row {
+  grid-template-columns: 42px minmax(180px, .8fr) minmax(260px, 1.2fr);
+  padding: 14px 0;
+}
+#settings-screen .settings-v2-row {
+  padding-left: 0;
+  padding-right: 0;
+}
+#settings-screen .settings-v2-link {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+#settings-screen .settings-v2-heading {
+  margin-bottom: 10px;
+}
+@media (max-width: 700px) {
+  #settings-screen .settings-v2-layout { gap: 24px; }
+  #settings-screen .settings-v2-profile-form {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 12px 0;
+  }
+  #settings-screen .settings-v2-profile-form > .settings-v2-profile-fields {
+    grid-column: 2;
+    width: 100%;
+  }
+  #settings-screen .settings-v2-profile-fields input {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  #settings-screen .settings-v2-control-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 8px 12px;
+  }
+  #settings-screen .settings-v2-control-row > .settings-v2-form,
+  #settings-screen .settings-v2-control-row > .settings-v2-actions {
+    grid-column: 2;
+    width: 100%;
+  }
+  #settings-screen .settings-v2-link {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+}
+@media (max-width: 420px) {
+  #settings-screen .settings-v2-profile-fields {
+    flex-wrap: wrap;
+  }
+  #settings-screen .settings-v2-profile-fields input {
+    flex-basis: 100%;
+  }
+}
