@@ -23,6 +23,12 @@ let marketFeedRefreshQueued = false;
 let latestScanId = null;
 let latestScanLoaded = false;
 let latestScanRefreshBusy = false;
+let authSession = null;
+let authUser = null;
+let authMode = "signin";
+let watchlistItems = [];
+let watchlistLoaded = false;
+let watchlistLoading = false;
 async function watchlistRequest(action, ticker) {
   if (!authClient) throw new Error("Supabase Auth is unavailable. Reload the app and try again.");
   const { data, error: sessionError } = await authClient.auth.getSession();
