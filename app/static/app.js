@@ -20,6 +20,35 @@ let marketFeedRefreshQueued = false;
 let latestScanId = null;
 let latestScanLoaded = false;
 let latestScanRefreshBusy = false;
+const WATCHLIST_ID_KEY = "stock-analyser-watchlist-id";
+let watchlistItems = [];
+let watchlistLoaded = false;
+let watchlistLoading = false;
+
+function watchlistUserId() {
+  try {
+    let id = localStorage.getItem(WATCHLIST_ID_KEY);
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      id = crypto.randomUUID();
+      localStorage.setItem(WATCHLIST_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    throw new Error("This browser cannot save a watchlist identity. Enable local storage and try again.");
+  }
+}
+
+async function watchlistRequest(action, ticker) {
+  if (!config.supabaseUrl || !config.supabasePublishableKey) throw new Error("Supabase is not configured.");
+  const response = await fetch(api("watchlist"), {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ action, user_id: watchlistUserId(), ticker })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Watchlist request failed.");
+  return data;
+}
 
 const QUEUE_KEY = "stock-analyser-active-jobs";
 let trackedJobs = loadTrackedJobs();
@@ -345,16 +374,14 @@ async function loadMarketFeed(force = false) {
 function switchScreen(screen) {
   currentScreen = screen;
   if (screen !== "detail") currentTab = screen;
-  ["home", "search", "discover", "detail"].forEach(name => {
+  ["home", "search", "discover", "watchlist", "detail"].forEach(name => {
     $(name + "-screen").hidden = name !== screen;
   });
   document.body.classList.toggle("detail-mode", screen === "detail");
 
-  $("nav-home").classList.toggle("active", currentTab === "home");
-  $("nav-search").classList.toggle("active", currentTab === "search");
-  $("nav-discover").classList.toggle("active", currentTab === "discover");
-  ["home", "search", "discover"].forEach(name => {
+  ["home", "search", "discover", "watchlist"].forEach(name => {
     const button = $("nav-" + name);
+    button.classList.toggle("active", currentTab === name);
     if (currentTab === name) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
@@ -362,11 +389,13 @@ function switchScreen(screen) {
   window.scrollTo({ top: 0, behavior: "instant" });
   if (screen === "home" || screen === "search" || screen === "discover") loadMarketFeed();
   if (screen === "discover") loadLatestScan();
+  if (screen === "watchlist") loadWatchlist(true);
 }
 
 $("nav-home").addEventListener("click", () => switchScreen("home"));
 $("nav-search").addEventListener("click", () => switchScreen("search"));
 $("nav-discover").addEventListener("click", () => switchScreen("discover"));
+$("nav-watchlist").addEventListener("click", () => switchScreen("watchlist"));
 $("detail-back").addEventListener("click", () => switchScreen(detailReturnScreen || currentTab));
 
 const autocompleteTimers = new Map();
