@@ -14,6 +14,7 @@ create index if not exists watchlist_items_user_created_idx
 alter table public.watchlist_items enable row level security;
 revoke all on public.watchlist_items from anon;
 grant select, insert, delete on public.watchlist_items to authenticated;
+grant select on public.watchlist_items to service_role;
 
 drop policy if exists "Users can read their own watchlist" on public.watchlist_items;
 create policy "Users can read their own watchlist"
