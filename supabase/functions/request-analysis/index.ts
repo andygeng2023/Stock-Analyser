@@ -31,8 +31,8 @@ Deno.serve(async (req) => {
       return json({ error: "Enter a valid stock ticker." }, 400);
     }
     if (!["1y", "2y", "5y", "10y", "max"].includes(period)) return json({ error: "Invalid history period." }, 400);
-    if (!Number.isInteger(horizon) || horizon < 1 || horizon > 60) {
-      return json({ error: "Forecast horizon must be 1–60 trading days." }, 400);
+    if (!Number.isInteger(horizon) || horizon < 1 || horizon > 504) {
+      return json({ error: "Forecast horizon must be 1–504 trading days." }, 400);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -63,10 +63,11 @@ Deno.serve(async (req) => {
 
     const hardRescan = body.hard_rescan === true;
     if (mode === "analysis" && !hardRescan) {
+      const indexCacheAge = period === "max" && horizon === 504 ? 30 : 8;
       const { data: indexed, error: indexError } = await admin.from("market_index")
         .select("source_job_id,indexed_at")
         .eq("ticker", symbol).eq("period", period).eq("horizon", horizon)
-        .gte("indexed_at", new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString())
+        .gte("indexed_at", new Date(Date.now() - indexCacheAge * 60 * 60 * 1000).toISOString())
         .not("source_job_id", "is", null).maybeSingle();
       if (indexError) throw indexError;
       if (indexed?.source_job_id) {
@@ -74,11 +75,12 @@ Deno.serve(async (req) => {
       }
     }
     if (!hardRescan) {
+      const jobCacheAge = period === "max" && horizon === 504 ? 30 * 24 : 8;
       const { data: cached, error: cacheError } = await admin.from("analysis_jobs")
         .select("id,created_at")
         .eq("job_type", mode).eq("scan_source", scanSource)
         .eq("ticker", symbol).eq("period", period).eq("horizon", horizon)
-        .eq("status", "completed").gte("created_at", new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString())
+        .eq("status", "completed").gte("created_at", new Date(Date.now() - jobCacheAge * 60 * 60 * 1000).toISOString())
         .not("result", "is", null)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (cacheError) throw cacheError;
