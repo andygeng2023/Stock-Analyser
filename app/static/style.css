@@ -313,4 +313,20 @@ td:first-child,th:first-child{text-align:left}
 .queue-empty{margin:8px 3px;color:#91a0b8;font-size:11px}
 .detail-mode #app-header{display:none}
 .detail-mode .global-queue{top:12px;right:14px}
-@media(max-width:700px){.global-queue{top:10px;right:12px}.global-queue-toggle{padding:8px 10px}header{padding-right:90px}}
+@media(max-width:700px){.global-queue{position:fixed;z-index:100;top:15px;right:max(22px,calc((100vw - 1250px)/2 + 28px));}
+.global-queue-toggle{display:inline-flex;align-items:center;gap:5px;padding:3px 2px;background:transparent;color:#91a0b8;border:0;border-radius:0;box-shadow:none;font-size:10px;font-weight:600;line-height:1.2;}
+.global-queue-toggle:hover,.global-queue-toggle:focus-visible{color:#e8eef9;background:transparent;}
+.global-queue-toggle.has-jobs{color:#b7c6e2;}
+#global-queue-count{display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 4px;border-radius:99px;background:#263650;color:#cbd7ea;font-size:9px;font-weight:700;}
+.global-queue-popover{position:absolute;right:0;top:25px;width:min(310px,calc(100vw - 24px));max-height:60vh;overflow:auto;padding:9px;background:#141f32;border:1px solid #263650;border-radius:9px;box-shadow:0 10px 28px #050a1499;}
+.queue-popover-title{font-size:11px;font-weight:700;margin:2px 3px 7px;color:#aab8ce;}
+.queue-job{display:block;width:100%;margin:5px 0;padding:9px;text-align:left;background:#0f1a2c;color:#e8eef9;border:1px solid #263650;border-radius:7px;}
+.queue-job-top{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+.queue-job-top strong{font-size:11px;}
+.queue-job-top small,.queue-stage{font-size:9px;color:#91a0b8;}
+.queue-track{display:block;height:4px;margin:7px 0 5px;background:#263650;border-radius:99px;overflow:hidden;}
+.queue-track>span{display:block;height:100%;background:#39c99a;transition:width .3s;}
+.queue-stage{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.queue-empty{margin:7px 3px;color:#91a0b8;font-size:10px;}
+.detail-mode .global-queue{top:12px;right:14px;}
+@media(max-width:700px){.global-queue{top:10px;right:13px;}.header-model-label{padding-right:65px;font-size:10px;}}
