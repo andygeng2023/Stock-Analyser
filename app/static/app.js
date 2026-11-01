@@ -504,7 +504,7 @@ async function openStockDetails(ticker, options = {}) {
   const indexer = options.indexer === "SlowIndex" ? "SlowIndex" : "rapidIndex";
   currentDetailIndexer = indexer;
   const period = options.customPeriod || (indexer === "SlowIndex" ? "max" : "5y");
-  const horizon = Number(options.customHorizon || (indexer === "SlowIndex" ? 504 : 30));
+  const horizon = Number(options.customHorizon || (indexer === "SlowIndex" ? 252 : 30));
   updateDetailIndexerSwitch();
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     switchScreen("detail");
@@ -599,7 +599,7 @@ $("hard-rerun-custom").addEventListener("submit", event => {
   const period = $("rerun-history").value;
   const horizon = Number($("rerun-horizon").value);
   const saveToIndexer = $("rerun-save").value;
-  const displayIndexer = period === "max" && horizon === 504 ? "SlowIndex" :
+  const displayIndexer = period === "max" && horizon === 252 ? "SlowIndex" :
     period === "5y" && horizon === 30 ? "rapidIndex" : currentDetailIndexer;
   setHardRerunMenu(false);
   openStockDetails(currentDetailTicker, {
