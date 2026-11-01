@@ -1574,3 +1574,214 @@ html[data-theme="light"] #watchlist-screen .watchlist-v2-remove{color:#65738a}
   #watchlist-screen .watchlist-v2-stat strong{font-size:7px}
   #watchlist-screen .watchlist-v2-remove{width:18px;min-width:18px;height:18px;font-size:14px}
 }
+
+
+/* -------------------------------------------------------------------------
+   Stock Analyser design-system layer
+   Centralised visual rules. Keep screen-specific layout and data density
+   intact while making typography, controls, surfaces and spacing consistent.
+   ------------------------------------------------------------------------- */
+:root {
+  --sa-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sa-text-xs: 10px;
+  --sa-text-sm: 12px;
+  --sa-text-md: 14px;
+  --sa-text-lg: 16px;
+  --sa-title-sm: 20px;
+  --sa-title-md: 25px;
+  --sa-title-lg: 30px;
+  --sa-weight-regular: 400;
+  --sa-weight-medium: 500;
+  --sa-weight-semibold: 600;
+  --sa-weight-bold: 700;
+  --sa-leading-tight: 1.2;
+  --sa-leading-normal: 1.5;
+  --sa-leading-loose: 1.65;
+  --sa-radius-control: 10px;
+  --sa-radius-surface: 12px;
+  --sa-radius-panel: 14px;
+  --sa-radius-pill: 999px;
+  --sa-space-1: 4px;
+  --sa-space-2: 8px;
+  --sa-space-3: 12px;
+  --sa-space-4: 16px;
+  --sa-space-5: 20px;
+  --sa-space-6: 24px;
+  --sa-focus: #91b4ed;
+}
+html { font-family: var(--sa-font); }
+body { font-size: var(--sa-text-md); line-height: var(--sa-leading-normal); }
+h1, h2, h3,
+.page-heading h1, .page-heading h2, .section-title h3,
+.detail-indexer-heading h3, .settings-v2-heading h3 {
+  font-family: var(--sa-font);
+  letter-spacing: -.025em;
+  line-height: var(--sa-leading-tight);
+}
+h1 { font-size: var(--sa-title-lg); font-weight: var(--sa-weight-bold); }
+h2 { font-size: var(--sa-title-md); font-weight: var(--sa-weight-bold); }
+h3 { font-size: var(--sa-text-lg); font-weight: var(--sa-weight-bold); }
+p { line-height: var(--sa-leading-normal); }
+.page-heading { align-items: center; margin-bottom: 22px; }
+.page-heading > div > small,
+header small, .page-heading small, .scan-intro small {
+  font-size: var(--sa-text-xs);
+  line-height: 1.4;
+  font-weight: var(--sa-weight-semibold);
+  letter-spacing: .09em;
+}
+.page-heading .muted { font-size: var(--sa-text-sm); }
+.section-title { gap: 16px; margin-bottom: 14px; }
+.section-title h3 { font-size: var(--sa-text-lg); font-weight: var(--sa-weight-bold); }
+.section-title p,
+.helper-text, .muted, .settings-v2-intro {
+  font-size: var(--sa-text-sm);
+  line-height: var(--sa-leading-loose);
+}
+.helper-text { margin-top: 10px; }
+label, .source-control { font-size: var(--sa-text-sm); font-weight: var(--sa-weight-semibold); }
+
+/* Controls share a single height, type treatment and corner radius. */
+button, input, select, textarea {
+  font-family: var(--sa-font);
+  font-size: var(--sa-text-sm);
+  line-height: 1.35;
+  border-radius: var(--sa-radius-control);
+}
+button {
+  min-height: 40px;
+  padding: 9px 14px;
+  font-weight: var(--sa-weight-semibold);
+  letter-spacing: 0;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--sa-focus);
+  outline-offset: 3px;
+}
+button:disabled { cursor: not-allowed; }
+input, select, textarea {
+  min-height: 42px;
+  padding: 10px 12px;
+  font-weight: var(--sa-weight-regular);
+}
+.quick-search input, form#search.quick-search input {
+  min-height: 36px;
+  padding: 7px 0;
+}
+.quick-search button { min-height: 38px; padding: 8px 14px; }
+.secondary-button { font-weight: var(--sa-weight-semibold); }
+.back-button, .detail-watchlist, .detail-rerun { min-height: 40px; font-size: var(--sa-text-sm); }
+.settings-v2-button {
+  min-height: 42px !important;
+  padding: 9px 14px !important;
+  border-radius: var(--sa-radius-control) !important;
+  font-size: var(--sa-text-sm) !important;
+  line-height: 1.35 !important;
+  font-weight: var(--sa-weight-semibold) !important;
+}
+.nav-tab {
+  min-height: 44px;
+  padding: 9px 12px;
+  border-radius: var(--sa-radius-control);
+  font-size: var(--sa-text-sm);
+  font-weight: var(--sa-weight-semibold);
+}
+.indexer-switch { border-radius: var(--sa-radius-control); }
+.indexer-option {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: var(--sa-text-sm);
+  font-weight: var(--sa-weight-semibold);
+}
+.global-queue-toggle {
+  min-height: 42px;
+  padding: 0 15px;
+  border-radius: var(--sa-radius-control);
+  font-size: var(--sa-text-sm);
+  font-weight: var(--sa-weight-semibold);
+}
+#global-queue-count { border-radius: var(--sa-radius-pill); }
+
+/* Surfaces use a restrained radius scale; list rows remain unboxed. */
+.card, article, .scan-panel, .discover-intro, .job-progress,
+.autocomplete-dropdown, .global-queue-popover, .hard-rerun-menu {
+  border-radius: var(--sa-radius-panel);
+}
+.stock-card, form, .quick-search, .discover-stats > div {
+  border-radius: var(--sa-radius-surface);
+}
+.progress-track, .progress-fill, .queue-track { border-radius: var(--sa-radius-pill); }
+.stock-card { padding: 15px; }
+.card, article { padding: 18px; }
+.scan-panel, .discover-intro { padding: 20px; }
+.discover-stats > div { padding: 14px; }
+.card small { font-size: var(--sa-text-sm); line-height: 1.4; font-weight: var(--sa-weight-medium); }
+.card strong { font-size: var(--sa-title-sm); line-height: var(--sa-leading-tight); font-weight: var(--sa-weight-bold); }
+article > h3, article h3 { font-size: var(--sa-text-lg); font-weight: var(--sa-weight-bold); }
+.row { font-size: var(--sa-text-sm); line-height: var(--sa-leading-normal); }
+table { font-size: var(--sa-text-sm); }
+td, th { padding: 12px 14px; line-height: 1.45; }
+th { font-weight: var(--sa-weight-semibold); }
+
+/* Settings rows and descriptions use the same text hierarchy as other pages. */
+.settings-v2-heading h3 { font-size: var(--sa-text-lg) !important; font-weight: var(--sa-weight-bold) !important; }
+.settings-v2-heading p, .settings-v2-copy small,
+.settings-v2-feedback, .settings-v2-intro {
+  font-size: var(--sa-text-sm) !important;
+  line-height: var(--sa-leading-loose) !important;
+}
+.settings-v2-copy strong { font-size: var(--sa-text-md) !important; font-weight: var(--sa-weight-semibold) !important; }
+.settings-v2-subheading { font-size: var(--sa-text-xs) !important; font-weight: var(--sa-weight-semibold) !important; }
+.settings-v2-facts dt { font-size: var(--sa-text-xs) !important; }
+.settings-v2-facts dd { font-size: var(--sa-text-sm) !important; font-weight: var(--sa-weight-semibold) !important; }
+
+/* Dense market data stays compact, but avoids unreadably tiny labels. */
+.stock-ticker, .watchlist-v2-ticker { font-weight: var(--sa-weight-bold); }
+.stock-company, .watchlist-v2-company { font-size: var(--sa-text-xs); line-height: 1.35; }
+.stock-price, .watchlist-v2-price { font-weight: var(--sa-weight-bold); font-variant-numeric: tabular-nums; }
+.stock-daily-change, .watchlist-v2-daily { font-size: var(--sa-text-xs); font-weight: var(--sa-weight-semibold); }
+.stock-analysis-stat small, .stock-predicted small { font-size: var(--sa-text-xs); }
+.stock-analysis-stat strong, .stock-predicted strong { font-size: var(--sa-text-xs); font-weight: var(--sa-weight-semibold); }
+.watchlist-v2-stat small { font-size: var(--sa-text-xs) !important; line-height: 1.3; }
+.watchlist-v2-stat strong { font-size: var(--sa-text-sm) !important; font-weight: var(--sa-weight-semibold); }
+#watchlist-screen #watchlist-status { font-size: var(--sa-text-xs); }
+.watchlist-v2-remove { width: 28px; min-width: 28px; height: 28px; border-radius: 8px; font-size: 16px; }
+
+/* Predictable focus and motion behaviour across interactive elements. */
+a { text-underline-offset: 3px; }
+button:hover:not(:disabled) { filter: brightness(1.04); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+@media (max-width: 700px) {
+  h1 { font-size: 27px; }
+  h2 { font-size: 23px; }
+  h3, .section-title h3, .settings-v2-heading h3 { font-size: 16px; }
+  .page-heading { margin-bottom: 18px; }
+  .stock-card { padding: 14px; }
+  .scan-panel, .discover-intro { padding: 16px; }
+  .card, article { padding: 15px; }
+  .settings-v2-copy strong { font-size: 14px !important; }
+  #watchlist-screen .watchlist-v2-ticker { font-size: 16px; }
+  #watchlist-screen .watchlist-v2-company { font-size: 10px; }
+  #watchlist-screen .watchlist-v2-price { font-size: 13px; }
+  #watchlist-screen .watchlist-v2-daily { font-size: 10px; }
+  #watchlist-screen .watchlist-v2-stat small { font-size: 9px !important; }
+  #watchlist-screen .watchlist-v2-stat strong { font-size: 10px !important; }
+}
+@media (max-width: 520px) {
+  #watchlist-screen .watchlist-v2-ticker { font-size: 14px; }
+  #watchlist-screen .watchlist-v2-company { font-size: 9px; }
+  #watchlist-screen .watchlist-v2-price { font-size: 11px; }
+  #watchlist-screen .watchlist-v2-daily { font-size: 9px; }
+  #watchlist-screen .watchlist-v2-stat small { font-size: 8px !important; }
+  #watchlist-screen .watchlist-v2-stat strong { font-size: 9px !important; }
+}
