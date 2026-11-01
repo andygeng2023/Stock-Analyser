@@ -66,11 +66,11 @@ Deno.serve(async (req) => {
     }
 
     const hardRescan = body.hard_rescan === true;
-    if (mode === "analysis" && !hardRescan) {
-      const indexCacheAge = period === "max" && horizon === 504 ? 30 : 8;
+    if (mode === "analysis" && !hardRescan && saveToIndexer !== "none") {
+      const indexCacheAge = saveToIndexer === "SlowIndex" ? 30 * 24 : 8;
       const { data: indexed, error: indexError } = await admin.from("market_index")
         .select("source_job_id,indexed_at")
-        .eq("ticker", symbol).eq("period", period).eq("horizon", horizon)
+        .eq("ticker", symbol).eq("period", period).eq("horizon", horizon).eq("indexer", saveToIndexer)
         .gte("indexed_at", new Date(Date.now() - indexCacheAge * 60 * 60 * 1000).toISOString())
         .not("source_job_id", "is", null).maybeSingle();
       if (indexError) throw indexError;
@@ -78,12 +78,13 @@ Deno.serve(async (req) => {
         return json({ id: indexed.source_job_id, status: "completed", ticker: symbol, mode, cached: true, cache_source: "market_index", cache_created_at: indexed.indexed_at }, 200);
       }
     }
-    if (!hardRescan) {
-      const jobCacheAge = period === "max" && horizon === 504 ? 30 * 24 : 8;
+    if (!hardRescan && (mode === "scan" || saveToIndexer !== "none")) {
+      const jobCacheAge = saveToIndexer === "SlowIndex" ? 30 * 24 : 8;
       const { data: cached, error: cacheError } = await admin.from("analysis_jobs")
         .select("id,created_at")
         .eq("job_type", mode).eq("scan_source", scanSource)
         .eq("ticker", symbol).eq("period", period).eq("horizon", horizon)
+        .eq("save_to_indexer", saveToIndexer)
         .eq("status", "completed").gte("created_at", new Date(Date.now() - jobCacheAge * 60 * 60 * 1000).toISOString())
         .not("result", "is", null)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
