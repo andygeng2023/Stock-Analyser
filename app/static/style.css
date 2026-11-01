@@ -1194,3 +1194,8 @@ html[data-theme="light"] #settings-screen .settings-action-button.danger-button{
   #settings-screen .account-inline-form input{flex:1 1 180px;max-width:none}
   #settings-screen .settings-row-trailing{padding-left:0}
 }
+
+#settings-screen .settings-account-details:has(#account-controls[hidden]){display:none}
+@media(max-width:700px){
+  #settings-screen .settings-account-details>summary span{flex:1 1 100%}
+}
