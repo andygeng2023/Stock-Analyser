@@ -11,6 +11,16 @@ const api = name => config.supabaseUrl.replace(/\/$/, "") + "/functions/v1/" + n
 const headers = () => ({ "Content-Type": "application/json", "apikey": config.supabasePublishableKey });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+function applyTheme(theme) {
+  const selected = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = selected;
+  const toggle = $("theme-toggle");
+  const status = $("theme-status");
+  if (toggle) toggle.textContent = selected === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  if (status) status.textContent = (selected === "dark" ? "Dark" : "Light") + " mode is active on this device.";
+  try { localStorage.setItem("stock-analyser-theme", selected); } catch {}
+}
+
 let currentScreen = "home";
 let currentTab = "home";
 let detailReturnScreen = "home";
@@ -53,12 +63,16 @@ function authRedirectUrl() {
 }
 
 function updateAuthUI() {
-  const button = $("account-button");
+  const button = $("settings-account-button");
   if (button) {
-    button.textContent = authUser?.email ? authUser.email : "Sign in";
+    button.textContent = authUser?.email ? "Manage account" : "Sign in or create account";
     button.title = authUser?.email || "Sign in or create an account";
     button.classList.toggle("signed-in", Boolean(authUser));
   }
+  const status = $("settings-account-status");
+  if (status) status.textContent = authUser?.email
+    ? "Signed in as " + authUser.email + ". Your saved watchlist is synced to this account."
+    : "Sign in to save and sync your watchlist across devices.";
   $("auth-form-panel").hidden = Boolean(authUser);
   $("auth-account-panel").hidden = !authUser;
   if (authUser) $("auth-account-email").textContent = authUser.email || "Signed-in account";
@@ -128,8 +142,8 @@ function applyAuthSession(session) {
 
 async function initializeAuth() {
   if (!authClient) {
-    $("account-button").disabled = true;
-    $("account-button").textContent = "Auth unavailable";
+    $("settings-account-button").disabled = true;
+    $("settings-account-button").textContent = "Authentication unavailable";
     $("auth-feedback").textContent = "Supabase URL and publishable key are required to enable accounts.";
     return;
   }
@@ -145,7 +159,7 @@ async function initializeAuth() {
   applyAuthSession(data.session);
 }
 
-$("account-button").addEventListener("click", () => openAuthDialog());
+$("settings-account-button").addEventListener("click", () => openAuthDialog());
 $("auth-close").addEventListener("click", closeAuthDialog);
 $("auth-modal").addEventListener("click", event => {
   if (event.target.matches("[data-auth-close]")) closeAuthDialog();
@@ -490,19 +504,27 @@ function watchlistCard(item) {
   const marketCap = moneyCompact(fundamentals.market_cap);
   const meta = fundamentals.sector || fundamentals.industry || "Company research";
   const status = data ? "RapidIndex" + (updated ? " · Updated " + esc(updated) : "") : "Waiting for WatchIndex";
+  const chart = stockSparkline({
+    history_preview: data?.history_preview || [],
+    forecast_preview: data?.forecast_preview || [],
+    expected_change_percent: expected
+  });
   return '<article class="watch-card">' +
     '<button type="button" class="watch-card-open" data-watch-open="' + esc(item.ticker) + '" aria-label="Open analysis for ' + esc(item.ticker) + '">' +
-      '<span class="watch-card-head"><span><strong class="watch-card-ticker">' + esc(item.ticker) + '</strong><span class="watch-card-company">' + esc(company) + '</span></span>' +
-      '<span class="watch-card-price">' + esc(cash(data?.price, data?.currency)) + '<small class="watch-card-daily ' + dailyClass + '">' + esc(pct(daily)) + ' today</small></span></span>' +
-      '<span class="watch-card-stats">' +
-        '<span><small>1 month</small><strong>' + esc(pct(summary.return_1m)) + '</strong></span>' +
-        '<span><small>1 year</small><strong>' + esc(pct(summary.return_1y)) + '</strong></span>' +
-        '<span><small>Forecast · ' + esc(forecastDays) + 'D</small><strong class="' + expectedClass + '">' + esc(pct(expected)) + '</strong></span>' +
-        '<span><small>Model direction</small><strong>' + esc(direction) + '</strong></span>' +
-        '<span><small>Volatility</small><strong>' + esc(pct(summary.annualized_volatility)) + '</strong></span>' +
-        '<span><small>Market cap</small><strong>' + esc(marketCap) + '</strong></span>' +
+      '<span class="watch-card-info">' +
+        '<span class="watch-card-head"><span><strong class="watch-card-ticker">' + esc(item.ticker) + '</strong><span class="watch-card-company">' + esc(company) + '</span></span>' +
+        '<span class="watch-card-price">' + esc(cash(data?.price, data?.currency)) + '<small class="watch-card-daily ' + dailyClass + '">' + esc(pct(daily)) + ' today</small></span></span>' +
+        '<span class="watch-card-stats">' +
+          '<span><small>1 month</small><strong>' + esc(pct(summary.return_1m)) + '</strong></span>' +
+          '<span><small>1 year</small><strong>' + esc(pct(summary.return_1y)) + '</strong></span>' +
+          '<span><small>Forecast · ' + esc(forecastDays) + 'D</small><strong class="' + expectedClass + '">' + esc(pct(expected)) + '</strong></span>' +
+          '<span><small>Model direction</small><strong>' + esc(direction) + '</strong></span>' +
+          '<span><small>Volatility</small><strong>' + esc(pct(summary.annualized_volatility)) + '</strong></span>' +
+          '<span><small>Market cap</small><strong>' + esc(marketCap) + '</strong></span>' +
+        '</span>' +
+        '<span class="watch-card-footer"><span>' + esc(meta) + '</span><span>' + status + '</span></span>' +
       '</span>' +
-      '<span class="watch-card-footer"><span>' + esc(meta) + '</span><span>' + status + '</span></span>' +
+      '<span class="watch-card-chart">' + chart + '<small>Historical price · RapidIndex forecast</small></span>' +
     '</button>' +
     '<button type="button" class="watch-card-remove" data-watch-remove="' + esc(item.ticker) + '" aria-label="Remove ' + esc(item.ticker) + ' from watchlist">Remove</button>' +
   '</article>';
@@ -696,12 +718,12 @@ async function loadMarketFeed(force = false) {
 function switchScreen(screen) {
   currentScreen = screen;
   if (screen !== "detail") currentTab = screen;
-  ["home", "search", "discover", "watchlist", "detail"].forEach(name => {
+  ["home", "search", "discover", "watchlist", "settings", "detail"].forEach(name => {
     $(name + "-screen").hidden = name !== screen;
   });
   document.body.classList.toggle("detail-mode", screen === "detail");
 
-  ["home", "search", "discover", "watchlist"].forEach(name => {
+  ["home", "search", "discover", "watchlist", "settings"].forEach(name => {
     const button = $("nav-" + name);
     button.classList.toggle("active", currentTab === name);
     if (currentTab === name) button.setAttribute("aria-current", "page");
@@ -718,6 +740,7 @@ $("nav-home").addEventListener("click", () => switchScreen("home"));
 $("nav-search").addEventListener("click", () => switchScreen("search"));
 $("nav-discover").addEventListener("click", () => switchScreen("discover"));
 $("nav-watchlist").addEventListener("click", () => switchScreen("watchlist"));
+$("nav-settings").addEventListener("click", () => switchScreen("settings"));
 $("detail-back").addEventListener("click", () => switchScreen(detailReturnScreen || currentTab));
 
 const autocompleteTimers = new Map();
@@ -1198,6 +1221,14 @@ async function refreshLatestScan() {
     latestScanRefreshBusy = false;
   }
 }
+
+const savedTheme = (() => {
+  try { return localStorage.getItem("stock-analyser-theme") || "dark"; } catch { return "dark"; }
+})();
+applyTheme(savedTheme);
+$("theme-toggle").addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+});
 
 switchScreen("home");
 initializeAuth();
