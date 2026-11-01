@@ -18,6 +18,24 @@ const number = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const optionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const sampleSeries = (value: unknown, points: number): number[] => {
+  if (!Array.isArray(value)) return [];
+  const values = value
+    .filter((item) => item !== null && item !== undefined)
+    .map(Number)
+    .filter(Number.isFinite);
+  if (values.length <= points) return values;
+  return Array.from({ length: points }, (_, index) =>
+    values[Math.round(index * (values.length - 1) / (points - 1))]
+  );
+};
+
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
@@ -68,8 +86,8 @@ Deno.serve(async (req: Request) => {
       const drawdown = number(market.max_drawdown, -100);
       const profitMargin = number(fundamentals.profit_margin, -1);
       const roe = number(fundamentals.return_on_equity, -1);
-      const expectedChange = number(forecast.expected_change_percent, 0);
-      const directionalAccuracy = number(metrics.directional_accuracy, 0);
+      const expectedChange = optionalNumber(forecast.expected_change_percent);
+      const directionalAccuracy = optionalNumber(metrics.directional_accuracy);
 
       // This is an editorial screening score, not a predicted return or rating.
       const qualityScore =
@@ -103,11 +121,25 @@ Deno.serve(async (req: Request) => {
       };
     });
 
+    const chartByTicker = new Map<string, { history_preview: number[]; forecast_preview: number[] }>();
+    for (const row of indexResponse.data ?? []) {
+      const result = (row as any).result ?? {};
+      chartByTicker.set((row as any).ticker, {
+        history_preview: sampleSeries(result.history?.close, 44),
+        forecast_preview: sampleSeries(result.forecast?.hybrid, 12),
+      });
+    }
+
     const unique = new Map<string, any>();
     for (const record of records) {
       if (!unique.has(record.ticker)) unique.set(record.ticker, record);
     }
     const stocks = [...unique.values()];
+    const withChartPreview = (items: any[]) => items.map((stock) => ({
+      ...stock,
+      ...(chartByTicker.get(stock.ticker) ?? { history_preview: [], forecast_preview: [] }),
+    }));
+    const stockByTicker = new Map(stocks.map((stock) => [stock.ticker, stock]));
     const liquid = stocks.filter((s) => s.avg_dollar_volume >= 2_000_000 && s.market_cap >= 100_000_000);
     const smaller = liquid.filter((s) => s.market_cap < 2_000_000_000);
     const healthySmaller = smaller.filter((s) =>
@@ -169,6 +201,10 @@ Deno.serve(async (req: Request) => {
             change_percent: item.change_percent ?? null,
             expected_change_percent: item.expected_change_percent ?? null,
             directional_accuracy: item.directional_accuracy ?? null,
+            validation_rmse: item.validation_rmse ?? null,
+            return_1m: stockByTicker.get(item.ticker)?.return_1m ?? null,
+            annualized_volatility: stockByTicker.get(item.ticker)?.annualized_volatility ?? null,
+            ...(chartByTicker.get(item.ticker) ?? { history_preview: [], forecast_preview: [] }),
           })),
         }
       : null;
@@ -179,11 +215,11 @@ Deno.serve(async (req: Request) => {
       small_company_count: smaller.length,
       quality_small_company_count: healthySmaller.length,
       latest_scan: latestScan,
-      recommended,
-      trending,
-      popular,
-      opportunities,
-      smaller_companies: smallerCompanies,
+      recommended: withChartPreview(recommended),
+      trending: withChartPreview(trending),
+      popular: withChartPreview(popular),
+      opportunities: withChartPreview(opportunities),
+      smaller_companies: withChartPreview(smallerCompanies),
     });
   } catch (error) {
     console.error("market-feed error:", error);
