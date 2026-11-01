@@ -26,13 +26,15 @@
     <span id="market-feed-updated" class="muted"></span>
   </div>
 
-  <form id="quick-search" class="quick-search">
-    <label class="sr-only" for="quick-ticker">Quick stock search</label>
+  <form id="quick-search" class="quick-search" autocomplete="off">
+    <label class="sr-only" for="quick-ticker">Search stocks</label>
     <span aria-hidden="true" class="search-glyph">⌕</span>
-    <input id="quick-ticker" placeholder="Search by ticker symbol…" maxlength="40" autocomplete="off">
-    <button type="submit">Search</button>
+    <div class="autocomplete-wrap">
+      <input id="quick-ticker" placeholder="Search tickers or company names…" maxlength="60" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="quick-suggestions">
+      <div id="quick-suggestions" class="autocomplete-dropdown" role="listbox" hidden></div>
+    </div>
   </form>
-  <p class="helper-text">Search takes you to the full stock search page.</p>
+  <p class="helper-text">Search by ticker symbol or company name, then select a result to analyse it.</p>
 
   <section class="feed-section">
     <div class="section-title"><div><h3>Latest market scan</h3><p>Most recent completed background scan</p></div><span class="live-dot" aria-label="Shared results"></span></div>
@@ -63,17 +65,18 @@
 
 <section id="search-screen" class="app-screen" hidden>
   <div class="page-heading"><div><small>INDIVIDUAL STOCK RESEARCH</small><h2>Search</h2></div></div>
-  <form id="search">
-    <label class="sr-only" for="ticker">Ticker symbol</label>
-    <input id="ticker" value="AAPL" placeholder="Ticker symbol" maxlength="20" required>
+  <form id="search" autocomplete="off">
+    <label class="sr-only" for="ticker">Search stocks</label>
+    <div class="autocomplete-wrap search-autocomplete-wrap">
+      <input id="ticker" placeholder="Search tickers or company names…" maxlength="60" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-suggestions">
+      <div id="search-suggestions" class="autocomplete-dropdown" role="listbox" hidden></div>
+    </div>
     <label class="sr-only" for="period">Historical period</label>
     <select id="period" aria-label="Historical period"><option>1y</option><option>2y</option><option selected>5y</option><option>10y</option><option>max</option></select>
     <label class="sr-only" for="horizon">Forecast horizon</label>
     <select id="horizon" aria-label="Forecast horizon"><option value="5">5 days</option><option value="10">10 days</option><option value="20">20 days</option><option value="30" selected>30 days</option><option value="60">60 days</option></select>
-    <button id="submit" type="submit">Analyse</button>
-    <button id="hard-rescan-search" class="secondary-button" type="submit">Hard refresh</button>
   </form>
-  <p class="helper-text">Select a ticker below to open its dedicated analysis page.</p>
+  <p class="helper-text">Start typing a ticker or company name and select a match to open its analysis.</p>
 
   <section class="feed-section">
     <div class="section-title"><div><h3>Trending stocks</h3><p>Recent price momentum</p></div></div>
@@ -131,7 +134,10 @@
 </section>
 
 <section id="detail-screen" class="app-screen" hidden>
-  <div class="detail-top"><button id="detail-back" class="back-button" type="button"><span aria-hidden="true">←</span> Back</button></div>
+  <div class="detail-top">
+    <button id="detail-back" class="back-button" type="button"><span aria-hidden="true">←</span> Back</button>
+    <button id="detail-hard-rerun" class="secondary-button detail-rerun" type="button">Hard rerun</button>
+  </div>
   <div class="job-progress" id="search-progress" hidden><div class="progress-track"><div id="search-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="search-progress-label">Queued</strong><span id="search-progress-percent">0%</span></div><p id="search-progress-stage" class="muted"></p></div>
   <p id="detail-status" role="status" aria-live="polite">Select a stock to view its analysis.</p>
   <section id="results" hidden>
