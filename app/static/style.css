@@ -294,3 +294,23 @@ td:first-child,th:first-child{text-align:left}
   #scan-list > * { flex-basis: 208px; }
   .stock-card { height: 208px; }
 }
+
+
+/* Persistent request queue, visible on every screen including stock details */
+.global-queue{position:fixed;z-index:100;top:14px;right:max(18px,calc((100vw - 1250px)/2 + 28px))}
+.global-queue-toggle{display:flex;align-items:center;gap:7px;padding:9px 12px;background:#192840;color:#e8eef9;border:1px solid #405574;border-radius:9px;font-size:11px;box-shadow:0 5px 20px #050a14aa}
+.global-queue-toggle.has-jobs{border-color:#39c99a}
+#global-queue-count{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:#39c99a;color:#071a16;font-size:10px}
+.global-queue-popover{position:absolute;right:0;top:43px;width:min(340px,calc(100vw - 28px));max-height:65vh;overflow:auto;padding:12px;background:#141f32;border:1px solid #405574;border-radius:12px;box-shadow:0 14px 38px #050a14cc}
+.queue-popover-title{font-size:12px;font-weight:750;margin:2px 3px 9px}
+.queue-job{display:block;width:100%;margin:6px 0;padding:10px;text-align:left;background:#0f1a2c;color:#e8eef9;border:1px solid #263650;border-radius:8px}
+.queue-job-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.queue-job-top strong{font-size:12px}
+.queue-job-top small,.queue-stage{font-size:9px;color:#91a0b8}
+.queue-track{display:block;height:5px;margin:8px 0 5px;background:#263650;border-radius:99px;overflow:hidden}
+.queue-track>span{display:block;height:100%;background:#39c99a;transition:width .3s}
+.queue-stage{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-empty{margin:8px 3px;color:#91a0b8;font-size:11px}
+.detail-mode #app-header{display:none}
+.detail-mode .global-queue{top:12px;right:14px}
+@media(max-width:700px){.global-queue{top:10px;right:12px}.global-queue-toggle{padding:8px 10px}header{padding-right:90px}}
