@@ -537,7 +537,6 @@ async function refreshLatestScan() {
 }
 
 switchScreen("home");
-loadMarketFeed(true);
 setInterval(() => {
   if (currentScreen === "home" || currentScreen === "discover") loadMarketFeed(true);
   refreshLatestScan();
