@@ -1785,3 +1785,112 @@ button:hover:not(:disabled) { filter: brightness(1.04); }
   #watchlist-screen .watchlist-v2-stat small { font-size: 8px !important; }
   #watchlist-screen .watchlist-v2-stat strong { font-size: 9px !important; }
 }
+
+
+/* Icon consistency and always-visible account settings */
+#settings-screen .settings-v2-layout{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;
+  gap:34px 44px;
+  max-width:1120px;
+}
+#settings-screen .settings-v2-section{min-width:0}
+#settings-screen .settings-v2-section[aria-labelledby="settings-account-heading"]{grid-column:1/-1}
+#settings-screen .settings-v2-section[aria-labelledby="settings-about-heading"]{grid-column:1/-1}
+#settings-screen .settings-v2-icon{
+  display:grid;
+  place-items:center;
+  box-sizing:border-box;
+  width:42px;
+  height:42px;
+  min-width:42px;
+  padding:0;
+  border-radius:12px;
+  line-height:0;
+}
+#settings-screen .settings-v2-icon svg{
+  display:block;
+  width:19px;
+  height:19px;
+  flex:none;
+  overflow:visible;
+}
+#settings-screen .settings-v2-trailing span{
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  padding:0;
+}
+#settings-screen .settings-v2-trailing svg{
+  display:block;
+  width:15px;
+  height:15px;
+}
+#settings-screen .settings-v2-account-block{
+  margin-top:12px;
+  border-top:1px solid #29384e;
+}
+#settings-screen .settings-v2-account-block:has(#account-controls[hidden]){
+  display:none;
+}
+#settings-screen .settings-v2-account-heading{
+  display:grid;
+  grid-template-columns:46px minmax(0,1fr);
+  align-items:center;
+  gap:17px;
+  min-height:78px;
+  padding:15px 14px;
+  border-bottom:1px solid #29384e;
+}
+#settings-screen .settings-v2-account-heading .settings-v2-copy strong{
+  font-size:13px;
+  font-weight:700;
+}
+#settings-screen .settings-v2-account-heading .settings-v2-copy small{
+  font-size:11px;
+  line-height:1.5;
+}
+#settings-screen .settings-v2-account-controls{
+  display:block;
+  padding:4px 0 12px 63px;
+}
+#settings-screen .settings-v2-account-controls[hidden]{
+  display:none!important;
+}
+#settings-screen .settings-v2-subheading{
+  margin-top:20px;
+}
+#settings-screen .settings-v2-control-row{
+  grid-template-columns:46px minmax(180px,.72fr) minmax(280px,1.28fr);
+}
+html[data-theme="light"] #settings-screen .settings-v2-account-block,
+html[data-theme="light"] #settings-screen .settings-v2-account-heading{
+  border-color:#dce3ed;
+}
+@media(max-width:980px){
+  #settings-screen .settings-v2-layout{
+    grid-template-columns:minmax(0,1fr);
+    gap:30px;
+  }
+  #settings-screen .settings-v2-section[aria-labelledby="settings-account-heading"],
+  #settings-screen .settings-v2-section[aria-labelledby="settings-about-heading"]{
+    grid-column:auto;
+  }
+  #settings-screen .settings-v2-account-controls{padding-left:0}
+}
+@media(max-width:700px){
+  #settings-screen .settings-v2-account-heading{
+    grid-template-columns:42px minmax(0,1fr);
+    gap:13px;
+    min-height:72px;
+    padding:13px 9px;
+  }
+  #settings-screen .settings-v2-account-controls{padding:2px 0 10px}
+  #settings-screen .settings-v2-icon{width:40px;height:40px;min-width:40px}
+  #settings-screen .settings-v2-icon svg{width:18px;height:18px}
+  #settings-screen .settings-v2-control-row{
+    grid-template-columns:42px minmax(0,1fr);
+  }
+}
