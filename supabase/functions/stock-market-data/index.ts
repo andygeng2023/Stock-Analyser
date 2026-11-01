@@ -22,6 +22,29 @@ function sample(values: unknown, limit = 64): number[] {
     numeric[Math.round(index * (numeric.length - 1) / (limit - 1))]
   );
 }
+async function yahooQuote(ticker: string) {
+  const url = new URL("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(ticker));
+  url.searchParams.set("range", "5d");
+  url.searchParams.set("interval", "5m");
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 StockAnalyser/1.0", "Accept": "application/json" },
+    signal: AbortSignal.timeout(4500),
+  });
+  if (!response.ok) throw new Error("Yahoo Finance returned " + response.status);
+  const body = await response.json();
+  const result = body?.chart?.result?.[0];
+  if (!result) throw new Error(body?.chart?.error?.description || "No quote available.");
+  const latest = Number(result.meta?.regularMarketPrice);
+  const previous = Number(result.meta?.chartPreviousClose ?? result.meta?.previousClose);
+  return {
+    price: Number.isFinite(latest) ? latest : null,
+    change_percent: Number.isFinite(latest) && Number.isFinite(previous) && previous !== 0
+      ? ((latest / previous) - 1) * 100 : null,
+    currency: result.meta?.currency || "USD",
+    as_of: result.meta?.regularMarketTime
+      ? new Date(Number(result.meta.regularMarketTime) * 1000).toISOString() : null,
+  };
+}
 async function yahooHistory(ticker: string) {
   const url = new URL("https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(ticker));
   url.searchParams.set("range", "1y");
@@ -99,19 +122,20 @@ Deno.serve(async (req: Request) => {
       const row: any = byTicker.get(ticker);
       const cached: any = row?.result ?? {};
       const cachedHistory = sample(cached.history?.close);
-      // Refresh quote data from Yahoo Finance while preserving cached analysis metrics.
+      // Reuse cached history; only download long history if no cache exists.
+      // Routine refreshes use a smaller quote request rather than redownloading a year.
       try {
-        const live = await yahooHistory(ticker);
+        const live = cachedHistory.length ? await yahooQuote(ticker) : await yahooHistory(ticker);
         return {
           ticker,
           company: cached.company || cached.name || ticker,
           currency: live.currency || cached.currency || "USD",
           price: live.price ?? cached.price ?? null,
           change_percent: live.change_percent ?? cached.change_percent ?? null,
-          history_preview: live.history_preview.length ? live.history_preview : cachedHistory,
+          history_preview: cachedHistory.length ? cachedHistory : (live.history_preview || []),
           indexed_at: row?.indexed_at ?? null,
           as_of: live.as_of,
-          source: cachedHistory.length ? "shared index + live Yahoo quote" : live.source,
+          source: cachedHistory.length ? "shared cache + live quote" : live.source,
         };
       } catch (error) {
         console.warn("Yahoo Finance refresh failed for " + ticker + ":", error);
