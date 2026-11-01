@@ -1024,5 +1024,6 @@ async function refreshLatestScan() {
 switchScreen("home");
 setInterval(() => {
   if (currentScreen === "home" || currentScreen === "discover") loadMarketFeed(true);
+  if (currentScreen === "watchlist") loadWatchlist(true);
   refreshLatestScan();
 }, 60_000);
