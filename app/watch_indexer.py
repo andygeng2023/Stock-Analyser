@@ -39,16 +39,26 @@ def watchlist_tickers():
     return sorted(tickers)
 
 
-def recent_rapid_index():
+def recent_rapid_index(tickers):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=RECENT_HOURS)).isoformat()
     encoded = quote(cutoff, safe="")
-    rows = supabase_request(
-        "market_index?select=ticker,indexed_at"
-        f"&period=eq.{PERIOD}&horizon=eq.{HORIZON}"
-        "&indexer=eq.rapidIndex"
-        f"&indexed_at=gte.{encoded}&limit=10000"
-    )
-    return {row["ticker"]: row.get("indexed_at") for row in rows or []}
+    recent = {}
+    # Restrict each query to this watchlist universe so PostgREST row limits
+    # cannot hide recently indexed tickers behind unrelated market symbols.
+    for start in range(0, len(tickers), 100):
+        batch = tickers[start:start + 100]
+        if not batch:
+            continue
+        symbols = ",".join(batch)
+        rows = supabase_request(
+            "market_index?select=ticker,indexed_at"
+            f"&ticker=in.({symbols})"
+            f"&period=eq.{PERIOD}&horizon=eq.{HORIZON}"
+            "&indexer=eq.rapidIndex"
+            f"&indexed_at=gte.{encoded}&limit=1000"
+        )
+        recent.update({row["ticker"]: row.get("indexed_at") for row in rows or []})
+    return recent
 
 
 def save_analysis(ticker, result):
@@ -82,7 +92,7 @@ def run_once(failed_until):
         print("No authenticated watchlists currently contain stocks.")
         return 0
 
-    recent = recent_rapid_index()
+    recent = recent_rapid_index(tickers)
     pending = [
         ticker for ticker in tickers
         if ticker not in recent and failed_until.get(ticker, 0) <= time.monotonic()
