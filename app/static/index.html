@@ -13,8 +13,12 @@
 <main>
 <header id="app-header">
   <div><small>QUANTITATIVE RESEARCH</small><h1>Stock Analyser</h1></div>
-  <span>ARIMA + Support Vector Regression</span>
-</header>\n<div class="global-queue">\n  <button id="global-queue-toggle" class="global-queue-toggle" type="button" aria-label="View queued analysis requests">Queue <span id="global-queue-count"></span></button>\n  <div id="global-queue-popover" class="global-queue-popover" hidden><div class="queue-popover-title">Your requests</div><div id="global-queue-list"></div></div>\n</div>
+  <span class="header-model-label">ARIMA + Support Vector Regression</span>
+</header>
+<div class="global-queue">
+  <button id="global-queue-toggle" class="global-queue-toggle" type="button" aria-label="Show queued requests" aria-expanded="false">Queue <span id="global-queue-count"></span></button>
+  <div id="global-queue-popover" class="global-queue-popover" hidden><div class="queue-popover-title">Queued requests</div><div id="global-queue-list"></div></div>
+</div>
 
 <section id="home-screen" class="app-screen">
   <div class="page-heading">
