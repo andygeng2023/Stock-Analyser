@@ -1,5 +1,8 @@
 const $ = id => document.getElementById(id);
 const config = window.STOCK_ANALYSER_CONFIG || {};
+const authClient = config.supabaseUrl && config.supabasePublishableKey && window.supabase?.createClient
+  ? window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, { auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true } })
+  : null;
 const fmt = (v, d = 2) => v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
 const pct = v => v == null || !Number.isFinite(Number(v)) ? "—" : (Number(v) > 0 ? "+" : "") + fmt(v) + "%";
 const cash = (v, c) => v == null || !Number.isFinite(Number(v)) ? "—" : new Intl.NumberFormat(undefined, { style: "currency", currency: c || "USD", maximumFractionDigits: 2 }).format(Number(v));
@@ -20,34 +23,174 @@ let marketFeedRefreshQueued = false;
 let latestScanId = null;
 let latestScanLoaded = false;
 let latestScanRefreshBusy = false;
-const WATCHLIST_ID_KEY = "stock-analyser-watchlist-id";
-let watchlistItems = [];
-let watchlistLoaded = false;
-let watchlistLoading = false;
+async function watchlistRequest(action, ticker) {
+  if (!authClient) throw new Error("Supabase Auth is unavailable. Reload the app and try again.");
+  const { data, error: sessionError } = await authClient.auth.getSession();
+  if (sessionError) throw sessionError;
+  const session = data.session || authSession;
+  if (!session?.access_token) {
+    openAuthDialog("signin");
+    throw new Error("Sign in to use your watchlist.");
+  }
+  const response = await fetch(api("watchlist"), {
+    method: "POST",
+    headers: { ...headers(), Authorization: "Bearer " + session.access_token },
+    body: JSON.stringify({ action, ticker })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Watchlist request failed.");
+  return result;
+}
 
-function watchlistUserId() {
-  try {
-    let id = localStorage.getItem(WATCHLIST_ID_KEY);
-    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
-      id = crypto.randomUUID();
-      localStorage.setItem(WATCHLIST_ID_KEY, id);
-    }
-    return id;
-  } catch {
-    throw new Error("This browser cannot save a watchlist identity. Enable local storage and try again.");
+function authRedirectUrl() {
+  return window.location.origin + window.location.pathname;
+}
+
+function updateAuthUI() {
+  const button = $("account-button");
+  if (button) {
+    button.textContent = authUser?.email ? authUser.email : "Sign in";
+    button.title = authUser?.email || "Sign in or create an account";
+    button.classList.toggle("signed-in", Boolean(authUser));
+  }
+  $("auth-form-panel").hidden = Boolean(authUser);
+  $("auth-account-panel").hidden = !authUser;
+  if (authUser) $("auth-account-email").textContent = authUser.email || "Signed-in account";
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const reset = mode === "reset";
+  const signup = mode === "signup";
+  $("auth-title").textContent = reset ? "Reset password" : signup ? "Create account" : "Sign in";
+  $("auth-description").textContent = reset
+    ? "Enter your email address and we’ll send a password reset link."
+    : signup
+      ? "Create an account to keep your watchlist synced across devices."
+      : "Sign in to access your saved watchlist from any device.";
+  $("auth-password-label").hidden = reset;
+  $("auth-password").required = !reset;
+  $("auth-password").autocomplete = signup ? "new-password" : "current-password";
+  $("auth-submit").textContent = reset ? "Send reset link" : signup ? "Create account" : "Sign in";
+  $("auth-mode-toggle").hidden = reset;
+  $("auth-mode-toggle").textContent = signup ? "Already have an account? Sign in" : "Create an account";
+  $("auth-reset-link").hidden = signup || reset;
+  $("auth-feedback").textContent = "";
+}
+
+function openAuthDialog(mode = "signin") {
+  if (authUser) {
+    updateAuthUI();
+  } else {
+    setAuthMode(mode);
+  }
+  $("auth-modal").hidden = false;
+  document.body.classList.add("auth-open");
+  if (!authUser) $("auth-email").focus();
+}
+
+function closeAuthDialog() {
+  $("auth-modal").hidden = true;
+  document.body.classList.remove("auth-open");
+}
+
+function applyAuthSession(session) {
+  const previousUserId = authUser?.id || null;
+  authSession = session || null;
+  authUser = session?.user || null;
+  const nextUserId = authUser?.id || null;
+  updateAuthUI();
+
+  if (previousUserId !== nextUserId) {
+    watchlistItems = [];
+    watchlistLoaded = false;
+    if (currentScreen === "watchlist" && authUser) loadWatchlist(true);
+    if (currentScreen === "watchlist" && !authUser) renderWatchlistSignedOut();
+    if (currentDetailTicker) updateDetailWatchlistButton();
   }
 }
 
-async function watchlistRequest(action, ticker) {
-  if (!config.supabaseUrl || !config.supabasePublishableKey) throw new Error("Supabase is not configured.");
-  const response = await fetch(api("watchlist"), {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({ action, user_id: watchlistUserId(), ticker })
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Watchlist request failed.");
-  return data;
+async function initializeAuth() {
+  if (!authClient) {
+    $("account-button").disabled = true;
+    $("account-button").textContent = "Auth unavailable";
+    $("auth-feedback").textContent = "Supabase URL and publishable key are required to enable accounts.";
+    return;
+  }
+  authClient.auth.onAuthStateChange((_event, session) => applyAuthSession(session));
+  const { data, error } = await authClient.auth.getSession();
+  if (error) {
+    $("auth-feedback").textContent = "Could not restore your sign-in session: " + error.message;
+    return;
+  }
+  applyAuthSession(data.session);
+}
+
+$("account-button").addEventListener("click", () => openAuthDialog());
+$("auth-close").addEventListener("click", closeAuthDialog);
+$("auth-modal").addEventListener("click", event => {
+  if (event.target.matches("[data-auth-close]")) closeAuthDialog();
+});
+$("auth-mode-toggle").addEventListener("click", () => setAuthMode(authMode === "signup" ? "signin" : "signup"));
+$("auth-reset-link").addEventListener("click", () => setAuthMode("reset"));
+
+$("auth-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!authClient) return;
+  const email = $("auth-email").value.trim();
+  const password = $("auth-password").value;
+  const submit = $("auth-submit");
+  submit.disabled = true;
+  $("auth-feedback").textContent = authMode === "signup" ? "Creating your account…" : authMode === "reset" ? "Sending reset link…" : "Signing in…";
+  try {
+    if (authMode === "signup") {
+      const { data, error } = await authClient.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: authRedirectUrl() }
+      });
+      if (error) throw error;
+      if (data.session) {
+        applyAuthSession(data.session);
+        closeAuthDialog();
+      } else {
+        $("auth-feedback").textContent = "Account created. Check your inbox and confirm your email address before signing in.";
+      }
+    } else if (authMode === "reset") {
+      const { error } = await authClient.auth.resetPasswordForEmail(email, { redirectTo: authRedirectUrl() });
+      if (error) throw error;
+      $("auth-feedback").textContent = "If an account exists for that email, a password reset link has been sent.";
+    } else {
+      const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      applyAuthSession(data.session);
+      closeAuthDialog();
+    }
+  } catch (error) {
+    $("auth-feedback").textContent = error.message || "Authentication failed. Try again.";
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+$("auth-signout").addEventListener("click", async () => {
+  if (!authClient) return;
+  const { error } = await authClient.auth.signOut();
+  if (error) {
+    $("auth-feedback").textContent = error.message;
+    return;
+  }
+  applyAuthSession(null);
+  closeAuthDialog();
+  if (currentScreen === "watchlist") switchScreen("home");
+});
+
+function renderWatchlistSignedOut() {
+  if (!$("watchlist-grid")) return;
+  $("watchlist-count").textContent = "";
+  $("watchlist-status").textContent = "Sign in to keep your saved stocks synced across devices.";
+  $("watchlist-grid").innerHTML = '<div class="empty-feed watchlist-empty"><p>Watchlists are linked to your account, not this browser.</p><button type="button" id="watchlist-signin">Sign in or create an account</button></div>';
+  $("watchlist-signin").addEventListener("click", () => openAuthDialog("signin"));
 }
 
 const QUEUE_KEY = "stock-analyser-active-jobs";
