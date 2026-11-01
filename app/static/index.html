@@ -5,14 +5,44 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1120">
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=watchlist-02">
+<link rel="stylesheet" href="./style.css?v=auth-watchlist-01">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.min.js"></script>
 <script src="./config.js"></script>
 </head>
 <body>
+<button id="account-button" class="account-button" type="button">Sign in</button>
 <div class="global-queue">
   <button id="global-queue-toggle" class="global-queue-toggle" type="button" aria-label="Show queued requests" aria-expanded="false">Queue <span id="global-queue-count"></span></button>
   <div id="global-queue-popover" class="global-queue-popover" hidden><div class="queue-popover-title">Active requests</div><div id="global-queue-list"></div></div>
+</div>
+<div id="auth-modal" class="auth-modal" hidden>
+  <div class="auth-backdrop" data-auth-close></div>
+  <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <button id="auth-close" class="auth-close" type="button" aria-label="Close sign-in dialog">×</button>
+    <div id="auth-form-panel">
+      <small class="auth-eyebrow">STOCK ANALYSER ACCOUNT</small>
+      <h2 id="auth-title">Sign in</h2>
+      <p id="auth-description" class="muted">Sign in to sync your watchlist across devices.</p>
+      <form id="auth-form" class="auth-form">
+        <label>Email address<input id="auth-email" type="email" required autocomplete="email" maxlength="254" placeholder="you@example.com"></label>
+        <label id="auth-password-label">Password<input id="auth-password" type="password" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters"></label>
+        <button id="auth-submit" type="submit">Sign in</button>
+      </form>
+      <p id="auth-feedback" class="auth-feedback" role="status" aria-live="polite"></p>
+      <div class="auth-links">
+        <button id="auth-mode-toggle" type="button">Create an account</button>
+        <button id="auth-reset-link" type="button">Forgot password?</button>
+      </div>
+    </div>
+    <div id="auth-account-panel" hidden>
+      <small class="auth-eyebrow">SIGNED IN</small>
+      <h2>Your account</h2>
+      <p id="auth-account-email" class="auth-account-email"></p>
+      <p class="muted">Your watchlist is saved to your account and available when you sign in on another device.</p>
+      <button id="auth-signout" class="secondary-button" type="button">Sign out</button>
+    </div>
+  </section>
 </div>
 <main>
 
