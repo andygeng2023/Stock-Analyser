@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1120">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("stock-analyser-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}</script>
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=settings-spacing-06">
+<link rel="stylesheet" href="./style.css?v=watchlist-layout-07">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
 <script src="./config.js"></script>
@@ -158,9 +158,9 @@
 
 <section id="watchlist-screen" class="app-screen" hidden>
   <div class="page-heading"><div><small>YOUR SAVED RESEARCH</small><h2>Watchlist</h2></div><span id="watchlist-count" class="muted"></span></div>
-  <p class="helper-text">Keep track of companies you are researching. WatchIndex refreshes watchlist stocks through the same five-year, 30-day RapidIndex analysis when a recent result is not already available.</p>
-  <div id="watchlist-status" class="muted" role="status" aria-live="polite">Loading watchlist…</div>
-  <div id="watchlist-grid" class="watchlist-grid"></div>
+  <p class="helper-text watchlist-intro">Your saved companies, latest market data and indexed price history in one place.</p>
+  <div class="watchlist-toolbar"><div id="watchlist-status" class="muted" role="status" aria-live="polite">Loading watchlist…</div></div>
+  <div id="watchlist-grid" class="watchlist-v2-list"></div>
 </section>
 <section id="settings-screen" class="app-screen" hidden>
   <div class="page-heading">
