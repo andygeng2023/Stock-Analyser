@@ -11,6 +11,7 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 let currentScreen = "home";
 let currentTab = "home";
 let detailReturnScreen = "home";
+let currentDetailTicker = "";
 let marketFeed = null;
 let marketFeedLoadedAt = 0;
 let marketFeedLoading = false;
@@ -360,18 +361,140 @@ $("nav-search").addEventListener("click", () => switchScreen("search"));
 $("nav-discover").addEventListener("click", () => switchScreen("discover"));
 $("detail-back").addEventListener("click", () => switchScreen(detailReturnScreen || currentTab));
 
-$("quick-search").addEventListener("submit", event => {
-  event.preventDefault();
-  const symbol = $("quick-ticker").value.trim().toUpperCase();
-  if (!symbol) return;
-  $("ticker").value = symbol;
-  switchScreen("search");
-  $("ticker").focus();
-});
+const autocompleteTimers = new Map();
+const autocompleteControllers = new Map();
+
+function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = () => ({})) {
+  const input = $(inputId);
+  const dropdown = $(dropdownId);
+  if (!input || !dropdown) return;
+  let suggestions = [];
+  let activeIndex = -1;
+  let requestSequence = 0;
+
+  const close = () => {
+    dropdown.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    activeIndex = -1;
+  };
+
+  const choose = stock => {
+    if (!stock?.ticker) return;
+    input.value = stock.ticker;
+    close();
+    const options = settings();
+    openStockDetails(stock.ticker, {
+      returnScreen,
+      period: options.period || "5y",
+      horizon: options.horizon || 30
+    });
+  };
+
+  const renderSuggestions = items => {
+    suggestions = items;
+    activeIndex = -1;
+    if (!items.length) {
+      dropdown.innerHTML = '<div class="autocomplete-message">No matching listed companies found.</div>';
+      dropdown.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      return;
+    }
+    dropdown.innerHTML = items.map((stock, index) =>
+      '<button type="button" role="option" aria-selected="false" id="' + inputId + '-option-' + index +
+      '" class="autocomplete-option" data-index="' + index + '">' +
+      '<span class="autocomplete-symbol">' + esc(stock.ticker) + '</span>' +
+      '<span class="autocomplete-company">' + esc(stock.company || stock.ticker) + '</span>' +
+      '<span class="autocomplete-exchange">' + esc(stock.exchange || stock.type || "Stock") + '</span>' +
+      '</button>'
+    ).join("");
+    dropdown.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  };
+
+  const search = query => {
+    const sequence = ++requestSequence;
+    clearTimeout(autocompleteTimers.get(inputId));
+    autocompleteControllers.get(inputId)?.abort();
+    if (!query) { close(); return; }
+    if (!config.supabaseUrl || !config.supabasePublishableKey) {
+      dropdown.innerHTML = '<div class="autocomplete-message">Search is not configured.</div>';
+      dropdown.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      return;
+    }
+    dropdown.innerHTML = '<div class="autocomplete-message">Searching stocks…</div>';
+    dropdown.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    const timer = setTimeout(async () => {
+      const controller = new AbortController();
+      autocompleteControllers.set(inputId, controller);
+      try {
+        const response = await fetch(api("market-feed") + "?q=" + encodeURIComponent(query), {
+          headers: { "apikey": config.supabasePublishableKey },
+          signal: controller.signal
+        });
+        const data = await response.json();
+        if (sequence !== requestSequence) return;
+        if (!response.ok) throw Error(data.error || "Stock search is temporarily unavailable.");
+        renderSuggestions(data.suggestions || []);
+      } catch (error) {
+        if (error.name === "AbortError" || sequence !== requestSequence) return;
+        dropdown.innerHTML = '<div class="autocomplete-message">Could not search stocks. Try again.</div>';
+        dropdown.hidden = false;
+        input.setAttribute("aria-expanded", "true");
+      }
+    }, 180);
+    autocompleteTimers.set(inputId, timer);
+  };
+
+  const setActive = index => {
+    if (!suggestions.length) return;
+    activeIndex = (index + suggestions.length) % suggestions.length;
+    dropdown.querySelectorAll(".autocomplete-option").forEach((option, i) => {
+      const selected = i === activeIndex;
+      option.setAttribute("aria-selected", String(selected));
+      if (selected) {
+        input.setAttribute("aria-activedescendant", option.id);
+        option.scrollIntoView({ block: "nearest" });
+      }
+    });
+  };
+
+  input.addEventListener("input", () => search(input.value.trim()));
+  input.addEventListener("keydown", event => {
+    if (event.key === "ArrowDown" && !dropdown.hidden) {
+      event.preventDefault(); setActive(activeIndex + 1);
+    } else if (event.key === "ArrowUp" && !dropdown.hidden) {
+      event.preventDefault(); setActive(activeIndex < 0 ? suggestions.length - 1 : activeIndex - 1);
+    } else if (event.key === "Enter" && !dropdown.hidden) {
+      if (activeIndex >= 0 && suggestions[activeIndex]) {
+        event.preventDefault(); choose(suggestions[activeIndex]);
+      }
+    } else if (event.key === "Escape") close();
+  });
+  dropdown.addEventListener("click", event => {
+    const option = event.target.closest(".autocomplete-option");
+    if (option) choose(suggestions[Number(option.dataset.index)]);
+  });
+  input.addEventListener("focus", () => {
+    if (input.value.trim() && !dropdown.hidden) input.setAttribute("aria-expanded", "true");
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest("#" + inputId) && !event.target.closest("#" + dropdownId)) close();
+  });
+}
+
+attachStockAutocomplete("quick-ticker", "quick-suggestions", "home");
+attachStockAutocomplete("ticker", "search-suggestions", "search", () => ({
+  period: $("period").value,
+  horizon: Number($("horizon").value)
+}));
 
 async function openStockDetails(ticker, options = {}) {
   const symbol = String(ticker || "").trim().toUpperCase();
   if (!symbol) return;
+  currentDetailTicker = symbol;
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     switchScreen("detail");
     $("detail-status").textContent = "Supabase is not configured. Add the project URL and publishable key to the app deployment variables.";
@@ -387,8 +510,7 @@ async function openStockDetails(ticker, options = {}) {
   $("results").hidden = true;
   $("search-progress").hidden = true;
   $("detail-status").textContent = "Preparing analysis for " + symbol + "…";
-  $("submit").disabled = true;
-  $("hard-rescan-search").disabled = true;
+  $("detail-hard-rerun").disabled = true;
 
   try {
     const request = options.jobId
@@ -422,18 +544,18 @@ async function openStockDetails(ticker, options = {}) {
   } catch (error) {
     $("detail-status").textContent = error.message;
   } finally {
-    $("submit").disabled = false;
-    $("hard-rescan-search").disabled = false;
+    $("detail-hard-rerun").disabled = false;
   }
 }
 
-$("search").addEventListener("submit", event => {
-  event.preventDefault();
-  openStockDetails($("ticker").value.trim().toUpperCase(), {
-    returnScreen: "search",
+$("search").addEventListener("submit", event => event.preventDefault());
+$("detail-hard-rerun").addEventListener("click", () => {
+  if (!currentDetailTicker) return;
+  openStockDetails(currentDetailTicker, {
+    returnScreen: detailReturnScreen,
     period: $("period").value,
     horizon: Number($("horizon").value),
-    hardRescan: event.submitter?.id === "hard-rescan-search"
+    hardRescan: true
   });
 });
 
