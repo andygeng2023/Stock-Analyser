@@ -485,6 +485,7 @@ function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = (
   });
 }
 
+$("quick-search").addEventListener("submit", event => event.preventDefault());
 attachStockAutocomplete("quick-ticker", "quick-suggestions", "home");
 attachStockAutocomplete("ticker", "search-suggestions", "search", () => ({
   period: $("period").value,
