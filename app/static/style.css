@@ -337,10 +337,10 @@ td:first-child,th:first-child{text-align:left}
 }
 
 
-/* Final layout: queue floats above the bottom navigation, never inside it. */
+/* Consistent top breathing room across every screen, including stock details. */
 main,
 .detail-mode main {
-  padding-top: 0 !important;
+  padding-top: 30px !important;
 }
 .app-screen > .page-heading:first-child {
   margin-top: 0;
@@ -362,10 +362,10 @@ main,
   transform: none !important;
 }
 @media (min-width: 701px) {
-  main,.detail-mode main { padding-top: 0 !important; }
+  main,.detail-mode main { padding-top: 30px !important; }
 }
 @media (max-width: 700px) {
-  main,.detail-mode main { padding-top: 0 !important; }
+  main,.detail-mode main { padding-top: 24px !important; }
   .global-queue {
     right: 12px !important;
     bottom: calc(66px + env(safe-area-inset-bottom)) !important;
