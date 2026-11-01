@@ -117,9 +117,9 @@ function applyAuthSession(session) {
   if (previousUserId !== nextUserId) {
     watchlistItems = [];
     watchlistLoaded = false;
-    if (currentScreen === "watchlist" && authUser) loadWatchlist(true);
+    if (currentScreen === "watchlist" && authUser) window.setTimeout(() => loadWatchlist(true), 0);
     if (currentScreen === "watchlist" && !authUser) renderWatchlistSignedOut();
-    if (currentDetailTicker) updateDetailWatchlistButton();
+    if (currentDetailTicker) window.setTimeout(() => updateDetailWatchlistButton(), 0);
   }
 }
 
