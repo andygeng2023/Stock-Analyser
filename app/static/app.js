@@ -89,7 +89,9 @@ async function refreshGlobalQueue() {
   } finally { queueRefreshBusy = false; }
 }
 $("global-queue-toggle")?.addEventListener("click", () => {
-  $("global-queue-popover").hidden = !$("global-queue-popover").hidden;
+  const popover = $("global-queue-popover");
+  popover.hidden = !popover.hidden;
+  $("global-queue-toggle").setAttribute("aria-expanded", String(!popover.hidden));
 });
 document.addEventListener("click", event => {
   if (!event.target.closest(".global-queue")) $("global-queue-popover").hidden = true;
@@ -140,7 +142,8 @@ async function waitForResult(id, statusElement, prefix = "search") {
     });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
-    updateProgress(prefix, data);\n    updateTrackedJob(id, data);
+    updateProgress(prefix, data);
+    updateTrackedJob(id, data);
     if (data.status === "completed") return data.result;
     if (data.status === "failed") throw Error(data.error || "The analysis failed.");
     statusElement.textContent = data.status === "running"
@@ -367,13 +370,10 @@ async function openStockDetails(ticker, options = {}) {
   $("hard-rescan-search").disabled = true;
 
   try {
-    const request = await requestAnalysis(
-      symbol,
-      $("period").value,
-      Number($("horizon").value),
-      "analysis",
-      options.hardRescan === true
-    );
+    const request = options.jobId
+      ? { id: options.jobId, status: "queued", reused: true }
+      : await requestAnalysis(symbol, $("period").value, Number($("horizon").value), "analysis", options.hardRescan === true);
+    trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
       const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
@@ -550,7 +550,8 @@ async function startScan(hard = false) {
     $("scan-status").textContent = hard
       ? "Requesting a fresh market scan…"
       : "Checking the shared eight-hour cache…";
-    const request = await requestAnalysis(null, null, null, "scan", hard);\n    trackJob({ id: request.id, ticker: "Market scan", type: "scan", status: request.status || "queued", progress: request.progress, stage: request.stage });
+    const request = await requestAnalysis(null, null, null, "scan", hard);
+    trackJob({ id: request.id, ticker: "Market scan", type: "scan", status: request.status || "queued", progress: request.progress, stage: request.stage });
     $("scan-progress").hidden = false;
     let result;
     if (request.status === "completed" && request.cached) {
