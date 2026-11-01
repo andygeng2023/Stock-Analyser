@@ -336,13 +336,11 @@ td:first-child,th:first-child{text-align:left}
  .autocomplete-option{padding:11px 9px}
 }
 
-
-/* Reserve an explicit header band below the fixed queue on every page.
-   The detail action row gets additional separation so Hard rerun cannot collide with Queue. */
-:root { --global-queue-reserved-space: 64px; }
-body > main { padding-top: var(--global-queue-reserved-space) !important; }
-body.detail-mode > main { padding-top: var(--global-queue-reserved-space) !important; }
-body.detail-mode .detail-top { margin-top: 8px; }
+/* The fixed queue is outside document flow; this element reserves its header band. */
+.global-queue-spacer { display: block; height: 22px; }
+.detail-mode .global-queue-spacer { height: 22px; }
+.detail-mode .detail-top { margin-top: 8px; }
 @media (max-width: 700px) {
-  :root { --global-queue-reserved-space: 60px; }
+  .global-queue-spacer,
+  .detail-mode .global-queue-spacer { height: 18px; }
 }
