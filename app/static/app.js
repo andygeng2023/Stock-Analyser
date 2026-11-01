@@ -931,6 +931,84 @@ function bindStockButtons(root) {
 let visibleMarketRefreshBusy = false;
 let visibleMarketRefreshQueued = false;
 let visibleMarketRefreshAt = 0;
+const indexedCardDataCache = new Map();
+const indexedCardDataCacheAt = new Map();
+const fallbackHistoryCache = new Map();
+const fallbackHistoryCacheAt = new Map();
+const CARD_INDEX_CACHE_TTL = 5 * 60 * 1000;
+
+function applyCardQuote(ticker, quote, cardsByTicker) {
+  for (const card of cardsByTicker.get(ticker) || []) {
+    if (!card.isConnected) continue;
+    const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
+    if (priceNode && quote.price != null) priceNode.textContent = cash(quote.price, quote.currency);
+    const dailyNode = card.querySelector(".stock-daily-change, .watchlist-v2-daily");
+    if (dailyNode && quote.change_percent != null) {
+      dailyNode.textContent = pct(quote.change_percent);
+      dailyNode.classList.toggle("negative", Number(quote.change_percent) < 0);
+      dailyNode.classList.toggle("positive", Number(quote.change_percent) >= 0);
+    }
+  }
+}
+
+function applyCardChart(ticker, data, cardsByTicker) {
+  for (const card of cardsByTicker.get(ticker) || []) {
+    if (!card.isConnected) continue;
+    const history = Array.isArray(data.history_preview) ? data.history_preview : [];
+    if (!history.length) continue;
+
+    const chartNode = card.querySelector(".stock-sparkline, .stock-chart-placeholder");
+    if (chartNode) chartNode.outerHTML = stockSparkline(data);
+
+    const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
+    if (priceNode && priceNode.textContent.trim() === "—" && data.price != null) {
+      priceNode.textContent = cash(data.price, data.currency);
+    }
+    const dailyNode = card.querySelector(".stock-daily-change, .watchlist-v2-daily");
+    if (dailyNode && dailyNode.textContent.trim() === "—" && data.change_percent != null) {
+      dailyNode.textContent = pct(data.change_percent);
+      dailyNode.classList.toggle("negative", Number(data.change_percent) < 0);
+      dailyNode.classList.toggle("positive", Number(data.change_percent) >= 0);
+    }
+
+    const metaNode = card.querySelector(".stock-card-chart .stock-analysis-meta");
+    if (metaNode) {
+      const predicted = data.expected_change_percent == null ? "" :
+        '<span class="stock-predicted ' + (Number(data.expected_change_percent) < 0 ? "negative" : "positive") +
+        '"><strong>' + esc(pct(data.expected_change_percent)) + '</strong><small>30D</small></span>';
+      const stats = [];
+      if (data.return_1m != null) stats.push({ label: "1M", value: pct(data.return_1m) });
+      if (data.directional_accuracy != null) stats.push({ label: "Accuracy", value: fmt(data.directional_accuracy, 0) + "%" });
+      else if (data.annualized_volatility != null) stats.push({ label: "Volatility", value: pct(data.annualized_volatility) });
+      metaNode.innerHTML = predicted + stats.slice(0, 2).map(stat =>
+        '<span class="stock-analysis-stat"><strong>' + esc(stat.value) +
+        '</strong><small>' + esc(stat.label) + '</small></span>'
+      ).join("");
+    }
+  }
+}
+
+async function requestCardMarketMode(mode, tickers, onItem) {
+  const batchSize = 6;
+  for (let offset = 0; offset < tickers.length; offset += batchSize) {
+    const batch = tickers.slice(offset, offset + batchSize);
+    try {
+      const response = await fetch(api("stock-market-data"), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ tickers: batch, mode })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw Error(payload.error || "Could not refresh market data.");
+      for (const item of payload.items || []) {
+        if (item?.ticker) onItem(item.ticker, item);
+      }
+    } catch (error) {
+      console.warn("Could not refresh " + mode + " market-data batch:", error);
+    }
+  }
+}
+
 async function refreshVisibleMarketCards(force = false) {
   if (!config.supabaseUrl || !config.supabasePublishableKey) return;
   if (visibleMarketRefreshBusy) {
@@ -953,25 +1031,27 @@ async function refreshVisibleMarketCards(force = false) {
     cardsByTicker.get(ticker).push(card);
   }
 
-  const applyMarketItem = (ticker, live) => {
-    for (const card of cardsByTicker.get(ticker) || []) {
-      if (!card.isConnected) continue;
-      const history = Array.isArray(live.history_preview) ? live.history_preview : [];
-      const chart = stockSparkline(live);
-      const chartNode = card.querySelector(".stock-sparkline, .stock-chart-placeholder");
-      if (chartNode && history.length) chartNode.outerHTML = chart;
-
-      const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
-      if (priceNode && live.price != null) priceNode.textContent = cash(live.price, live.currency);
-      const dailyNode = card.querySelector(".stock-daily-change, .watchlist-v2-daily");
-      if (dailyNode && live.change_percent != null) {
-        dailyNode.textContent = pct(live.change_percent);
-        dailyNode.classList.toggle("negative", Number(live.change_percent) < 0);
-        dailyNode.classList.toggle("positive", Number(live.change_percent) >= 0);
+  try {
+    const now = Date.now();
+    const indexRefresh = [];
+    for (const ticker of tickers) {
+      const cachedAt = indexedCardDataCacheAt.get(ticker) || 0;
+      const cached = indexedCardDataCache.get(ticker);
+      if (cached && now - cachedAt < CARD_INDEX_CACHE_TTL) {
+        applyCardChart(ticker, cached, cardsByTicker);
+      } else {
+        indexRefresh.push(ticker);
       }
+    }
 
-      const hasRapidIndex = Array.isArray(live.forecast_preview) && live.forecast_preview.length > 0;
-      const isWatchlistCard = card.matches(".watchlist-v2-item");
+    // First fetch only the shared RapidIndex records. No Yahoo request can delay these charts.
+    await requestCardMarketMode("indexed", indexRefresh, (ticker, item) => {
+      indexedCardDataCache.set(ticker, item);
+      indexedCardDataCacheAt.set(ticker, Date.now());
+      applyCardChart(ticker, item, cardsByTicker);
+
+      const hasRapidIndex = Array.isArray(item.forecast_preview) && item.forecast_preview.length > 0;
+      const isWatchlistCard = (cardsByTicker.get(ticker) || []).every(card => card.matches(".watchlist-v2-item"));
       if (!isWatchlistCard && !hasRapidIndex && !rapidIndexQueuePending.has(ticker)) {
         rapidIndexQueuePending.add(ticker);
         requestAnalysis(ticker, "5y", 30, "analysis", false, false, "rapidIndex")
@@ -983,28 +1063,34 @@ async function refreshVisibleMarketCards(force = false) {
           .catch(error => console.warn("Could not queue RapidIndex for " + ticker + ":", error))
           .finally(() => rapidIndexQueuePending.delete(ticker));
       }
-    }
-  };
+    });
 
-  try {
-    // Small sequential batches let each group of charts appear without waiting
-    // for the entire visible market universe to finish loading.
-    const batchSize = 6;
-    for (let offset = 0; offset < tickers.length; offset += batchSize) {
-      const batch = tickers.slice(offset, offset + batchSize);
-      try {
-        const response = await fetch(api("stock-market-data"), {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ tickers: batch })
-        });
-        const payload = await response.json();
-        if (!response.ok) throw Error(payload.error || "Could not refresh market data.");
-        for (const item of payload.items || []) {
-          if (item?.ticker) applyMarketItem(item.ticker, item);
-        }
-      } catch (error) {
-        console.warn("Could not refresh market-data batch:", error);
+    // Only request Yahoo historical prices when the RapidIndex/shared result has no chart.
+    const fallbackTickers = tickers.filter(ticker => {
+      const indexed = indexedCardDataCache.get(ticker);
+      if (indexed?.history_preview?.length) return false;
+      const fallbackAt = fallbackHistoryCacheAt.get(ticker) || 0;
+      return !(fallbackHistoryCache.has(ticker) && Date.now() - fallbackAt < CARD_INDEX_CACHE_TTL);
+    });
+
+    // Quotes and rare historical fallbacks now run independently of the indexed-chart request.
+    const fallbackPromise = requestCardMarketMode("history", fallbackTickers, (ticker, item) => {
+      if (item.history_preview?.length) {
+        fallbackHistoryCache.set(ticker, item);
+        fallbackHistoryCacheAt.set(ticker, Date.now());
+        applyCardChart(ticker, item, cardsByTicker);
+      }
+    });
+    const quotesPromise = requestCardMarketMode("quotes", tickers, (ticker, item) => {
+      applyCardQuote(ticker, item, cardsByTicker);
+    });
+    await Promise.all([fallbackPromise, quotesPromise]);
+
+    // Reuse a historical fallback immediately when the same ticker reappears on another screen.
+    for (const ticker of tickers) {
+      const fallback = fallbackHistoryCache.get(ticker);
+      if (fallback && !indexedCardDataCache.get(ticker)?.history_preview?.length) {
+        applyCardChart(ticker, fallback, cardsByTicker);
       }
     }
   } finally {
@@ -1015,7 +1101,6 @@ async function refreshVisibleMarketCards(force = false) {
     }
   }
 }
-
 
 function fillStockGrid(id, stocks, tag = "") {
   const root = $(id);
