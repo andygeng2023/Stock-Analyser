@@ -24,6 +24,13 @@ See [Supabase setup instructions](supabase/README.md). The database schema is in
 
 The repository is public. GitHub documents standard hosted runner usage as free for public repositories. Private repositories instead use the account's included Actions quota and may incur charges if exceeded.
 
+## Indexing profiles
+
+- **rapidIndex** indexes five years of price history and a 30-trading-day forecast.
+- **SlowIndex** indexes the maximum available history and a 252-trading-day (approximately one-year) forecast.
+- Detailed stock analysis and Hard rerun use these same profiles. Custom reruns can select a different history period, forecast horizon (up to 504 trading days), and independent save destination.
+- Results are cached separately by ticker, history period, forecast horizon, and destination indexer, so custom results cannot overwrite RapidIndex or SlowIndex entries.
+
 ## Local Python server
 
 For local development only:
