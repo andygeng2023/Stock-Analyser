@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1120">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("stock-analyser-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}</script>
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=settings-display-name-input-beside-save-1">
+<link rel="stylesheet" href="./style.css?v=settings-account-controls-alignment-1">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
 <script src="./config.js"></script>
@@ -242,10 +242,14 @@
               <small>Set a new password or request a reset email.</small>
             </div>
             <form id="account-password-form" class="settings-v2-form settings-v2-password-form">
-              <input id="account-new-password" type="password" required minlength="8" autocomplete="new-password" placeholder="New password">
-              <input id="account-confirm-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password">
-              <button type="submit" class="settings-v2-button">Update password</button>
-              <button id="account-password-reset" class="settings-v2-button secondary-button" type="button">Send reset email</button>
+              <div class="settings-v2-form-fields">
+                <input id="account-new-password" type="password" required minlength="8" autocomplete="new-password" placeholder="New password">
+                <input id="account-confirm-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password">
+              </div>
+              <div class="settings-v2-form-actions">
+                <button type="submit" class="settings-v2-button">Update password</button>
+                <button id="account-password-reset" class="settings-v2-button secondary-button" type="button">Send reset email</button>
+              </div>
             </form>
           </div>
 
