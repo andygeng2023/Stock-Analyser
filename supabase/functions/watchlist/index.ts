@@ -16,6 +16,16 @@ function normaliseTicker(value: unknown): string {
   return ticker;
 }
 
+function samplePreview(values: unknown, limit: number): number[] {
+  if (!Array.isArray(values)) return [];
+  const numeric = values.map(Number).filter((value: number) => Number.isFinite(value));
+  if (numeric.length <= limit) return numeric;
+  if (limit <= 1) return [numeric[numeric.length - 1]];
+  return Array.from({ length: limit }, (_, index) =>
+    numeric[Math.round(index * (numeric.length - 1) / (limit - 1))]
+  );
+}
+
 function compactAnalysis(result: any, indexedAt: string | null) {
   if (!result) return null;
   return {
@@ -25,6 +35,8 @@ function compactAnalysis(result: any, indexedAt: string | null) {
     change_percent: result.change_percent ?? null,
     as_of: result.as_of ?? null,
     indexed_at: indexedAt,
+    history_preview: samplePreview(result.history?.close, 72),
+    forecast_preview: samplePreview(result.forecast?.hybrid, 30),
     market_summary: result.market_summary ?? {},
     fundamentals: {
       market_cap: result.fundamentals?.market_cap ?? null,
