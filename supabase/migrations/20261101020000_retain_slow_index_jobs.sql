@@ -10,17 +10,17 @@ declare
   expired_jobs integer;
 begin
   delete from public.market_index
-   where (period = 'max' and horizon = 504 and indexed_at < now() - interval '30 days')
-      or ((period <> 'max' or horizon <> 504) and indexed_at < now() - interval '8 hours');
+   where (indexer = 'SlowIndex' and indexed_at < now() - interval '30 days')
+      or (indexer <> 'SlowIndex' and indexed_at < now() - interval '8 hours');
   get diagnostics expired_index = row_count;
 
   delete from public.analysis_jobs
    where status = 'completed'
-     and not (period = 'max' and horizon = 504)
+     and save_to_indexer <> 'SlowIndex'
      and created_at < now() - interval '8 hours';
   delete from public.analysis_jobs
    where status = 'completed'
-     and period = 'max' and horizon = 504
+     and save_to_indexer = 'SlowIndex'
      and created_at < now() - interval '30 days';
   get diagnostics expired_jobs = row_count;
 
