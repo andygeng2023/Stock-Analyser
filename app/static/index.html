@@ -129,7 +129,26 @@
 <section id="detail-screen" class="app-screen" hidden>
   <div class="detail-top">
     <button id="detail-back" class="back-button" type="button"><span aria-hidden="true">←</span> Back</button>
-    <button id="detail-hard-rerun" class="secondary-button detail-rerun" type="button">Hard rerun</button>
+    <div class="hard-rerun-wrap">
+      <button id="detail-hard-rerun" class="secondary-button detail-rerun" type="button" aria-haspopup="true" aria-expanded="false">Hard rerun <span aria-hidden="true">▾</span></button>
+      <div id="hard-rerun-menu" class="hard-rerun-menu" hidden>
+        <button type="button" data-rerun-indexer="rapidIndex"><strong>Use rapidIndex</strong><small>5 years of history · 30-day forecast</small></button>
+        <button type="button" data-rerun-indexer="SlowIndex"><strong>Use SlowIndex</strong><small>Full history · 504-day forecast</small></button>
+        <button type="button" data-rerun-custom><strong>Use custom settings</strong><small>Choose history, forecast and saving</small></button>
+        <form id="hard-rerun-custom" class="hard-rerun-custom" hidden>
+          <label>History
+            <select id="rerun-history"><option value="5y">rapidIndex · 5 years</option><option value="max">SlowIndex · Full history</option><option value="1y">1 year</option><option value="2y">2 years</option><option value="10y">10 years</option></select>
+          </label>
+          <label>Forecast
+            <select id="rerun-horizon"><option value="30">rapidIndex · 30 trading days</option><option value="504">SlowIndex · 504 trading days</option><option value="90">90 trading days</option><option value="180">180 trading days</option><option value="252">252 trading days</option></select>
+          </label>
+          <label>Save result to
+            <select id="rerun-save"><option value="rapidIndex">rapidIndex</option><option value="SlowIndex">SlowIndex</option><option value="none">Do not save to an index</option></select>
+          </label>
+          <div class="hard-rerun-custom-actions"><button type="submit">Run custom rerun</button></div>
+        </form>
+      </div>
+    </div>
   </div>
   <div class="job-progress" id="search-progress" hidden><div class="progress-track"><div id="search-progress-fill" class="progress-fill"></div></div><div class="progress-detail"><strong id="search-progress-label">Queued</strong><span id="search-progress-percent">0%</span></div><p id="search-progress-stage" class="muted"></p></div>
   <p id="detail-status" role="status" aria-live="polite">Select a stock to view its analysis.</p>
