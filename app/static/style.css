@@ -95,13 +95,6 @@ td:first-child,th:first-child{text-align:left}
 .scan-actions{display:flex;gap:10px;flex-wrap:wrap}
 .scan-status,#scan-status{color:#a7b6cc;margin:16px 2px;font-size:12px}
 .scan-meta{color:#91a0b8;font-size:11px;margin:18px 2px}
-.scan-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:16px;margin:10px 0;background:#141f32;border:1px solid #263650;border-radius:10px}
-.scan-result h3{margin:0 0 6px;font-size:14px}
-.scan-result p{margin:0;color:#91a0b8;font-size:11px;line-height:1.6}
-.scan-result .scan-return{text-align:right}
-.scan-result .scan-return strong{display:block;font-size:18px;color:#39c99a}
-.scan-result .scan-return small{display:block;margin:4px 0 8px;color:#91a0b8}
-.scan-result button{padding:8px 10px;font-size:11px}
 .job-progress{margin:15px 0;padding:14px 15px;background:#141f32;border:1px solid #263650;border-radius:10px}
 .progress-track{height:8px;background:#263650;border-radius:99px;overflow:hidden}
 .progress-fill{height:100%;width:0;background:#39c99a;border-radius:99px;transition:width .35s ease}
@@ -125,25 +118,25 @@ td:first-child,th:first-child{text-align:left}
   h1{font-size:25px}
   header>span{max-width:135px;text-align:right;font-size:10px}
   .page-heading{margin-top:2px}
-  .stock-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .stock-card{padding:12px}
-  .stock-card-name strong{font-size:15px}
+  .stock-grid{grid-template-columns:1fr;gap:8px}
+  .stock-card{min-height:102px;grid-template-columns:minmax(58px,.72fr) minmax(0,2fr) minmax(68px,.82fr);gap:8px;padding:11px 12px}
+  .stock-ticker{font-size:16px}
   .stock-price{font-size:15px}
+  .stock-sparkline,.stock-chart-placeholder{height:44px}
+  .stock-analysis-meta{gap:4px 8px}
+  .stock-analysis-stat strong{font-size:8px}
+  .stock-analysis-stat small,.stock-predicted small{font-size:7px}
   form#search{flex-wrap:wrap;padding:12px}
   form#search input{flex-basis:100%}
   form#search select{flex:1;min-width:0}
   form#search button{flex:1}
   .quick-search{gap:8px}
   .quick-search button{padding:9px 12px}
-  .compact-stock{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px}
-  .compact-return{display:none}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
   .card{padding:14px}
   .card strong{font-size:18px}
   .columns{grid-template-columns:1fr}
   .chart{height:290px}
-  .scan-result{padding:13px;gap:9px}
-  .scan-result .scan-return strong{font-size:16px}
   .discover-intro,.scan-panel{padding:16px}
   .discover-stats{gap:7px}
   .discover-stats>div{padding:10px 8px}
