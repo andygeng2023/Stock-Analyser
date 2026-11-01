@@ -22,6 +22,7 @@ let latestScanRefreshBusy = false;
 const QUEUE_KEY = "stock-analyser-active-jobs";
 let trackedJobs = loadTrackedJobs();
 let queueRefreshBusy = false;
+const locallyPollingJobIds = new Set();
 
 function loadTrackedJobs() {
   try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); }
@@ -74,7 +75,7 @@ async function refreshGlobalQueue() {
   if (queueRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
   queueRefreshBusy = true;
   try {
-    const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status));
+    const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status) && !locallyPollingJobIds.has(job.id));
     await Promise.all(active.map(async job => {
       try {
         const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(job.id), {
@@ -88,15 +89,30 @@ async function refreshGlobalQueue() {
     saveTrackedJobs();
   } finally { queueRefreshBusy = false; }
 }
-$("global-queue-toggle")?.addEventListener("click", () => {
+function setGlobalQueueOpen(open) {
+  const toggle = $("global-queue-toggle");
   const popover = $("global-queue-popover");
-  popover.hidden = !popover.hidden;
-  $("global-queue-toggle").setAttribute("aria-expanded", String(!popover.hidden));
-});
+  if (!toggle || !popover) return;
+  popover.hidden = !open;
+  toggle.setAttribute("aria-expanded", String(open));
+}
 document.addEventListener("click", event => {
-  if (!event.target.closest(".global-queue")) $("global-queue-popover").hidden = true;
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const toggle = target.closest("#global-queue-toggle");
+  if (toggle) {
+    event.preventDefault();
+    setGlobalQueueOpen($("global-queue-popover").hidden);
+    return;
+  }
+  if (!target.closest(".global-queue")) setGlobalQueueOpen(false);
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") setGlobalQueueOpen(false);
 });
 renderGlobalQueue();
+refreshGlobalQueue();
+setInterval(refreshGlobalQueue, 5000);
 
 
 function rows(obj) {
@@ -135,23 +151,28 @@ function updateProgress(prefix, data) {
 }
 
 async function waitForResult(id, statusElement, prefix = "search") {
-  const started = Date.now();
-  while (Date.now() - started < 15 * 60 * 1000) {
-    const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(id), {
-      headers: { "apikey": config.supabasePublishableKey }
-    });
-    const data = await response.json();
-    if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
-    updateProgress(prefix, data);
-    updateTrackedJob(id, data);
-    if (data.status === "completed") return data.result;
-    if (data.status === "failed") throw Error(data.error || "The analysis failed.");
-    statusElement.textContent = data.status === "running"
-      ? "The worker is processing this job…"
-      : "Queued; waiting for the shared GitHub Actions worker…";
-    await wait(2500);
+  locallyPollingJobIds.add(id);
+  try {
+    const started = Date.now();
+    while (Date.now() - started < 15 * 60 * 1000) {
+      const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(id), {
+        headers: { "apikey": config.supabasePublishableKey }
+      });
+      const data = await response.json();
+      if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
+      updateProgress(prefix, data);
+      updateTrackedJob(id, data);
+      if (data.status === "completed") return data.result;
+      if (data.status === "failed") throw Error(data.error || "The analysis failed.");
+      statusElement.textContent = data.status === "running"
+        ? "The worker is processing this job…"
+        : "Queued; waiting for the shared GitHub Actions worker…";
+      await wait(2500);
+    }
+    throw Error("This analysis is taking longer than expected. Its job may still finish; try again later.");
+  } finally {
+    locallyPollingJobIds.delete(id);
   }
-  throw Error("This analysis is taking longer than expected. Its job may still finish; try again later.");
 }
 
 function stockSparkline(stock) {
