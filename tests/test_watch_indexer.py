@@ -22,7 +22,7 @@ class WatchIndexerTests(unittest.TestCase):
         supabase_request.return_value = [
             {"ticker": "AAPL", "indexed_at": "2026-11-01T00:00:00+00:00"},
         ]
-        result = watch_indexer.recent_rapid_index()
+        result = watch_indexer.recent_rapid_index(["AAPL"])
         query = supabase_request.call_args.args[0]
         self.assertIn("period=eq.5y", query)
         self.assertIn("horizon=eq.30", query)
