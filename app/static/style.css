@@ -567,3 +567,12 @@ html[data-theme="light"] .settings-links a,html[data-theme="light"] .settings-pr
   .watch-card-chart>small{font-size:7px}
   .watch-card-stats strong{font-size:9px}
 }
+
+
+/* Five-tab navigation */
+.bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media(max-width:700px){
+  .bottom-nav{gap:3px;padding-left:8px;padding-right:8px}
+  .nav-tab{flex-direction:column;gap:3px;padding:6px 2px;font-size:9px;line-height:1.15}
+  .nav-tab span{font-size:16px}
+}
