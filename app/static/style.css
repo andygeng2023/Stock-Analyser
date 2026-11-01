@@ -1992,7 +1992,6 @@ html[data-theme="light"] #settings-screen .settings-v2-form input:focus{
   border:0!important;
   box-shadow:none!important;
   outline:0;
-  padding:0;
 }
 #settings-screen #account-profile-form input,
 #settings-screen #account-email-form input,
