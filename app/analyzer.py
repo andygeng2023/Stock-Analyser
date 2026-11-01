@@ -1,6 +1,9 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 from sklearn.pipeline import make_pipeline
@@ -12,20 +15,53 @@ from .errors import AnalysisError
 ORDERS = [(1,0,0),(0,0,1),(1,0,1),(2,0,1),(2,0,2)]
 
 def _select_order(series):
-    candidates=[]
+    candidates = []
     for order in ORDERS:
         try:
             # Use a numeric index: Yahoo Finance DatetimeIndex values often have
             # no fixed frequency, which prevents statsmodels append() from
             # extending the fitted model during one-step-ahead validation.
-            fitted=ARIMA(np.asarray(series,dtype=float),order=order,enforce_stationarity=False,enforce_invertibility=False).fit()
-            candidates.append((float(fitted.aic),order,fitted))
+            with warnings.catch_warnings(record=True) as fit_warnings:
+                warnings.simplefilter("always")
+                fitted = ARIMA(
+                    np.asarray(series, dtype=float),
+                    order=order,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False,
+                ).fit()
+            aic = float(fitted.aic)
+            if not np.isfinite(aic):
+                continue
+            retvals = getattr(fitted, "mle_retvals", None)
+            converged = retvals.get("converged") if isinstance(retvals, dict) else None
+            if converged is None:
+                converged = not any(
+                    issubclass(item.category, ConvergenceWarning)
+                    for item in fit_warnings
+                )
+            candidates.append((bool(converged), aic, order, fitted))
         except Exception:
             continue
+
     if not candidates:
         raise AnalysisError("ARIMA fitting failed.")
-    _,order,fitted=min(candidates,key=lambda item:item[0])
-    return order,fitted
+
+    # Prefer a genuinely converged fit, even when a failed optimizer happened
+    # to report a numerically smaller AIC. Only use a non-converged fit when
+    # every candidate failed to converge.
+    converged_candidates = [item for item in candidates if item[0]]
+    if converged_candidates:
+        selected = min(converged_candidates, key=lambda item: item[1])
+    else:
+        warnings.warn(
+            "No ARIMA candidate converged; using the lowest-AIC finite fallback.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        selected = min(candidates, key=lambda item: item[1])
+
+    _, _, order, fitted = selected
+    return order, fitted
 
 def _feature_frame(close,volume,returns,residuals):
     r=returns.reindex(close.index)
@@ -46,6 +82,18 @@ def _feature_frame(close,volume,returns,residuals):
     for lag in range(1,4):
         x[f"e{lag}"]=e.shift(lag-1)
     return x
+
+def _aligned_target_dates(validation_features, feature_dates, target_dates):
+    """Map surviving feature rows to the next-session dates they predict."""
+    mapping = pd.Series(
+        pd.Index(target_dates).to_numpy(),
+        index=pd.Index(feature_dates),
+    )
+    aligned = mapping.reindex(pd.Index(validation_features))
+    if aligned.isna().any():
+        raise AnalysisError("Could not align the chronological model validation window.")
+    return pd.Index(aligned.to_numpy())
+
 
 def _metrics(actual,predicted):
     return {
@@ -100,9 +148,16 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         target=residuals.reindex(close.index).shift(-1)
         data=features.assign(target=target).replace([np.inf,-np.inf],np.nan).dropna()
         feature_dates=returns.index[split-1:-1]
+        if len(feature_dates) != len(test_returns):
+            raise AnalysisError("Could not map validation features to next-session targets.")
         test_data=data.reindex(feature_dates).dropna()
-        if len(test_data)!=len(test_returns):
-            raise AnalysisError("Could not align the chronological model validation window.")
+        if len(test_data) < 15:
+            raise AnalysisError("Not enough clean observations for chronological validation.")
+        validation_dates = _aligned_target_dates(
+            test_data.index,
+            feature_dates,
+            test_returns.index,
+        )
         train_data=data.loc[data.index < returns.index[split-1]]
         if len(train_data)<40:
             raise AnalysisError("Not enough clean observations to train the SVR model.")
@@ -111,9 +166,12 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             return make_pipeline(StandardScaler(),SVR(kernel="rbf",C=10,epsilon=0.001))
         svr_validation=make_model().fit(train_data.drop(columns="target"),train_data["target"])
         predicted_residuals=svr_validation.predict(test_data.drop(columns="target"))
-        actual_returns=test_returns.to_numpy(dtype=float)
-        actual_residuals=residuals.loc[test_returns.index].to_numpy(dtype=float)
-        predicted_arima=np.asarray(arima_predictions,dtype=float)
+        actual_returns=returns.reindex(validation_dates).to_numpy(dtype=float)
+        actual_residuals=residuals.reindex(validation_dates).to_numpy(dtype=float)
+        predicted_arima=pd.Series(
+            np.asarray(arima_predictions,dtype=float),
+            index=test_returns.index,
+        ).reindex(validation_dates).to_numpy(dtype=float)
         metrics={
             "arima":_metrics(actual_returns,predicted_arima),
             "svm_residual":_metrics(actual_residuals,predicted_residuals),
