@@ -8,7 +8,7 @@ import os
 import sys
 import time
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import yfinance as yf
 
@@ -47,6 +47,57 @@ def db_post(path, payload, *, conflict=None):
     })
 
 
+def _retry_fields(indexer):
+    if indexer == "SlowIndex":
+        return "slow_attempted_at", "slow_retry_after", "slow_last_error"
+    return "rapid_attempted_at", "rapid_retry_after", "rapid_last_error"
+
+
+def _retry_after_for_failure(error, attempted_at=None):
+    """Return a bounded retry time based on whether the failure is data or transient."""
+    attempted_at = attempted_at or datetime.now(timezone.utc)
+    message = str(error).lower()
+
+    if any(term in message for term in (
+        "insufficient price history",
+        "at least 90 daily returns",
+        "not enough clean observations",
+    )):
+        delay = timedelta(days=7)
+    elif "enter a valid ticker" in message:
+        delay = timedelta(days=30)
+    elif any(term in message for term in (
+        "timed out", "timeout", "429", "rate limit", "too many requests",
+        "connection", "temporarily", "service unavailable", "502", "503", "504",
+    )):
+        delay = timedelta(minutes=30)
+    elif "could not align the chronological model validation window" in message:
+        delay = timedelta(hours=6)
+    elif "arima fitting failed" in message:
+        delay = timedelta(hours=6)
+    else:
+        delay = timedelta(hours=2)
+
+    return attempted_at + delay
+
+
+def _retry_is_available(row, indexer, now=None):
+    """A failed symbol becomes eligible again when its persisted cooldown expires."""
+    now = now or datetime.now(timezone.utc)
+    _, retry_field, _ = _retry_fields(indexer)
+    value = row.get(retry_field)
+    if not value:
+        return True
+    try:
+        retry_at = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return retry_at <= now
+    except (TypeError, ValueError):
+        # An unreadable cooldown must not permanently block a ticker.
+        return True
+
+
 def market_cap_for(ticker):
     try:
         info = yf.Ticker(ticker).fast_info
@@ -76,6 +127,7 @@ def run(shard, indexer="rapidIndex"):
     is_slow = indexer == "SlowIndex"
     period, horizon = (SLOW_PERIOD, SLOW_HORIZON) if is_slow else (RAPID_PERIOD, RAPID_HORIZON)
     cursor_field = "last_slow_indexed_at" if is_slow else "last_indexed_at"
+    attempt_field, retry_field, error_field = _retry_fields(indexer)
     refresh_after_hours = SLOW_REFRESH_AFTER_HOURS if is_slow else REFRESH_AFTER_HOURS
     batch_limit = SLOW_PER_SHARD_LIMIT if is_slow else PER_SHARD_LIMIT
     print(f"{indexer} shard {shard + 1}/{shard_count} preparing candidates ({period}, {horizon} trading days).")
@@ -84,7 +136,11 @@ def run(shard, indexer="rapidIndex"):
         print("No eligible stocks found; nothing to index.")
         return 0
 
-    catalog_rows = db_get("market_index_catalog?select=ticker,last_indexed_at,last_slow_indexed_at,market_cap&limit=10000")
+    catalog_rows = db_get(
+        "market_index_catalog?select=ticker,last_indexed_at,last_slow_indexed_at,"
+        "rapid_attempted_at,rapid_retry_after,rapid_last_error,"
+        "slow_attempted_at,slow_retry_after,slow_last_error,market_cap&limit=10000"
+    )
     catalog = {row["ticker"]: row for row in catalog_rows or []}
 
     # Enrich a bounded liquid subset with Yahoo's market-cap metadata. If it is
@@ -126,7 +182,8 @@ def run(shard, indexer="rapidIndex"):
         if not value:
             return None
         try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
         except (TypeError, ValueError):
             return None
 
@@ -165,7 +222,12 @@ def run(shard, indexer="rapidIndex"):
 
     # Track A: protect a small high-value/high-liquidity cohort. Refresh its
     # entries at six hours, leaving a two-hour margin before the cache expires.
-    elite = sorted(ranked, key=lambda x: x["_quality"], reverse=True)[:PRIORITY_REFRESH_COUNT]
+    retry_ready = [
+        item for item in ranked
+        if _retry_is_available(catalog.get(item["ticker"], {}), indexer, now_dt)
+    ]
+    cooling_down = len(ranked) - len(retry_ready)
+    elite = sorted(retry_ready, key=lambda x: x["_quality"], reverse=True)[:PRIORITY_REFRESH_COUNT]
     refresh_due = [
         item for item in elite
         if item["_indexed_at"] is None or item["_age_hours"] >= refresh_after_hours
@@ -179,10 +241,11 @@ def run(shard, indexer="rapidIndex"):
     # catalogue cursor prevents the same names being chosen repeatedly, while
     # market-cap/liquidity/fast-screen quality breaks ties.
     refresh_tickers = {item["ticker"] for item in refresh_due}
-    discovery = [item for item in ranked if item["ticker"] not in refresh_tickers]
+    discovery = [item for item in retry_ready if item["ticker"] not in refresh_tickers]
     def discovery_key(item):
-        last = parse_time(catalog.get(item["ticker"], {}).get(cursor_field))
-        # Never/least-recently processed names first; stronger names win ties.
+        row = catalog.get(item["ticker"], {})
+        last = parse_time(row.get(attempt_field) or row.get(cursor_field))
+        # Never/least-recently attempted names first; stronger names win ties.
         age = (now_dt - last).total_seconds() if last else float("inf")
         return (-age, -item["_quality"])
     discovery.sort(key=discovery_key)
@@ -200,13 +263,25 @@ def run(shard, indexer="rapidIndex"):
     print(
         f"Universe={universe_size}, eligible={eligible}, "
         f"priority refresh due={len(refresh_due)}, "
-        f"elite cohort={len(elite)}, shard candidates={len(shard_candidates)}."
+        f"elite cohort={len(elite)}, cooling down={cooling_down}, "
+        f"shard candidates={len(shard_candidates)}."
     )
     completed = 0
     for position, item in enumerate(shard_candidates, start=1):
         ticker = item["ticker"]
         print(f"[{position}/{len(shard_candidates)}] Indexing {ticker}.")
+        attempted_dt = datetime.now(timezone.utc)
+        attempted_at = attempted_dt.isoformat()
         try:
+            # Persist the attempt before expensive work so a process interruption
+            # cannot leave this symbol at the front of the discovery queue.
+            db_post("market_index_catalog", {
+                "ticker": ticker,
+                attempt_field: attempted_at,
+                retry_field: None,
+                error_field: None,
+                "updated_at": attempted_at,
+            }, conflict="ticker")
             result = analyze_ticker(ticker, period=period, horizon=horizon)
             job = db_post("analysis_jobs", {
                 "ticker": ticker, "period": period, "horizon": horizon,
@@ -220,7 +295,7 @@ def run(shard, indexer="rapidIndex"):
             index_row = {
                 "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
                 "result": result, "source_job_id": job_id,
-                "indexed_at": datetime.now(timezone.utc).isoformat(),
+                "indexed_at": attempted_at,
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
             }
@@ -229,12 +304,34 @@ def run(shard, indexer="rapidIndex"):
                 "ticker": ticker, "market_cap": cap,
                 "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
-                cursor_field: datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                cursor_field: attempted_at,
+                attempt_field: attempted_at,
+                retry_field: None,
+                error_field: None,
+                "updated_at": attempted_at,
             }, conflict="ticker")
             completed += 1
         except Exception as exc:
-            print(f"Indexing failed for {ticker}: {str(exc)[:250]}", file=sys.stderr)
+            failed_at = datetime.now(timezone.utc)
+            retry_at = _retry_after_for_failure(exc, failed_at)
+            try:
+                db_post("market_index_catalog", {
+                    "ticker": ticker,
+                    attempt_field: failed_at.isoformat(),
+                    retry_field: retry_at.isoformat(),
+                    error_field: str(exc)[:250],
+                    "updated_at": failed_at.isoformat(),
+                }, conflict="ticker")
+            except Exception as persist_exc:
+                print(
+                    f"Could not persist cooldown for {ticker}: {str(persist_exc)[:180]}",
+                    file=sys.stderr,
+                )
+            print(
+                f"Indexing failed for {ticker}; retry after {retry_at.isoformat()}: "
+                f"{str(exc)[:250]}",
+                file=sys.stderr,
+            )
     print(f"{indexer} shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
     return 0
 
