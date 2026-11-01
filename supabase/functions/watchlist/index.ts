@@ -127,13 +127,34 @@ Deno.serve(async (req) => {
       const githubToken = Deno.env.get("STOCK_ANALYSER_GITHUB_TOKEN");
       if (githubToken) {
         try {
-          const dispatch = await fetch("https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/watch-index.yml/dispatches", {
-            method: "POST",
-            headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + githubToken, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
-            body: JSON.stringify({ ref: "main" }),
-            signal: AbortSignal.timeout(5000),
-          });
-          if (!dispatch.ok) console.error("WatchIndex dispatch failed:", dispatch.status, (await dispatch.text()).slice(0, 250));
+          const githubHeaders = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": "Bearer " + githubToken,
+            "X-GitHub-Api-Version": "2022-11-28",
+          };
+          const activeResponse = await fetch(
+            "https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/watch-index.yml/runs?branch=main&per_page=10",
+            { headers: githubHeaders, signal: AbortSignal.timeout(5000) },
+          );
+          if (activeResponse.ok) {
+            const activeRuns = await activeResponse.json();
+            const alreadyRunning = (activeRuns.workflow_runs ?? []).some((run: any) =>
+              ["queued", "in_progress", "waiting", "requested"].includes(run.status)
+            );
+            if (alreadyRunning) {
+              console.log("WatchIndex refresh already running; reusing its pending refresh.");
+            } else {
+              const dispatch = await fetch("https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/watch-index.yml/dispatches", {
+                method: "POST",
+                headers: { ...githubHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({ ref: "main" }),
+                signal: AbortSignal.timeout(5000),
+              });
+              if (!dispatch.ok) console.error("WatchIndex dispatch failed:", dispatch.status, (await dispatch.text()).slice(0, 250));
+            }
+          } else {
+            console.error("Could not check WatchIndex runs:", activeResponse.status);
+          }
         } catch (dispatchError) { console.error("WatchIndex dispatch error:", dispatchError); }
       } else console.error("STOCK_ANALYSER_GITHUB_TOKEN is missing; WatchIndex refresh cannot be triggered.");
     }
