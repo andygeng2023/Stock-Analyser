@@ -953,3 +953,42 @@ html[data-theme="light"] .danger-button{background:#fff0f0!important;color:#963b
 .settings-list-row[hidden],.account-settings-list[hidden]{display:none!important}
 html[data-theme="light"] button.nav-tab{background:transparent!important;color:#58677e!important;border-color:transparent!important}
 html[data-theme="light"] button.nav-tab.active{background:#edf2f8!important;color:#243a58!important;border-color:#d8e1ed!important}
+
+/* Roomier settings list with clearly separated categories and individual rows. */
+.settings-list-section{margin:38px 0 0}
+.settings-list-section>h3{margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid var(--border,#29384e);font-size:13px;font-weight:750;letter-spacing:.01em}
+.settings-subcategory{margin:20px 0 2px;padding:0 2px;color:var(--muted,#91a0b8);font-size:10px;font-weight:750;letter-spacing:.09em;text-transform:uppercase}
+.settings-list-row{min-height:68px;align-items:center;gap:22px;padding:16px 12px;border-bottom:1px solid var(--border,#29384e);border-radius:7px}
+.settings-list-row:hover{background:rgba(130,150,180,.045)}
+.settings-list-copy{gap:6px;flex:1 1 260px}
+.settings-list-copy strong{font-size:13px}
+.settings-list-copy small{font-size:11px;line-height:1.5;max-width:560px}
+.settings-list-link>span:last-child{font-size:10px;white-space:nowrap}
+.settings-action-button{min-height:34px!important;padding:8px 13px!important;font-size:11px!important}
+#settings-account-button,#theme-toggle{min-height:34px!important;padding:8px 13px!important;font-size:11px!important}
+.account-profile-row{padding:18px 12px;display:block}
+.account-profile-row>.settings-list-copy{display:flex}
+.account-facts{max-width:620px;gap:14px 34px;margin:18px 0}
+.account-facts dt{font-size:10px}
+.account-facts dd{font-size:12px}
+.account-form{max-width:560px;margin-top:16px;gap:10px}
+.account-form label{font-size:11px}
+.account-form input,.account-inline-form input{padding:9px 11px;font-size:11px}
+.account-inline-form{gap:9px;flex-wrap:wrap}
+.account-inline-form input{width:190px}
+.account-password-inline input{width:170px}
+.settings-row-actions{gap:9px}
+.account-settings-feedback{font-size:11px;margin:12px 12px}
+html[data-theme="light"] .settings-list-section>h3{border-color:#dce3ed;color:#172235}
+html[data-theme="light"] .settings-subcategory{color:#66758b}
+html[data-theme="light"] .settings-list-row{border-color:#e1e7ef}
+html[data-theme="light"] .settings-list-row:hover{background:#f8faff}
+@media(max-width:700px){
+ .settings-list-section{margin-top:30px}
+ .settings-list-row{min-height:unset;padding:15px 8px;gap:12px}
+ .settings-list-copy{flex:1 1 100%}
+ .settings-action-button{margin-left:0}
+ .account-inline-form{width:100%;justify-content:flex-start}
+ .account-inline-form input{flex:1 1 180px;width:auto}
+ .settings-row-actions{width:100%;justify-content:flex-start}
+}
