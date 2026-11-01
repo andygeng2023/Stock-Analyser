@@ -99,6 +99,7 @@ Deno.serve(async (req) => {
       .eq("ticker", symbol)
       .eq("period", period)
       .eq("horizon", horizon)
+      .eq("save_to_indexer", saveToIndexer)
       .in("status", ["queued", "running"])
       .order("created_at", { ascending: false })
       .limit(1)
