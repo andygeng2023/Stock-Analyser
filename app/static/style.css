@@ -992,3 +992,83 @@ html[data-theme="light"] .settings-list-row:hover{background:#f8faff}
  .account-inline-form input{flex:1 1 180px;width:auto}
  .settings-row-actions{width:100%;justify-content:flex-start}
 }
+
+
+/* Settings: match Home's section rhythm; settings controls are rows, never cards. */
+#settings-screen .settings-group{margin-top:30px}
+#settings-screen .settings-group .section-title{margin-bottom:9px}
+#settings-screen .settings-group .section-title h3{font-size:15px;font-weight:750}
+#settings-screen .settings-group .section-title p{font-size:11px}
+#settings-screen .settings-row{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  min-width:0;min-height:62px;padding:13px 2px;
+  border:0;border-bottom:1px solid #29384e;border-radius:0;
+  background:transparent;color:inherit;text-decoration:none;
+}
+#settings-screen .settings-row:hover{background:transparent}
+#settings-screen .settings-row-copy{display:flex;flex:1 1 260px;min-width:0;flex-direction:column;gap:5px}
+#settings-screen .settings-row-copy strong{font-size:12px;font-weight:700}
+#settings-screen .settings-row-copy small{max-width:560px;color:#91a0b8;font-size:10px;line-height:1.5}
+#settings-screen .settings-row-trailing{flex:none;color:#91a0b8;font-size:10px;white-space:nowrap}
+#settings-screen .settings-row-link:hover .settings-row-copy strong{color:#a8baff}
+#settings-screen .settings-action-button{
+  flex:none;width:auto!important;min-height:32px!important;padding:7px 11px!important;
+  border-radius:7px!important;font-size:10px!important;line-height:1.2;
+}
+#settings-screen .settings-account-controls[hidden],
+#settings-screen #account-signed-out-note[hidden]{display:none!important}
+#settings-screen .settings-subheading{
+  margin:22px 0 0;padding:0 2px 7px;border-bottom:1px solid #29384e;
+  color:#91a0b8;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+}
+#settings-screen .settings-profile-row{border-bottom:0}
+#settings-screen .account-facts{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 28px;
+  max-width:620px;margin:7px 0 15px;padding:0 2px;
+}
+#settings-screen .account-facts dt{margin-bottom:4px;color:#91a0b8;font-size:9px}
+#settings-screen .account-facts dd{margin:0;color:#e8eef9;font-size:11px;font-weight:650;overflow-wrap:anywhere}
+#settings-screen .account-form{
+  display:flex;align-items:end;gap:9px;max-width:540px;margin:8px 0 17px;padding:0;
+  border:0;border-radius:0;background:transparent;
+}
+#settings-screen .account-form label{display:flex;flex:1;flex-direction:column;gap:5px;color:#b9c5d8;font-size:10px}
+#settings-screen .account-form input,
+#settings-screen .account-inline-form input{
+  min-width:0;padding:8px 10px;font-size:10px;
+}
+#settings-screen .account-form>input{flex:1}
+#settings-screen .account-inline-form{
+  display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:0 1 560px;
+  min-width:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;
+}
+#settings-screen .account-inline-form input{width:175px}
+#settings-screen .account-password-inline input{width:150px}
+#settings-screen .settings-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+#settings-screen .account-settings-feedback{min-height:16px;margin:8px 0;color:#91a0b8;font-size:10px}
+#settings-screen .account-settings-feedback.is-error{color:#e88f8f}
+html[data-theme="light"] #settings-screen .settings-row{border-color:#e1e7ef;background:transparent;color:#172235}
+html[data-theme="light"] #settings-screen .settings-row-copy strong{color:#172235}
+html[data-theme="light"] #settings-screen .settings-row-copy small,
+html[data-theme="light"] #settings-screen .settings-row-trailing,
+html[data-theme="light"] #settings-screen .settings-subheading{color:#66758b}
+html[data-theme="light"] #settings-screen .settings-subheading{border-color:#dce3ed}
+html[data-theme="light"] #settings-screen .account-facts dd{color:#172235}
+html[data-theme="light"] #settings-screen .account-facts dt,
+html[data-theme="light"] #settings-screen .account-form label{color:#52627a}
+html[data-theme="light"] #settings-screen .settings-action-button{background:#edf1f6!important;color:#35445b!important;border:1px solid #d5deea!important;box-shadow:none!important}
+html[data-theme="light"] #settings-screen .settings-action-button.danger-button{background:#fff0f0!important;color:#963b46!important;border-color:#eccbd0!important}
+@media(max-width:700px){
+  #settings-screen .settings-row{align-items:flex-start;flex-wrap:wrap;gap:9px;padding:13px 0}
+  #settings-screen .settings-row-copy{flex:1 1 100%}
+  #settings-screen .settings-row-actions{justify-content:flex-start;width:100%}
+  #settings-screen .account-inline-form{flex:1 1 100%;justify-content:flex-start;flex-wrap:wrap}
+  #settings-screen .account-inline-form input{flex:1 1 145px;width:auto}
+  #settings-screen .account-form{align-items:stretch;flex-direction:column}
+  #settings-screen .account-form>input{width:100%}
+  #settings-screen .account-form>button{align-self:flex-start}
+  #settings-screen .settings-action-button{margin-left:0}
+}
+@media(max-width:390px){
+  #settings-screen .account-facts{grid-template-columns:1fr 1fr;gap:10px 14px}
+}
