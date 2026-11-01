@@ -774,25 +774,27 @@ function watchlistCard(item) {
     ? '<strong class="watchlist-v2-price">' + esc(cash(data.price, data.currency)) + '</strong>' +
       '<small class="watchlist-v2-daily ' + dailyClass + '">' + esc(pct(daily)) + '</small>'
     : '<strong class="watchlist-v2-price">Pending</strong><small class="watchlist-v2-daily">Awaiting data</small>';
-  const status = data ? "Indexed" : "Indexing";
+  const ticker = esc(item.ticker);
+  const openButton = (className, content, label) =>
+    '<button type="button" class="watchlist-v2-open ' + className +
+      '" data-watch-open="' + ticker + '" aria-label="' + esc(label) + '">' + content + '</button>';
 
   return '<article class="watchlist-v2-item">' +
-    '<button type="button" class="watchlist-v2-main" data-watch-open="' + esc(item.ticker) + '" aria-label="Open analysis for ' + esc(item.ticker) + '">' +
-      '<span class="watchlist-v2-identity">' +
-        '<strong class="watchlist-v2-ticker">' + esc(item.ticker) + '</strong>' +
-        '<span class="watchlist-v2-company">' + esc(company) + '</span>' +
-        '<small class="watchlist-v2-status">' + status + '</small>' +
-      '</span>' +
-      '<span class="watchlist-v2-quote">' + quote + '</span>' +
-      '<span class="watchlist-v2-chart">' + chart + '</span>' +
-    '</button>' +
+    openButton(
+      "watchlist-v2-identity",
+      '<strong class="watchlist-v2-ticker">' + ticker + '</strong>' +
+        '<span class="watchlist-v2-company">' + esc(company) + '</span>',
+      "Open analysis for " + item.ticker
+    ) +
+    openButton("watchlist-v2-quote", quote, "Open analysis for " + item.ticker) +
+    openButton("watchlist-v2-chart", chart, "Open chart and analysis for " + item.ticker) +
     '<div class="watchlist-v2-stats">' +
       (stats.length ? stats.join("") : '<span class="watchlist-v2-no-stats">Statistics pending</span>') +
     '</div>' +
-    '<button type="button" class="watch-card-remove watchlist-v2-remove" data-watch-remove="' + esc(item.ticker) + '" aria-label="Remove ' + esc(item.ticker) + ' from watchlist" title="Remove from watchlist">×</button>' +
+    '<button type="button" class="watch-card-remove watchlist-v2-remove" data-watch-remove="' +
+      ticker + '" aria-label="Remove ' + ticker + ' from watchlist" title="Remove from watchlist">×</button>' +
   '</article>';
 }
-
 function renderWatchlist() {
   const root = $("watchlist-grid");
   $("watchlist-count").textContent = watchlistItems.length + (watchlistItems.length === 1 ? " stock" : " stocks");
