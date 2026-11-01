@@ -49,8 +49,6 @@ Deno.serve(async (req: Request) => {
     if (!url || !serviceKey) return json({ error: "Market feed is not configured." }, 503);
 
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
-    const cutoff = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
-
     const searchQuery = new URL(req.url).searchParams.get("q")?.trim().slice(0, 60) ?? "";
     if (searchQuery) {
       let suggestions: Array<{ ticker: string; company: string; exchange: string | null; type: string }> = [];
@@ -85,7 +83,6 @@ Deno.serve(async (req: Request) => {
           .eq("period", "5y")
           .eq("horizon", 30)
          .eq("indexer", "rapidIndex")
-          .gte("indexed_at", cutoff)
           .limit(1500);
         if (fallback.error) throw fallback.error;
         const q = searchQuery.toLocaleLowerCase();
@@ -117,7 +114,6 @@ Deno.serve(async (req: Request) => {
         .eq("period", "5y")
         .eq("horizon", 30)
           .eq("indexer", "rapidIndex")
-        .gte("indexed_at", cutoff)
         .order("indexed_at", { ascending: false })
         .limit(1500),
       admin.from("analysis_jobs")
