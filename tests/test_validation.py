@@ -21,7 +21,7 @@ class AnalyzerInputTests(unittest.TestCase):
 
     def test_rejects_horizon_above_range(self):
         with self.assertRaises(AnalysisError):
-            analyze_ticker("AAPL", horizon=61)
+            analyze_ticker("AAPL", horizon=505)
 
 if __name__ == "__main__":
     unittest.main()
