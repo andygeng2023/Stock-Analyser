@@ -148,3 +148,149 @@ td:first-child,th:first-child{text-align:left}
   .stock-grid{grid-template-columns:1fr}
   .nav-tab{font-size:11px;gap:5px}
 }
+
+
+/* Square, horizontally swipeable stock-card shelves */
+.stock-grid,
+.compact-list,
+#scan-list {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: stretch;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 12px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #405574 transparent;
+}
+.stock-grid > *,
+.compact-list > *,
+#scan-list > * {
+  flex: 0 0 232px;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+.stock-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-height: 0;
+  height: 224px;
+  aspect-ratio: 1.04 / 1;
+  padding: 15px;
+  border-radius: 13px;
+  text-align: left;
+}
+.stock-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.stock-card-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 4px;
+}
+.stock-ticker {
+  font-size: 21px;
+  line-height: 1.12;
+}
+.stock-company {
+  font-size: 10px;
+}
+.stock-open-arrow {
+  flex: none;
+  color: #91a0b8;
+  font-size: 19px;
+  line-height: 1;
+}
+.stock-card-price-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.stock-price {
+  font-size: 20px;
+  line-height: 1.15;
+}
+.stock-daily-change {
+  font-size: 11px;
+}
+.stock-card-chart {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.stock-sparkline,
+.stock-chart-placeholder {
+  width: 100%;
+  height: 76px;
+  flex: none;
+}
+.stock-analysis-meta {
+  min-height: 14px;
+  gap: 5px 12px;
+}
+.stock-predicted strong {
+  font-size: 11px;
+}
+.stock-analysis-stat strong {
+  font-size: 10px;
+}
+.stock-predicted small,
+.stock-analysis-stat small {
+  font-size: 8px;
+}
+.compact-list {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+#scan-list {
+  margin: 0 -2px;
+}
+@media (max-width: 700px) {
+  .stock-grid,
+  .compact-list,
+  #scan-list {
+    gap: 10px;
+    padding-bottom: 11px;
+  }
+  .stock-grid > *,
+  .compact-list > *,
+  #scan-list > * {
+    flex-basis: 218px;
+  }
+  .stock-card {
+    height: 214px;
+    padding: 14px;
+    gap: 10px;
+  }
+  .stock-ticker { font-size: 20px; }
+  .stock-price { font-size: 19px; }
+  .stock-sparkline,
+  .stock-chart-placeholder { height: 72px; }
+}
+@media (max-width: 380px) {
+  .stock-grid > *,
+  .compact-list > *,
+  #scan-list > * { flex-basis: 208px; }
+  .stock-card { height: 208px; }
+}
