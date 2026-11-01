@@ -61,7 +61,7 @@ def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, res
     base = os.environ["SUPABASE_URL"].rstrip("/")
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     request_json(
-        f"{base}/rest/v1/market_index?on_conflict=ticker,period,horizon",
+        f"{base}/rest/v1/market_index?on_conflict=ticker,period,horizon,indexer",
         method="POST", payload=payload,
         headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "resolution=merge-duplicates,return=minimal"},
     )
