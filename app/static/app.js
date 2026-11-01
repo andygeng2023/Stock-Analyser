@@ -73,50 +73,79 @@ async function waitForResult(id, statusElement, prefix = "search") {
   throw Error("This analysis is taking longer than expected. Its job may still finish; try again later.");
 }
 
-function metricValue(stock) {
-  if (stock.return_1m != null) return { label: "1m", value: pct(stock.return_1m) };
-  if (stock.expected_change_percent != null) return { label: "Model", value: pct(stock.expected_change_percent) };
-  return { label: "Day", value: pct(stock.change_percent) };
+function stockSparkline(stock) {
+  const history = (Array.isArray(stock.history_preview) ? stock.history_preview : [])
+    .map(Number).filter(Number.isFinite);
+  const future = (Array.isArray(stock.forecast_preview) ? stock.forecast_preview : [])
+    .map(Number).filter(Number.isFinite);
+  if (!history.length) {
+    return '<div class="stock-chart-placeholder">Indexed chart unavailable</div>';
+  }
+
+  const all = history.concat(future);
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const spread = max - min || Math.max(Math.abs(max) * 0.01, 1);
+  const width = 280;
+  const height = 54;
+  const pad = 5;
+  const total = Math.max(2, history.length + future.length);
+  const point = (value, index) => {
+    const x = (index / (total - 1)) * width;
+    const y = height - pad - ((value - min) / spread) * (height - pad * 2);
+    return [x, y];
+  };
+  const pathFor = (values, offset = 0) => values.map((value, index) => {
+    const [x, y] = point(value, index + offset);
+    return (index ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1);
+  }).join(" ");
+  const historyPath = pathFor(history);
+  const forecastValues = future.length ? [history[history.length - 1], ...future] : [];
+  const forecastPath = forecastValues.length ? pathFor(forecastValues, history.length - 1) : "";
+  const forecastClass = Number(stock.expected_change_percent) < 0 ? "negative" : "positive";
+
+  return '<svg class="stock-sparkline" viewBox="0 0 280 54" preserveAspectRatio="none" role="img" aria-label="Historical price and indexed model forecast">' +
+    '<path class="stock-history-line" d="' + historyPath + '"></path>' +
+    (forecastPath ? '<path class="stock-forecast-line ' + forecastClass + '" d="' + forecastPath + '"></path>' : '') +
+    '</svg>';
 }
 
 function stockCard(stock) {
-  const metric = metricValue(stock);
-  const negative = String(metric.value).startsWith("-");
   const company = stock.company || stock.name || stock.ticker;
-  const marketCap = stock.market_cap
-    ? "Market cap " + compactMoney(stock.market_cap)
-    : (stock.industry || stock.sector || stock.exchange || "Market data");
+  const dailyChange = stock.change_percent;
+  const dailyClass = Number(dailyChange) < 0 ? "negative" : "positive";
+  const predicted = stock.expected_change_percent == null
+    ? ""
+    : '<span class="stock-predicted ' + (Number(stock.expected_change_percent) < 0 ? "negative" : "positive") +
+      '"><strong>' + esc(pct(stock.expected_change_percent)) + '</strong><small>30D</small></span>';
+
+  const stats = [];
+  if (stock.return_1m != null) stats.push({ label: "1M", value: pct(stock.return_1m) });
+  else if (stock.validation_rmse != null) stats.push({ label: "RMSE", value: fmt(stock.validation_rmse, 4) });
+  if (stock.directional_accuracy != null) {
+    stats.push({ label: "Accuracy", value: fmt(stock.directional_accuracy, 0) + "%" });
+  } else if (stock.annualized_volatility != null) {
+    stats.push({ label: "Volatility", value: pct(stock.annualized_volatility) });
+  }
+
+  const statMarkup = stats.slice(0, 2).map(stat =>
+    '<span class="stock-analysis-stat"><strong>' + esc(stat.value) + '</strong><small>' + esc(stat.label) + '</small></span>'
+  ).join("");
+
   return `
-    <button type="button" class="stock-card" data-ticker="${esc(stock.ticker)}">
-      <span class="stock-card-top">
-        <span class="stock-card-name"><strong>${esc(stock.ticker)}</strong><span>${esc(company)}</span></span>
-        <span class="stock-card-arrow" aria-hidden="true">↗</span>
+    <button type="button" class="stock-card" data-ticker="${esc(stock.ticker)}" aria-label="Open analysis for ${esc(stock.ticker)}">
+      <span class="stock-card-left">
+        <strong class="stock-ticker">${esc(stock.ticker)}</strong>
+        <span class="stock-company">${esc(company)}</span>
       </span>
-      <span class="stock-card-bottom">
+      <span class="stock-card-middle">
+        ${stockSparkline(stock)}
+        <span class="stock-analysis-meta">${predicted}${statMarkup}</span>
+      </span>
+      <span class="stock-card-right">
         <strong class="stock-price">${esc(cash(stock.price, stock.currency))}</strong>
-        <span class="stock-metric ${negative ? "negative" : ""}">${esc(metric.value)}</span>
+        <span class="stock-daily-change ${dailyClass}">${esc(pct(dailyChange))}</span>
       </span>
-      <span class="stock-card-foot">${esc(marketCap)}</span>
-    </button>`;
-}
-
-function compactMoney(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  if (n >= 1e12) return "$" + fmt(n / 1e12, 1) + "T";
-  if (n >= 1e9) return "$" + fmt(n / 1e9, 1) + "B";
-  if (n >= 1e6) return "$" + fmt(n / 1e6, 0) + "M";
-  return "$" + fmt(n, 0);
-}
-
-function compactStock(stock) {
-  const metric = metricValue(stock);
-  const negative = String(metric.value).startsWith("-");
-  return `
-    <button type="button" class="compact-stock" data-ticker="${esc(stock.ticker)}">
-      <span class="compact-main"><strong>${esc(stock.company || stock.ticker)}</strong><span>${esc(stock.ticker)} · ${esc(stock.exchange || stock.sector || "Listed stock")}</span></span>
-      <span class="compact-price">${esc(cash(stock.price, stock.currency))}</span>
-      <span class="compact-return ${negative ? "negative" : ""}">${esc(metric.value)}</span>
     </button>`;
 }
 
@@ -134,7 +163,7 @@ function fillStockGrid(id, stocks, tag = "") {
     root.innerHTML = '<div class="empty-feed">No stocks currently meet this screen. The lists update as new market results are indexed.</div>';
     return;
   }
-  root.innerHTML = stocks.map(stock => stockCard(stock, tag)).join("");
+  root.innerHTML = stocks.map(stockCard).join("");
   bindStockButtons(root);
 }
 
@@ -147,7 +176,7 @@ function renderMarketFeed(data) {
 
   const latest = data.latest_scan?.results || [];
   $("home-latest-scan").innerHTML = latest.length
-    ? latest.slice(0, 6).map(compactStock).join("")
+    ? latest.slice(0, 6).map(stockCard).join("")
     : '<div class="empty-feed">No completed background scan is available yet. The section will populate after the next shared scan finishes.</div>';
   bindStockButtons($("home-latest-scan"));
 
@@ -413,17 +442,16 @@ function renderScan(data) {
     " passed the fast filter · " + fmt(data.arima_svr_refined, 0) +
     " refined with ARIMA–SVR · " + results.length + " ranked results";
 
-  $("scan-list").innerHTML = results.map((item, index) => `
-    <article class="scan-result">
-      <div>
-        <h3>${index + 1}. ${esc(item.company)} <span class="muted">(${esc(item.ticker)})</span></h3>
-        <p>${esc(item.exchange || "Listed equity")} · Price ${esc(cash(item.price, item.currency))} · Daily move ${esc(pct(item.change_percent))}<br>
-        Validation directional accuracy: ${esc(fmt(item.directional_accuracy))}%</p>
-      </div>
-      <div class="scan-return"><strong>${esc(pct(item.expected_change_percent))}</strong><small>30-day model estimate</small>
-        <button type="button" data-ticker="${esc(item.ticker)}">Detailed view</button>
-      </div>
-    </article>`
+  const indexedStocks = [
+    ...(marketFeed?.recommended || []),
+    ...(marketFeed?.trending || []),
+    ...(marketFeed?.popular || []),
+    ...(marketFeed?.opportunities || []),
+    ...(marketFeed?.smaller_companies || []),
+  ];
+  const indexedByTicker = new Map(indexedStocks.map(stock => [stock.ticker, stock]));
+  $("scan-list").innerHTML = results.map(item =>
+    stockCard({ ...(indexedByTicker.get(item.ticker) || {}), ...item })
   ).join("");
   $("scan-results").hidden = results.length === 0;
   bindStockButtons($("scan-list"));
