@@ -572,9 +572,31 @@ html[data-theme="light"] .settings-links a,html[data-theme="light"] .settings-pr
 /* Five-tab navigation */
 .bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media(max-width:700px){
-  .bottom-nav{gap:3px;padding-left:8px;padding-right:8px}
-  .nav-tab{flex-direction:column;gap:3px;padding:6px 2px;font-size:9px;line-height:1.15}
-  .nav-tab span{font-size:16px}
+  .bottom-nav{
+    gap:3px;
+    padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+  }
+  .nav-tab{
+    flex-direction:column;
+    gap:0;
+    min-height:42px;
+    padding:7px 2px;
+    font-size:0;
+    line-height:1;
+  }
+  .nav-tab span,
+  .nav-tab .nav-tab-icon{
+    display:grid;
+    place-items:center;
+    font-size:20px;
+    line-height:1;
+  }
+  .nav-tab svg{width:20px;height:20px}
+  .global-queue{
+    right:12px!important;
+    bottom:calc(74px + env(safe-area-inset-bottom))!important;
+    z-index:1200!important;
+  }
 }
 
 
