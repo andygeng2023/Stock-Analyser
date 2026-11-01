@@ -85,6 +85,7 @@ Deno.serve(async (req: Request) => {
           .eq("period", "5y")
           .eq("horizon", 30)
           .eq("indexer", "rapidIndex")
+          .eq("indexer", "rapidIndex")
           .gte("indexed_at", cutoff)
           .limit(1500);
         if (fallback.error) throw fallback.error;
@@ -116,6 +117,7 @@ Deno.serve(async (req: Request) => {
         .select("ticker,indexed_at,market_cap,avg_dollar_volume,priority,result")
         .eq("period", "5y")
         .eq("horizon", 30)
+          .eq("indexer", "rapidIndex")
         .gte("indexed_at", cutoff)
         .order("indexed_at", { ascending: false })
         .limit(1500),
