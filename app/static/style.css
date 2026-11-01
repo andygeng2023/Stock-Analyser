@@ -1963,3 +1963,22 @@ html[data-theme="light"] #settings-screen .settings-v2-form input:focus{
   }
   #settings-screen .settings-v2-feedback{margin-left:60px}
 }
+
+
+/* Remove decorative pale icon tiles; keep consistent icon alignment only. */
+#settings-screen .settings-v2-layout{
+  width:100%;
+  max-width:none;
+}
+#settings-screen .settings-v2-icon{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+}
+#settings-screen .settings-v2-trailing span{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+}
