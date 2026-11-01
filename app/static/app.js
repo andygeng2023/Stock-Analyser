@@ -19,6 +19,84 @@ let latestScanId = null;
 let latestScanLoaded = false;
 let latestScanRefreshBusy = false;
 
+const QUEUE_KEY = "stock-analyser-active-jobs";
+let trackedJobs = loadTrackedJobs();
+let queueRefreshBusy = false;
+
+function loadTrackedJobs() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveTrackedJobs() {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(trackedJobs.slice(0, 30))); } catch {}
+  renderGlobalQueue();
+}
+function trackJob(job) {
+  if (!job?.id) return;
+  trackedJobs = trackedJobs.filter(item => item.id !== job.id);
+  trackedJobs.unshift({ id: job.id, ticker: job.ticker || "Market scan", type: job.type || "analysis",
+    status: job.status || "queued", progress: Number(job.progress) || 0, stage: job.stage || "Waiting for a worker…" });
+  saveTrackedJobs();
+}
+function updateTrackedJob(id, data) {
+  const item = trackedJobs.find(job => job.id === id);
+  if (!item) return;
+  Object.assign(item, { status: data.status || item.status, progress: Math.max(0, Math.min(100, Number(data.progress) || 0)),
+    stage: data.stage || item.stage, error: data.error || null });
+  if (["completed", "failed"].includes(item.status)) item.finishedAt = Date.now();
+  saveTrackedJobs();
+}
+function renderGlobalQueue() {
+  const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status));
+  const button = $("global-queue-toggle");
+  const count = $("global-queue-count");
+  const list = $("global-queue-list");
+  if (!button || !count || !list) return;
+  count.textContent = active.length ? String(active.length) : "";
+  button.classList.toggle("has-jobs", active.length > 0);
+  list.innerHTML = trackedJobs.length ? trackedJobs.map(job => {
+    const pctValue = Math.max(0, Math.min(100, Number(job.progress) || 0));
+    return '<button type="button" class="queue-job" data-job-id="' + esc(job.id) + '" data-job-type="' + esc(job.type) + '" data-job-ticker="' + esc(job.ticker) + '">' +
+      '<span class="queue-job-top"><strong>' + esc(job.ticker) + '</strong><small>' + esc(job.status) + ' · ' + pctValue + '%</small></span>' +
+      '<span class="queue-track"><span style="width:' + pctValue + '%"></span></span><small class="queue-stage">' + esc(job.stage) + '</small></button>';
+  }).join("") : '<p class="queue-empty">No recent analysis requests.</p>';
+  list.querySelectorAll("[data-job-id]").forEach(el => el.addEventListener("click", () => {
+    $("global-queue-popover").hidden = true;
+    if (el.dataset.jobType === "scan") {
+      switchScreen("discover");
+      $("scan-status").textContent = "Opening your tracked market scan…";
+      return;
+    }
+    openStockDetails(el.dataset.jobTicker, { jobId: el.dataset.jobId, returnScreen: currentTab });
+  }));
+}
+async function refreshGlobalQueue() {
+  if (queueRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
+  queueRefreshBusy = true;
+  try {
+    const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status));
+    await Promise.all(active.map(async job => {
+      try {
+        const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(job.id), {
+          headers: { "apikey": config.supabasePublishableKey }
+        });
+        const data = await response.json();
+        if (response.ok) updateTrackedJob(job.id, data);
+      } catch {}
+    }));
+    trackedJobs = trackedJobs.filter(job => !job.finishedAt || Date.now() - job.finishedAt < 10 * 60 * 1000);
+    saveTrackedJobs();
+  } finally { queueRefreshBusy = false; }
+}
+$("global-queue-toggle")?.addEventListener("click", () => {
+  $("global-queue-popover").hidden = !$("global-queue-popover").hidden;
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest(".global-queue")) $("global-queue-popover").hidden = true;
+});
+renderGlobalQueue();
+
+
 function rows(obj) {
   return Object.entries(obj || {}).map(([k, v]) =>
     '<div class="row"><span>' + esc(k.replaceAll("_", " ")) + '</span><strong>' +
@@ -62,7 +140,7 @@ async function waitForResult(id, statusElement, prefix = "search") {
     });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
-    updateProgress(prefix, data);
+    updateProgress(prefix, data);\n    updateTrackedJob(id, data);
     if (data.status === "completed") return data.result;
     if (data.status === "failed") throw Error(data.error || "The analysis failed.");
     statusElement.textContent = data.status === "running"
@@ -472,7 +550,7 @@ async function startScan(hard = false) {
     $("scan-status").textContent = hard
       ? "Requesting a fresh market scan…"
       : "Checking the shared eight-hour cache…";
-    const request = await requestAnalysis(null, null, null, "scan", hard);
+    const request = await requestAnalysis(null, null, null, "scan", hard);\n    trackJob({ id: request.id, ticker: "Market scan", type: "scan", status: request.status || "queued", progress: request.progress, stage: request.stage });
     $("scan-progress").hidden = false;
     let result;
     if (request.status === "completed" && request.cached) {
