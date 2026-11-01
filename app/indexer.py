@@ -22,6 +22,7 @@ MARKET_CAP_LOOKUPS = 250
 PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"))
 REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
 SLOW_REFRESH_AFTER_HOURS = float(os.environ.get("SLOW_INDEX_REFRESH_AFTER_HOURS", "168"))
+ATTEMPT_LEASE_MINUTES = int(os.environ.get("INDEX_ATTEMPT_LEASE_MINUTES", "45"))
 RAPID_PERIOD, RAPID_HORIZON = "5y", 30
 SLOW_PERIOD, SLOW_HORIZON = "max", 252
 _UNIVERSE_SNAPSHOT = None
@@ -278,7 +279,7 @@ def run(shard, indexer="rapidIndex"):
             db_post("market_index_catalog", {
                 "ticker": ticker,
                 attempt_field: attempted_at,
-                retry_field: None,
+                retry_field: (attempted_dt + timedelta(minutes=ATTEMPT_LEASE_MINUTES)).isoformat(),
                 error_field: None,
                 "updated_at": attempted_at,
             }, conflict="ticker")
@@ -292,10 +293,11 @@ def run(shard, indexer="rapidIndex"):
             })
             job_id = job[0]["id"]
             cap = item.get("market_cap")
+            indexed_at = datetime.now(timezone.utc).isoformat()
             index_row = {
                 "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
                 "result": result, "source_job_id": job_id,
-                "indexed_at": attempted_at,
+                "indexed_at": indexed_at,
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
             }
@@ -304,11 +306,11 @@ def run(shard, indexer="rapidIndex"):
                 "ticker": ticker, "market_cap": cap,
                 "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
-                cursor_field: attempted_at,
+                cursor_field: indexed_at,
                 attempt_field: attempted_at,
                 retry_field: None,
                 error_field: None,
-                "updated_at": attempted_at,
+                "updated_at": indexed_at,
             }, conflict="ticker")
             completed += 1
         except Exception as exc:
