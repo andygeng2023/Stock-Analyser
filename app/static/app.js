@@ -494,6 +494,12 @@ function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = (
 
 $("quick-search").addEventListener("submit", event => event.preventDefault());
 attachStockAutocomplete("quick-ticker", "quick-suggestions", "home");
+$("horizon").addEventListener("change", () => {
+  if (Number($("horizon").value) === 504) $("period").value = "max";
+});
+$("period").addEventListener("change", () => {
+  if ($("period").value !== "max" && Number($("horizon").value) === 504) $("horizon").value = "30";
+});
 attachStockAutocomplete("ticker", "search-suggestions", "search", () => ({
   period: $("period").value,
   horizon: Number($("horizon").value)
