@@ -510,6 +510,7 @@ function renderWatchlist() {
 }
 
 async function loadWatchlist(force = false) {
+  if (!authUser) { renderWatchlistSignedOut(); return; }
   if (watchlistLoading || (watchlistLoaded && !force)) return;
   watchlistLoading = true;
   $("watchlist-status").textContent = "Loading your saved stocks…";
@@ -525,14 +526,19 @@ async function loadWatchlist(force = false) {
   } catch (error) {
     $("watchlist-status").textContent = error.message;
     $("watchlist-grid").innerHTML = '<div class="empty-feed">Your watchlist could not be loaded.</div>';
-  } finally {
-    watchlistLoading = false;
-  }
+  } finally { watchlistLoading = false; }
 }
 
 async function updateDetailWatchlistButton() {
   const button = $("detail-watchlist");
   if (!button || !currentDetailTicker) return;
+  if (!authUser) {
+    button.textContent = "Sign in to save";
+    button.classList.remove("watchlist-added");
+    button.disabled = false;
+    button.dataset.added = "false";
+    return;
+  }
   const ticker = currentDetailTicker;
   button.disabled = true;
   try {
@@ -557,7 +563,9 @@ async function updateDetailWatchlistButton() {
 $("detail-watchlist").addEventListener("click", async () => {
   const ticker = currentDetailTicker;
   const button = $("detail-watchlist");
-  if (!ticker || button.disabled) return;
+  if (!ticker) return;
+  if (!authUser) { openAuthDialog("signin"); return; }
+  if (button.disabled) return;
   button.disabled = true;
   button.textContent = "Adding…";
   try {
@@ -578,7 +586,6 @@ $("detail-watchlist").addEventListener("click", async () => {
     }
   }
 });
-
 function bindStockButtons(root) {
   if (!root) return;
   root.querySelectorAll("[data-ticker]").forEach(button => {
@@ -1165,6 +1172,7 @@ async function refreshLatestScan() {
 }
 
 switchScreen("home");
+initializeAuth();
 setInterval(() => {
   if (currentScreen === "home" || currentScreen === "discover") loadMarketFeed(true);
   if (currentScreen === "watchlist") loadWatchlist(true);
