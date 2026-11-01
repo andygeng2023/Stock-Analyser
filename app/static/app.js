@@ -131,10 +131,10 @@ function rows(obj) {
   ).join("");
 }
 
-async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardRescan = false, latestOnly = false) {
+async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardRescan = false, latestOnly = false, saveToIndexer = "rapidIndex") {
   const payload = mode === "scan"
     ? { mode: "scan", source: $("scan-source").value, hard_rescan: hardRescan, latest_only: latestOnly }
-    : { ticker, period, horizon, hard_rescan: hardRescan };
+    : { ticker, period, horizon, hard_rescan: hardRescan, save_to_indexer: saveToIndexer };
   const response = await fetch(api("request-analysis"), {
     method: "POST",
     headers: headers(),
@@ -503,8 +503,8 @@ async function openStockDetails(ticker, options = {}) {
   currentDetailTicker = symbol;
   const indexer = options.indexer === "SlowIndex" ? "SlowIndex" : "rapidIndex";
   currentDetailIndexer = indexer;
-  const period = indexer === "SlowIndex" ? "max" : "5y";
-  const horizon = indexer === "SlowIndex" ? 504 : 30;
+  const period = options.customPeriod || (indexer === "SlowIndex" ? "max" : "5y");
+  const horizon = Number(options.customHorizon || (indexer === "SlowIndex" ? 504 : 30));
   updateDetailIndexerSwitch();
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     switchScreen("detail");
@@ -524,7 +524,7 @@ async function openStockDetails(ticker, options = {}) {
   try {
     const request = options.jobId
       ? { id: options.jobId, status: "queued", reused: true }
-      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true);
+      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, options.saveToIndexer || indexer);
     trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
@@ -575,13 +575,40 @@ $("detail-indexer-switch").addEventListener("click", event => {
   });
 });
 
+const hardRerunMenu = $("hard-rerun-menu");
+function setHardRerunMenu(open) {
+  hardRerunMenu.hidden = !open;
+  $("detail-hard-rerun").setAttribute("aria-expanded", String(open));
+  if (!open) $("hard-rerun-custom").hidden = true;
+}
 $("detail-hard-rerun").addEventListener("click", () => {
-  if (!currentDetailTicker) return;
+  setHardRerunMenu(hardRerunMenu.hidden);
+});
+hardRerunMenu.addEventListener("click", event => {
+  const choice = event.target.closest("[data-rerun-indexer]");
+  if (choice) {
+    const indexer = choice.dataset.rerunIndexer;
+    setHardRerunMenu(false);
+    openStockDetails(currentDetailTicker, { returnScreen: detailReturnScreen, indexer, hardRescan: true, saveToIndexer: indexer });
+    return;
+  }
+  if (event.target.closest("[data-rerun-custom]")) $("hard-rerun-custom").hidden = false;
+});
+$("hard-rerun-custom").addEventListener("submit", event => {
+  event.preventDefault();
+  const period = $("rerun-history").value;
+  const horizon = Number($("rerun-horizon").value);
+  const saveToIndexer = $("rerun-save").value;
+  const displayIndexer = period === "max" && horizon === 504 ? "SlowIndex" :
+    period === "5y" && horizon === 30 ? "rapidIndex" : currentDetailIndexer;
+  setHardRerunMenu(false);
   openStockDetails(currentDetailTicker, {
-    returnScreen: detailReturnScreen,
-    indexer: currentDetailIndexer,
-    hardRescan: true
+    returnScreen: detailReturnScreen, indexer: displayIndexer,
+    customPeriod: period, customHorizon: horizon, hardRescan: true, saveToIndexer
   });
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest(".hard-rerun-wrap")) setHardRerunMenu(false);
 });
 
 function render(data) {
