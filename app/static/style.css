@@ -2548,7 +2548,7 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 14px 0;
+  padding: 14px 0 24px;
   border: 0;
   border-top: 1px solid var(--border, #29384e);
   border-radius: 0;
@@ -2608,7 +2608,7 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   #settings-screen .settings-v2-profile-form {
     grid-template-columns: 36px minmax(0, 1fr);
     gap: 8px 12px;
-    padding: 12px 0;
+    padding: 12px 0 22px;
   }
   #settings-screen .settings-v2-profile-form > .settings-v2-profile-fields {
     grid-column: 2;
@@ -2638,23 +2638,5 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   }
   #settings-screen .settings-v2-profile-fields input {
     flex-basis: 100%;
-  }
-}
-
-
-/* Give the Display name row a clear lower boundary and balanced bottom spacing. */
-#settings-screen .settings-v2-profile-form {
-  padding-top: 14px;
-  padding-bottom: 22px;
-  margin-bottom: 0;
-  border-bottom: 1px solid var(--border, #29384e);
-}
-html[data-theme="light"] #settings-screen .settings-v2-profile-form {
-  border-bottom-color: #e1e7ef;
-}
-@media (max-width: 700px) {
-  #settings-screen .settings-v2-profile-form {
-    padding-top: 12px;
-    padding-bottom: 20px;
   }
 }
