@@ -18,6 +18,8 @@ function applyTheme(theme) {
   const status = $("theme-status");
   if (toggle) toggle.textContent = selected === "dark" ? "Switch to light mode" : "Switch to dark mode";
   if (status) status.textContent = (selected === "dark" ? "Dark" : "Light") + " mode is active on this device.";
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.setAttribute("content", selected === "light" ? "#f4f6fa" : "#0b1120");
   try { localStorage.setItem("stock-analyser-theme", selected); } catch {}
 }
 
@@ -63,19 +65,33 @@ function authRedirectUrl() {
 }
 
 function updateAuthUI() {
+  const signedIn = Boolean(authUser);
   const button = $("settings-account-button");
   if (button) {
     button.textContent = authUser?.email ? "Manage account" : "Sign in or create account";
     button.title = authUser?.email || "Sign in or create an account";
-    button.classList.toggle("signed-in", Boolean(authUser));
+    button.classList.toggle("signed-in", signedIn);
   }
   const status = $("settings-account-status");
   if (status) status.textContent = authUser?.email
     ? "Signed in as " + authUser.email + ". Your saved watchlist is synced to this account."
     : "Sign in to save and sync your watchlist across devices.";
-  $("auth-form-panel").hidden = Boolean(authUser);
-  $("auth-account-panel").hidden = !authUser;
+  $("auth-form-panel").hidden = signedIn;
+  $("auth-account-panel").hidden = !signedIn;
   if (authUser) $("auth-account-email").textContent = authUser.email || "Signed-in account";
+
+  const controls = $("account-controls");
+  const signedOutNote = $("account-signed-out-note");
+  if (controls) controls.hidden = !signedIn;
+  if (signedOutNote) signedOutNote.hidden = signedIn;
+  if (signedIn) {
+    const verified = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
+    $("account-current-email").textContent = authUser.email || "—";
+    $("account-email-status").textContent = verified ? "Verified" : "Confirmation pending";
+    $("account-created").textContent = authUser.created_at ? new Date(authUser.created_at).toLocaleString() : "—";
+    $("account-last-signin").textContent = authUser.last_sign_in_at ? new Date(authUser.last_sign_in_at).toLocaleString() : "—";
+    $("account-display-name").value = authUser.user_metadata?.display_name || "";
+  }
 }
 
 function setAuthMode(mode) {
@@ -160,6 +176,223 @@ async function initializeAuth() {
 }
 
 $("settings-account-button").addEventListener("click", () => openAuthDialog());
+
+$("account-signin").addEventListener("click", () => openAuthDialog("signin"));
+
+function setAccountFeedback(message, isError = false) {
+  const target = $("account-settings-feedback");
+  if (!target) return;
+  target.textContent = message || "";
+  target.classList.toggle("is-error", Boolean(isError));
+}
+
+$("account-refresh").addEventListener("click", async () => {
+  if (!authClient || !authUser) return;
+  const button = $("account-refresh");
+  button.disabled = true;
+  try {
+    const { data, error } = await authClient.auth.getUser();
+    if (error) throw error;
+    authUser = data.user;
+    const { data: sessionData } = await authClient.auth.getSession();
+    authSession = sessionData.session || authSession;
+    updateAuthUI();
+    setAccountFeedback("Account details refreshed.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not refresh account details.", true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("account-profile-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!authClient || !authUser) return;
+  const button = event.submitter;
+  if (button) button.disabled = true;
+  try {
+    const displayName = $("account-display-name").value.trim();
+    const { data, error } = await authClient.auth.updateUser({
+      data: { ...(authUser.user_metadata || {}), display_name: displayName }
+    });
+    if (error) throw error;
+    authUser = data.user || authUser;
+    updateAuthUI();
+    setAccountFeedback("Profile details saved.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not save profile details.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+$("account-email-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!authClient || !authUser) return;
+  const button = event.submitter;
+  const nextEmail = $("account-new-email").value.trim();
+  if (!nextEmail || nextEmail.toLowerCase() === String(authUser.email || "").toLowerCase()) {
+    setAccountFeedback("Enter a different email address.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    const { error } = await authClient.auth.updateUser(
+      { email: nextEmail },
+      { emailRedirectTo: authRedirectUrl() }
+    );
+    if (error) throw error;
+    $("account-new-email").value = "";
+    setAccountFeedback("Email change requested. Follow the confirmation instructions sent by your email provider.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not update the email address.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+$("account-password-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!authClient || !authUser) return;
+  const button = event.submitter;
+  const password = $("account-new-password").value;
+  const confirmation = $("account-confirm-password").value;
+  if (password.length < 8) {
+    setAccountFeedback("Choose a password with at least 8 characters.", true);
+    return;
+  }
+  if (password !== confirmation) {
+    setAccountFeedback("The new passwords do not match.", true);
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    const { error } = await authClient.auth.updateUser({ password });
+    if (error) throw error;
+    $("account-new-password").value = "";
+    $("account-confirm-password").value = "";
+    setAccountFeedback("Your password has been updated.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not update the password.", true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+});
+
+$("account-password-reset").addEventListener("click", async () => {
+  if (!authClient || !authUser?.email) return;
+  const button = $("account-password-reset");
+  button.disabled = true;
+  try {
+    const { error } = await authClient.auth.resetPasswordForEmail(authUser.email, { redirectTo: authRedirectUrl() });
+    if (error) throw error;
+    setAccountFeedback("A password-reset email has been requested for " + authUser.email + ".");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not send a password-reset email.", true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("account-signout-others").addEventListener("click", async () => {
+  if (!authClient || !authUser) return;
+  const button = $("account-signout-others");
+  button.disabled = true;
+  try {
+    const { error } = await authClient.auth.signOut({ scope: "others" });
+    if (error) throw error;
+    setAccountFeedback("Other sessions have been signed out.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not sign out other devices.", true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("account-signout-all").addEventListener("click", async () => {
+  if (!authClient || !authUser) return;
+  if (!window.confirm("Sign out this account on every device? This will also sign you out here.")) return;
+  const button = $("account-signout-all");
+  button.disabled = true;
+  try {
+    const { error } = await authClient.auth.signOut({ scope: "global" });
+    if (error) throw error;
+    applyAuthSession(null);
+    if (currentScreen === "watchlist") switchScreen("home");
+    setAccountFeedback("All sessions have been signed out.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not sign out all devices.", true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
+$("account-export-watchlist").addEventListener("click", async () => {
+  if (!authUser) return;
+  const button = $("account-export-watchlist");
+  button.disabled = true;
+  try {
+    if (!watchlistLoaded) await loadWatchlist(true);
+    const headers = ["Ticker", "Company", "Price", "Currency", "Daily change (%)", "1-month return (%)", "1-year return (%)", "Forecast change (%)", "Indexed at"];
+    const rows = watchlistItems.map(item => {
+      const data = item.analysis || {};
+      const summary = data.market_summary || {};
+      const forecast = data.forecast || {};
+      return [item.ticker, data.company || item.ticker, data.price, data.currency, data.change_percent,
+        summary.return_1m, summary.return_1y, forecast.expected_change_percent, data.indexed_at];
+    });
+    const csv = [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "stock-analyser-watchlist.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setAccountFeedback("Watchlist CSV exported.");
+  } catch (error) {
+    setAccountFeedback(error.message || "Could not export the watchlist.", true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("account-clear-watchlist").addEventListener("click", async () => {
+  if (!authUser) return;
+  if (!watchlistLoaded) await loadWatchlist(true);
+  const count = watchlistItems.length;
+  if (!count) {
+    setAccountFeedback("Your watchlist is already empty.");
+    return;
+  }
+  if (!window.confirm("Permanently remove all " + count + " saved stocks from your watchlist?")) return;
+  const button = $("account-clear-watchlist");
+  button.disabled = true;
+  let removed = 0;
+  try {
+    for (const item of [...watchlistItems]) {
+      setAccountFeedback("Removing " + item.ticker + " (" + (removed + 1) + " of " + count + ")…");
+      await watchlistRequest("remove", item.ticker);
+      removed += 1;
+    }
+    watchlistItems = [];
+    watchlistLoaded = true;
+    renderWatchlist();
+    setAccountFeedback("Removed " + removed + " saved stocks.");
+  } catch (error) {
+    await loadWatchlist(true);
+    setAccountFeedback("Removed " + removed + " of " + count + " stocks. " + (error.message || "The remaining entries could not be removed."), true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $("auth-close").addEventListener("click", closeAuthDialog);
 $("auth-modal").addEventListener("click", event => {
   if (event.target.matches("[data-auth-close]")) closeAuthDialog();
@@ -1230,7 +1463,8 @@ $("theme-toggle").addEventListener("click", () => {
   applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
 });
 
-switchScreen("home");
+const requestedTab = new URLSearchParams(window.location.search).get("tab");
+switchScreen(["home", "search", "discover", "watchlist", "settings"].includes(requestedTab) ? requestedTab : "home");
 initializeAuth();
 setInterval(() => {
   if (currentScreen === "home" || currentScreen === "discover") loadMarketFeed(true);
