@@ -79,18 +79,24 @@ function metricValue(stock) {
   return { label: "Day", value: pct(stock.change_percent) };
 }
 
-function stockCard(stock, tag = "") {
+function stockCard(stock) {
   const metric = metricValue(stock);
   const negative = String(metric.value).startsWith("-");
-  const company = stock.company || stock.ticker;
+  const company = stock.company || stock.name || stock.ticker;
+  const marketCap = stock.market_cap
+    ? "Market cap " + compactMoney(stock.market_cap)
+    : (stock.industry || stock.sector || stock.exchange || "Market data");
   return `
     <button type="button" class="stock-card" data-ticker="${esc(stock.ticker)}">
       <span class="stock-card-top">
-        <span class="stock-card-name"><strong>${esc(company)}</strong><span>${esc(stock.ticker)} · ${esc(stock.sector || stock.exchange || "Listed stock")}</span></span>
-        ${tag ? '<span class="stock-card-tag">' + esc(tag) + '</span>' : ""}
+        <span class="stock-card-name"><strong>${esc(stock.ticker)}</strong><span>${esc(company)}</span></span>
+        <span class="stock-card-arrow" aria-hidden="true">↗</span>
       </span>
-      <span class="stock-card-bottom"><strong class="stock-price">${esc(cash(stock.price, stock.currency))}</strong><span class="stock-metric ${negative ? "negative" : ""}">${esc(metric.value)} <span class="stock-ticker">${esc(metric.label)}</span></span></span>
-      <span class="stock-card-foot"><span>${stock.market_cap ? "Market cap " + esc(compactMoney(stock.market_cap)) : esc(stock.industry || "Open analysis")}</span><span>View analysis →</span></span>
+      <span class="stock-card-bottom">
+        <strong class="stock-price">${esc(cash(stock.price, stock.currency))}</strong>
+        <span class="stock-metric ${negative ? "negative" : ""}">${esc(metric.value)}</span>
+      </span>
+      <span class="stock-card-foot">${esc(marketCap)}</span>
     </button>`;
 }
 
