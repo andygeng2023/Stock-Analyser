@@ -122,6 +122,8 @@ Deno.serve(async (req: Request) => {
       const row: any = byTicker.get(ticker);
       const cached: any = row?.result ?? {};
       const cachedHistory = sample(cached.history?.close ?? cached.history_preview ?? cached.historical?.close ?? cached.price_history);
+      const cachedForecast = sample(cached.forecast?.hybrid ?? cached.forecast_preview ?? cached.forecast?.forecast_path, 30);
+      const cachedSummary = cached.market_summary ?? {};
       // Reuse cached history; only download long history if no cache exists.
       // Routine refreshes use a smaller quote request rather than redownloading a year.
       try {
@@ -133,6 +135,11 @@ Deno.serve(async (req: Request) => {
           price: live.price ?? cached.price ?? null,
           change_percent: live.change_percent ?? cached.change_percent ?? null,
           history_preview: cachedHistory.length ? cachedHistory : (live.history_preview || []),
+          forecast_preview: cachedForecast,
+          expected_change_percent: cached.forecast?.expected_change_percent ?? cached.expected_change_percent ?? null,
+          return_1m: cachedSummary.return_1m ?? null,
+          directional_accuracy: cached.model?.metrics?.hybrid?.directional_accuracy ?? null,
+          annualized_volatility: cachedSummary.annualized_volatility ?? null,
           indexed_at: row?.indexed_at ?? null,
           as_of: live.as_of,
           source: cachedHistory.length ? "shared cache + live quote" : live.source,
@@ -146,6 +153,11 @@ Deno.serve(async (req: Request) => {
           price: cached.price ?? null,
           change_percent: cached.change_percent ?? null,
           history_preview: cachedHistory,
+          forecast_preview: cachedForecast,
+          expected_change_percent: cached.forecast?.expected_change_percent ?? cached.expected_change_percent ?? null,
+          return_1m: cachedSummary.return_1m ?? null,
+          directional_accuracy: cached.model?.metrics?.hybrid?.directional_accuracy ?? null,
+          annualized_volatility: cachedSummary.annualized_volatility ?? null,
           indexed_at: row?.indexed_at ?? null,
           source: cachedHistory.length ? "shared index cache" : "unavailable",
         };
