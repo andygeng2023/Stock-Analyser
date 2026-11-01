@@ -292,6 +292,150 @@ function stockCard(stock) {
     </button>`;
 }
 
+
+function moneyCompact(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  if (n >= 1e12) return "$" + fmt(n / 1e12, 2) + "T";
+  if (n >= 1e9) return "$" + fmt(n / 1e9, 2) + "B";
+  if (n >= 1e6) return "$" + fmt(n / 1e6, 2) + "M";
+  if (n >= 1e3) return "$" + fmt(n / 1e3, 1) + "K";
+  return cash(n, "USD");
+}
+
+function watchlistCard(item) {
+  const data = item.analysis;
+  const summary = data?.market_summary || {};
+  const fundamentals = data?.fundamentals || {};
+  const accuracy = data?.model?.metrics?.hybrid?.directional_accuracy;
+  const expected = data?.forecast?.expected_change_percent;
+  const daily = data?.change_percent;
+  const company = data?.company || item.ticker;
+  const updated = data?.indexed_at ? new Date(data.indexed_at).toLocaleString() : "";
+  const dailyClass = Number(daily) < 0 ? "negative" : "positive";
+  const expectedClass = Number(expected) < 0 ? "negative" : "positive";
+  const forecastDays = data?.forecast?.horizon ?? 30;
+  const direction = accuracy == null ? "—" : fmt(accuracy, 0) + "%";
+  const marketCap = moneyCompact(fundamentals.market_cap);
+  const meta = fundamentals.sector || fundamentals.industry || "Company research";
+  const status = data ? "RapidIndex" + (updated ? " · Updated " + esc(updated) : "") : "Waiting for WatchIndex";
+  return '<article class="watch-card">' +
+    '<button type="button" class="watch-card-open" data-watch-open="' + esc(item.ticker) + '" aria-label="Open analysis for ' + esc(item.ticker) + '">' +
+      '<span class="watch-card-head"><span><strong class="watch-card-ticker">' + esc(item.ticker) + '</strong><span class="watch-card-company">' + esc(company) + '</span></span>' +
+      '<span class="watch-card-price">' + esc(cash(data?.price, data?.currency)) + '<small class="watch-card-daily ' + dailyClass + '">' + esc(pct(daily)) + ' today</small></span></span>' +
+      '<span class="watch-card-stats">' +
+        '<span><small>1 month</small><strong>' + esc(pct(summary.return_1m)) + '</strong></span>' +
+        '<span><small>1 year</small><strong>' + esc(pct(summary.return_1y)) + '</strong></span>' +
+        '<span><small>Forecast · ' + esc(forecastDays) + 'D</small><strong class="' + expectedClass + '">' + esc(pct(expected)) + '</strong></span>' +
+        '<span><small>Model direction</small><strong>' + esc(direction) + '</strong></span>' +
+        '<span><small>Volatility</small><strong>' + esc(pct(summary.annualized_volatility)) + '</strong></span>' +
+        '<span><small>Market cap</small><strong>' + esc(marketCap) + '</strong></span>' +
+      '</span>' +
+      '<span class="watch-card-footer"><span>' + esc(meta) + '</span><span>' + status + '</span></span>' +
+    '</button>' +
+    '<button type="button" class="watch-card-remove" data-watch-remove="' + esc(item.ticker) + '" aria-label="Remove ' + esc(item.ticker) + ' from watchlist">Remove</button>' +
+  '</article>';
+}
+
+function renderWatchlist() {
+  const root = $("watchlist-grid");
+  $("watchlist-count").textContent = watchlistItems.length + (watchlistItems.length === 1 ? " stock" : " stocks");
+  if (!watchlistItems.length) {
+    root.innerHTML = '<div class="empty-feed watchlist-empty">Your watchlist is empty. Open a stock analysis and select “Add to watchlist” to save it here.</div>';
+    return;
+  }
+  root.innerHTML = watchlistItems.map(watchlistCard).join("");
+  root.querySelectorAll("[data-watch-open]").forEach(button => {
+    button.addEventListener("click", () => openStockDetails(button.dataset.watchOpen, { returnScreen: "watchlist" }));
+  });
+  root.querySelectorAll("[data-watch-remove]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const ticker = button.dataset.watchRemove;
+      button.disabled = true;
+      try {
+        await watchlistRequest("remove", ticker);
+        watchlistItems = watchlistItems.filter(item => item.ticker !== ticker);
+        renderWatchlist();
+        $("watchlist-status").textContent = ticker + " removed from your watchlist.";
+        if (currentDetailTicker === ticker) updateDetailWatchlistButton();
+      } catch (error) {
+        button.disabled = false;
+        $("watchlist-status").textContent = error.message;
+      }
+    });
+  });
+}
+
+async function loadWatchlist(force = false) {
+  if (watchlistLoading || (watchlistLoaded && !force)) return;
+  watchlistLoading = true;
+  $("watchlist-status").textContent = "Loading your saved stocks…";
+  try {
+    const data = await watchlistRequest("list");
+    watchlistItems = Array.isArray(data.items) ? data.items : [];
+    watchlistLoaded = true;
+    renderWatchlist();
+    const pending = watchlistItems.filter(item => !item.analysis).length;
+    $("watchlist-status").textContent = pending
+      ? pending + " stock" + (pending === 1 ? " is" : "s are") + " waiting for WatchIndex. Results appear automatically when indexed."
+      : "Your RapidIndex data is up to date.";
+  } catch (error) {
+    $("watchlist-status").textContent = error.message;
+    $("watchlist-grid").innerHTML = '<div class="empty-feed">Your watchlist could not be loaded.</div>';
+  } finally {
+    watchlistLoading = false;
+  }
+}
+
+async function updateDetailWatchlistButton() {
+  const button = $("detail-watchlist");
+  if (!button || !currentDetailTicker) return;
+  const ticker = currentDetailTicker;
+  button.disabled = true;
+  try {
+    if (!watchlistLoaded) {
+      const data = await watchlistRequest("list");
+      watchlistItems = Array.isArray(data.items) ? data.items : [];
+      watchlistLoaded = true;
+    }
+    if (currentDetailTicker !== ticker) return;
+    const exists = watchlistItems.some(item => item.ticker === ticker);
+    button.textContent = exists ? "✓ In watchlist" : "＋ Add to watchlist";
+    button.classList.toggle("watchlist-added", exists);
+    button.disabled = exists;
+    button.dataset.added = String(exists);
+  } catch (error) {
+    button.textContent = "＋ Add to watchlist";
+    button.disabled = false;
+    button.title = error.message;
+  }
+}
+
+$("detail-watchlist").addEventListener("click", async () => {
+  const ticker = currentDetailTicker;
+  const button = $("detail-watchlist");
+  if (!ticker || button.disabled) return;
+  button.disabled = true;
+  button.textContent = "Adding…";
+  try {
+    await watchlistRequest("add", ticker);
+    if (!watchlistItems.some(item => item.ticker === ticker)) {
+      watchlistItems.unshift({ ticker, added_at: new Date().toISOString(), analysis: null });
+    }
+    if (currentDetailTicker !== ticker) return;
+    button.textContent = "✓ In watchlist";
+    button.classList.add("watchlist-added");
+    button.dataset.added = "true";
+    if (currentScreen === "watchlist") renderWatchlist();
+  } catch (error) {
+    if (currentDetailTicker === ticker) {
+      button.textContent = "＋ Add to watchlist";
+      button.disabled = false;
+      button.title = error.message;
+    }
+  }
+});
+
 function bindStockButtons(root) {
   if (!root) return;
   root.querySelectorAll("[data-ticker]").forEach(button => {
@@ -530,6 +674,7 @@ async function openStockDetails(ticker, options = {}) {
   const symbol = String(ticker || "").trim().toUpperCase();
   if (!symbol) return;
   currentDetailTicker = symbol;
+  updateDetailWatchlistButton();
   const indexer = options.indexer === "SlowIndex" ? "SlowIndex" : "rapidIndex";
   currentDetailIndexer = indexer;
   const period = options.customPeriod || (indexer === "SlowIndex" ? "max" : "5y");
