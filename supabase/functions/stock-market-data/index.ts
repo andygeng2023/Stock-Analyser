@@ -108,7 +108,7 @@ Deno.serve(async (req: Request) => {
           currency: live.currency || cached.currency || "USD",
           price: live.price ?? cached.price ?? null,
           change_percent: live.change_percent ?? cached.change_percent ?? null,
-          history_preview: cachedHistory.length ? cachedHistory : live.history_preview,
+          history_preview: live.history_preview.length ? live.history_preview : cachedHistory,
           indexed_at: row?.indexed_at ?? null,
           as_of: live.as_of,
           source: cachedHistory.length ? "shared index + live Yahoo quote" : live.source,
