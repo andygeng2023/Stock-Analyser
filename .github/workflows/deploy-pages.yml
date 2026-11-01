@@ -36,7 +36,7 @@ jobs:
             exit 1
           fi
           mkdir -p site
-          cp app/static/index.html app/static/style.css app/static/app.js site/
+          cp app/static/*.html app/static/*.css app/static/*.js site/
           python - <<'PY'
           import json, os
           config = {
