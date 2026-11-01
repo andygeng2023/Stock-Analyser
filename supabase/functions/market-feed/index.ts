@@ -84,6 +84,7 @@ Deno.serve(async (req: Request) => {
           .select("ticker,result")
           .eq("period", "5y")
           .eq("horizon", 30)
+          .eq("indexer", "rapidIndex")
           .gte("indexed_at", cutoff)
           .limit(1500);
         if (fallback.error) throw fallback.error;
