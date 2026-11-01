@@ -8,12 +8,11 @@ class WatchIndexerTests(unittest.TestCase):
     @patch("app.watch_indexer.supabase_request")
     def test_watchlist_tickers_reads_all_pages_and_deduplicates(self, supabase_request):
         supabase_request.side_effect = [
-            [{"ticker": "AAPL"}, {"ticker": "MSFT"}],
+            [{"ticker": "AAPL"}] * 998 + [{"ticker": "MSFT"}, {"ticker": "AAPL"}],
             [{"ticker": "AAPL"}, {"ticker": "NVDA"}],
-            [],
         ]
         self.assertEqual(watch_indexer.watchlist_tickers(), ["AAPL", "MSFT", "NVDA"])
-        self.assertEqual(supabase_request.call_count, 3)
+        self.assertEqual(supabase_request.call_count, 2)
         self.assertIn("watchlist_items?select=ticker", supabase_request.call_args_list[0].args[0])
         self.assertIn("offset=1000", supabase_request.call_args_list[1].args[0])
 
