@@ -576,3 +576,322 @@ html[data-theme="light"] .settings-links a,html[data-theme="light"] .settings-pr
   .nav-tab{flex-direction:column;gap:3px;padding:6px 2px;font-size:9px;line-height:1.15}
   .nav-tab span{font-size:16px}
 }
+
+
+/* Watchlist: compact two-up desktop cards with a chart alongside the metrics. */
+@media (min-width: 760px) {
+  .watchlist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+.watch-card {
+  gap: 7px;
+  padding: 12px;
+}
+.watch-card-open {
+  grid-template-columns: minmax(0, 1.18fr) minmax(112px, .82fr);
+  gap: 11px;
+}
+.watch-card-info {
+  gap: 8px;
+}
+.watch-card-head {
+  gap: 7px;
+}
+.watch-card-ticker {
+  font-size: 16px;
+}
+.watch-card-company {
+  font-size: 10px;
+}
+.watch-card-price {
+  font-size: 16px;
+}
+.watch-card-daily {
+  font-size: 9px;
+}
+.watch-card-stats {
+  gap: 7px 8px;
+  padding: 8px 0;
+}
+.watch-card-stats>span {
+  gap: 3px;
+}
+.watch-card-stats small {
+  font-size: 8px;
+}
+.watch-card-stats strong {
+  font-size: 10px;
+}
+.watch-card-chart {
+  min-height: 92px;
+  gap: 5px;
+  padding: 7px 0 6px 10px;
+}
+.watch-card-chart .stock-sparkline,
+.watch-card-chart .stock-chart-placeholder {
+  height: 84px;
+}
+.watch-card-footer {
+  font-size: 8px;
+}
+.watch-card-remove {
+  margin-top: 2px;
+  padding: 4px 7px;
+}
+@media (max-width: 900px) and (min-width: 760px) {
+  .watch-card-open {
+    grid-template-columns: minmax(0, 1.12fr) minmax(96px, .78fr);
+    gap: 8px;
+  }
+  .watch-card-chart { padding-left: 8px; }
+}
+@media (max-width: 700px) {
+  .watchlist-grid { grid-template-columns: minmax(0, 1fr); }
+  .watch-card { padding: 11px; }
+  .watch-card-open { grid-template-columns: minmax(0, 1.25fr) minmax(94px, .75fr); gap: 8px; }
+  .watch-card-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .watch-card-stats>span:nth-child(n+4) { display: none; }
+  .watch-card-chart { min-height: 64px; padding: 3px 0 3px 7px; }
+  .watch-card-chart .stock-sparkline,
+  .watch-card-chart .stock-chart-placeholder { height: 54px; }
+}
+@media (max-width: 390px) {
+  .watch-card-open { grid-template-columns: minmax(0, 1fr) 82px; }
+  .watch-card-chart .stock-sparkline,
+  .watch-card-chart .stock-chart-placeholder { height: 46px; }
+}
+
+/* Complete light palette: carry the selected theme through every app surface. */
+html[data-theme="light"] body,
+html[data-theme="light"] main {
+  background: #f4f6fa !important;
+  color: #172235 !important;
+}
+html[data-theme="light"] .stock-card,
+html[data-theme="light"] .watch-card,
+html[data-theme="light"] .card,
+html[data-theme="light"] article,
+html[data-theme="light"] .scan-panel,
+html[data-theme="light"] .discover-intro,
+html[data-theme="light"] .job-progress,
+html[data-theme="light"] .settings-card,
+html[data-theme="light"] .settings-link-card,
+html[data-theme="light"] .account-settings-panel,
+html[data-theme="light"] .account-signed-out-note,
+html[data-theme="light"] .settings-disclosure,
+html[data-theme="light"] .discover-stats>div,
+html[data-theme="light"] .quick-search,
+html[data-theme="light"] form:not(.auth-form),
+html[data-theme="light"] .auth-dialog,
+html[data-theme="light"] .autocomplete-dropdown,
+html[data-theme="light"] .hard-rerun-menu {
+  background: #ffffff !important;
+  color: #172235 !important;
+  border-color: #dce3ed !important;
+  box-shadow: 0 3px 14px rgba(27,43,66,.06);
+}
+html[data-theme="light"] .stock-card:hover,
+html[data-theme="light"] .watch-card:hover {
+  background: #f8faff !important;
+  border-color: #afc0d8 !important;
+}
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea,
+html[data-theme="light"] .hard-rerun-custom select {
+  background: #ffffff !important;
+  color: #172235 !important;
+  border-color: #cdd7e5 !important;
+}
+html[data-theme="light"] .quick-search input {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+html[data-theme="light"] .secondary-button,
+html[data-theme="light"] .nav-tab,
+html[data-theme="light"] .indexer-switch,
+html[data-theme="light"] .back-button {
+  background: #edf1f7 !important;
+  color: #35445b !important;
+  border-color: #d2dbe7 !important;
+}
+html[data-theme="light"] .nav-tab.active,
+html[data-theme="light"] .indexer-option.active {
+  background: #dce7f8 !important;
+  color: #1c3557 !important;
+  border-color: #b8cbe7 !important;
+}
+html[data-theme="light"] .indexer-option {
+  color: #58677e !important;
+}
+html[data-theme="light"] .bottom-nav {
+  background: rgba(255,255,255,.94) !important;
+  border-color: #dce3ed !important;
+}
+html[data-theme="light"] .page-heading small,
+html[data-theme="light"] header small,
+html[data-theme="light"] .settings-eyebrow,
+html[data-theme="light"] .helper-text,
+html[data-theme="light"] .muted,
+html[data-theme="light"] .section-title p,
+html[data-theme="light"] .settings-prose,
+html[data-theme="light"] .settings-updated,
+html[data-theme="light"] .watch-card-company,
+html[data-theme="light"] .watch-card-footer,
+html[data-theme="light"] .watch-card-chart>small,
+html[data-theme="light"] .stock-company,
+html[data-theme="light"] .stock-card .stock-open-arrow,
+html[data-theme="light"] .stock-predicted small,
+html[data-theme="light"] .stock-analysis-stat small,
+html[data-theme="light"] .card small,
+html[data-theme="light"] .row span,
+html[data-theme="light"] .company>div:last-child p,
+html[data-theme="light"] .discover-stats span,
+html[data-theme="light"] .source-control,
+html[data-theme="light"] .scan-meta,
+html[data-theme="light"] .progress-detail span,
+html[data-theme="light"] .disclaimer,
+html[data-theme="light"] .empty-feed,
+html[data-theme="light"] .stock-chart-placeholder {
+  color: #66758b !important;
+}
+html[data-theme="light"] .discover-intro>p,
+html[data-theme="light"] .scan-status,
+html[data-theme="light"] #scan-status,
+html[data-theme="light"] #detail-status,
+html[data-theme="light"] .source-control,
+html[data-theme="light"] .hard-rerun-custom label,
+html[data-theme="light"] .auth-form label,
+html[data-theme="light"] .settings-prose h4,
+html[data-theme="light"] .settings-disclosure>summary,
+html[data-theme="light"] .account-facts dt,
+html[data-theme="light"] .account-form label {
+  color: #35445b !important;
+}
+html[data-theme="light"] .card strong,
+html[data-theme="light"] .company,
+html[data-theme="light"] .company h2,
+html[data-theme="light"] .watch-card-open,
+html[data-theme="light"] .watch-card-ticker,
+html[data-theme="light"] .watch-card-price,
+html[data-theme="light"] .watch-card-stats strong,
+html[data-theme="light"] .stock-card,
+html[data-theme="light"] .stock-ticker,
+html[data-theme="light"] .stock-price,
+html[data-theme="light"] .account-facts dd {
+  color: #172235 !important;
+}
+html[data-theme="light"] .watch-card-stats,
+html[data-theme="light"] .watch-card-chart,
+html[data-theme="light"] .row,
+html[data-theme="light"] td,
+html[data-theme="light"] th,
+html[data-theme="light"] .hard-rerun-custom {
+  border-color: #e5eaf1 !important;
+}
+html[data-theme="light"] .progress-track,
+html[data-theme="light"] .queue-track {
+  background: #e5eaf1 !important;
+}
+html[data-theme="light"] .hard-rerun-menu>[data-rerun-indexer],
+html[data-theme="light"] .hard-rerun-menu>[data-rerun-custom],
+html[data-theme="light"] .autocomplete-option,
+html[data-theme="light"] .queue-job {
+  color: #25334a !important;
+}
+html[data-theme="light"] .hard-rerun-menu>[data-rerun-indexer]:hover,
+html[data-theme="light"] .hard-rerun-menu>[data-rerun-custom]:hover,
+html[data-theme="light"] .autocomplete-option:hover,
+html[data-theme="light"] .autocomplete-option[aria-selected="true"] {
+  background: #edf2f8 !important;
+}
+html[data-theme="light"] .hard-rerun-menu small,
+html[data-theme="light"] .autocomplete-exchange,
+html[data-theme="light"] .autocomplete-message {
+  color: #65738a !important;
+}
+html[data-theme="light"] .watch-card-remove {
+  color: #52627a !important;
+  background: transparent !important;
+  border-color: #d2dbe7 !important;
+}
+html[data-theme="light"] .watch-card-remove:hover {
+  background: #fff1f1 !important;
+  color: #a43d48 !important;
+}
+html[data-theme="light"] .settings-link-card strong,
+html[data-theme="light"] .account-settings-panel h3,
+html[data-theme="light"] .settings-card h3 {
+  color: #172235 !important;
+}
+html[data-theme="light"] .settings-link-card small,
+html[data-theme="light"] .account-settings-panel .muted {
+  color: #65738a !important;
+}
+html[data-theme="light"] .danger-button {
+  background: #fff0f0 !important;
+  color: #9a3440 !important;
+  border-color: #efc9cd !important;
+}
+html[data-theme="light"] .settings-links a,
+html[data-theme="light"] .settings-prose a,
+html[data-theme="light"] .auth-links button {
+  color: #315f9c !important;
+}
+
+/* Account settings */
+.account-settings-section{margin-top:30px}
+.account-signed-out-note{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;background:#141f32;border:1px solid #2b3b55;border-radius:12px}
+.account-signed-out-note strong{font-size:13px}
+.account-signed-out-note p{margin:4px 0 0}
+.account-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.account-settings-panel{min-width:0;padding:17px;background:#141f32;border:1px solid #2b3b55;border-radius:12px}
+.account-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.account-settings-panel h3{margin:6px 0 8px;font-size:14px}
+.account-panel-heading h3{margin-bottom:0}
+.compact-button{padding:6px 9px;font-size:10px}
+.account-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;margin:16px 0}
+.account-facts>div{min-width:0}
+.account-facts dt{margin-bottom:3px;color:#91a0b8;font-size:9px}
+.account-facts dd{margin:0;overflow-wrap:anywhere;font-size:11px;font-weight:650}
+.account-form{display:grid;gap:8px;margin-top:14px;padding:0;background:transparent;border:0}
+.account-form label{color:#b9c5d8;font-size:10px;font-weight:650}
+.account-form input{width:100%;min-width:0;padding:9px 10px;font-size:11px}
+.account-form button,.account-action-stack button{padding:9px 11px;font-size:10px}
+.account-form-row{display:flex;align-items:center;gap:8px}
+.account-form-row input{flex:1}
+.account-form-row button{flex:none}
+.account-action-stack{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.danger-button{background:#3c252c;color:#f0b8be;border-color:#74454c}
+.account-settings-feedback{min-height:18px;margin:10px 2px 0;color:#8ab4f2;font-size:11px;line-height:1.5}
+.account-settings-feedback.is-error{color:#e88f8f}
+.settings-information{display:grid;gap:9px;margin-top:30px}
+.settings-link-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 17px;background:#141f32;border:1px solid #2b3b55;border-radius:11px;color:#e8eef9;text-decoration:none;transition:border-color .15s ease,background .15s ease}
+.settings-link-card:hover{background:#192840;border-color:#48618a;text-decoration:none}
+.settings-link-card>span:first-child{display:flex;flex-direction:column;gap:4px;min-width:0}
+.settings-link-card strong{font-size:12px}
+.settings-link-card small{color:#91a0b8;font-size:10px}
+.settings-link-card>span:last-child{color:#91a0b8;font-size:16px}
+@media(max-width:900px){.account-settings-grid{grid-template-columns:1fr}}
+@media(max-width:600px){
+ .account-signed-out-note{align-items:flex-start;flex-direction:column}
+ .account-signed-out-note button{width:100%}
+ .account-form-row{align-items:stretch;flex-direction:column}
+ .account-form-row button{width:100%}
+ .account-facts{grid-template-columns:1fr 1fr;gap:10px}
+}
+
+html[data-theme="light"] .account-signed-out-note,
+html[data-theme="light"] .account-settings-panel {
+  background: #ffffff !important;
+  color: #172235 !important;
+  border-color: #dce3ed !important;
+}
+html[data-theme="light"] .account-settings-panel h3,
+html[data-theme="light"] .account-facts dd { color: #172235 !important; }
+html[data-theme="light"] .account-form label,
+html[data-theme="light"] .account-facts dt { color: #52627a !important; }
+html[data-theme="light"] .account-settings-feedback { color: #315f9c; }
+html[data-theme="light"] .account-settings-feedback.is-error { color: #a43d48; }
