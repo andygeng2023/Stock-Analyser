@@ -118,6 +118,25 @@ Deno.serve(async (req) => {
       .eq("period", "5y").eq("horizon", 30).eq("indexer", "rapidIndex");
     if (error) throw error;
     const byTicker = new Map((indexed ?? []).map((row: any) => [row.ticker, row]));
+    const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+    const staleTickers = items.filter((item) => {
+      const row: any = byTicker.get(item.ticker);
+      return !row?.indexed_at || new Date(row.indexed_at).getTime() < sixHoursAgo;
+    }).map((item) => item.ticker);
+    if (staleTickers.length) {
+      const githubToken = Deno.env.get("STOCK_ANALYSER_GITHUB_TOKEN");
+      if (githubToken) {
+        try {
+          const dispatch = await fetch("https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/watch-index.yml/dispatches", {
+            method: "POST",
+            headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + githubToken, "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
+            body: JSON.stringify({ ref: "main" }),
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!dispatch.ok) console.error("WatchIndex dispatch failed:", dispatch.status, (await dispatch.text()).slice(0, 250));
+        } catch (dispatchError) { console.error("WatchIndex dispatch error:", dispatchError); }
+      } else console.error("STOCK_ANALYSER_GITHUB_TOKEN is missing; WatchIndex refresh cannot be triggered.");
+    }
     return json({
       items: items.map((item) => {
         const row: any = byTicker.get(item.ticker);
@@ -125,8 +144,12 @@ Deno.serve(async (req) => {
           ticker: item.ticker,
           added_at: item.created_at,
           analysis: compactAnalysis(row?.result, row?.indexed_at ?? null),
+          indexed_at: row?.indexed_at ?? null,
+          index_fresh: Boolean(row?.indexed_at && new Date(row.indexed_at).getTime() >= sixHoursAgo),
+          awaiting_watchindex: staleTickers.includes(item.ticker),
         };
       }),
+      refreshing: staleTickers.length > 0,
     });
   } catch (error) {
     console.error("watchlist error:", error);
