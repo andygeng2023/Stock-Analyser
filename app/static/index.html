@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1120">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem("stock-analyser-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}</script>
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=settings-account-pages-03">
+<link rel="stylesheet" href="./style.css?v=settings-list-clean-04">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
 <script src="./config.js"></script>
@@ -165,35 +165,20 @@
 <section id="settings-screen" class="app-screen" hidden>
   <div class="page-heading"><div><small>APP PREFERENCES</small><h2>Settings</h2></div></div>
 
-  <div class="settings-layout">
-    <section class="settings-card settings-account-card">
-      <div class="settings-card-copy">
-        <small class="settings-eyebrow">ACCOUNT</small>
-        <h3>Sign in and sync</h3>
-        <p id="settings-account-status" class="muted">Sign in to sync your watchlist across devices.</p>
-      </div>
-      <button id="settings-account-button" type="button">Sign in or create account</button>
-    </section>
-
-    <section class="settings-card settings-appearance-card">
-      <div class="settings-card-copy">
-        <small class="settings-eyebrow">APPEARANCE</small>
-        <h3>Theme</h3>
-        <p id="theme-status" class="muted">Dark mode is active.</p>
-      </div>
-      <button id="theme-toggle" class="secondary-button" type="button">Switch to light mode</button>
-    </section>
-  </div>
-
-  <section class="account-settings-section">
-    <div class="section-title"><div><h3>Account settings</h3><p>Manage your profile, sign-in details, security and saved data.</p></div></div>
-    <div id="account-signed-out-note" class="account-signed-out-note">
-      <div><strong>Sign in to manage your account</strong><p class="muted">Profile, security and data controls appear here after you sign in.</p></div>
-      <button id="account-signin" type="button">Sign in</button>
+  <section class="settings-list-section">
+    <h3>Account</h3>
+    <div class="settings-list-row">
+      <div class="settings-list-copy"><strong>Account</strong><small id="settings-account-status">Sign in to sync your watchlist across devices.</small></div>
+      <button id="settings-account-button" class="settings-action-button" type="button">Sign in</button>
     </div>
-    <div id="account-controls" class="account-settings-grid" hidden>
-      <section class="account-settings-panel account-overview">
-        <div class="account-panel-heading"><div><small class="settings-eyebrow">PROFILE</small><h3>Account details</h3></div><button id="account-refresh" class="secondary-button compact-button" type="button">Refresh</button></div>
+    <div id="account-signed-out-note" class="settings-list-row">
+      <div class="settings-list-copy"><strong>Account management</strong><small>Sign in to manage your profile, security and saved data.</small></div>
+      <button id="account-signin" class="settings-action-button" type="button">Sign in</button>
+    </div>
+    <div id="account-controls" class="account-settings-list" hidden>
+      <div class="settings-list-row account-profile-row">
+        <div class="settings-list-copy"><strong>Account details</strong><small>Email, verification, account creation and last sign-in</small></div>
+        <button id="account-refresh" class="settings-action-button secondary-button" type="button">Refresh</button>
         <dl class="account-facts">
           <div><dt>Email</dt><dd id="account-current-email">—</dd></div>
           <div><dt>Email status</dt><dd id="account-email-status">—</dd></div>
@@ -202,61 +187,58 @@
         </dl>
         <form id="account-profile-form" class="account-form">
           <label for="account-display-name">Display name</label>
-          <div class="account-form-row"><input id="account-display-name" type="text" maxlength="80" placeholder="Add a display name"><button type="submit">Save profile</button></div>
+          <div class="account-form-row"><input id="account-display-name" type="text" maxlength="80" placeholder="Add a display name"><button type="submit" class="settings-action-button">Save</button></div>
         </form>
-      </section>
-
-      <section class="account-settings-panel">
-        <small class="settings-eyebrow">SIGN-IN DETAILS</small><h3>Change email address</h3>
-        <p class="muted">A confirmation email may be sent before the new address becomes active.</p>
-        <form id="account-email-form" class="account-form">
-          <label for="account-new-email">New email address</label>
-          <input id="account-new-email" type="email" required maxlength="254" autocomplete="email" placeholder="name@example.com">
-          <button type="submit">Update email address</button>
+      </div>
+      <div class="settings-list-row">
+        <div class="settings-list-copy"><strong>Change email address</strong><small>Confirmation may be required before the new address becomes active.</small></div>
+        <form id="account-email-form" class="account-inline-form">
+          <input id="account-new-email" type="email" required maxlength="254" autocomplete="email" placeholder="New email address">
+          <button type="submit" class="settings-action-button">Update</button>
         </form>
-      </section>
-
-      <section class="account-settings-panel">
-        <small class="settings-eyebrow">SECURITY</small><h3>Change password</h3>
-        <p class="muted">Use at least 8 characters. You can also request a password-reset email.</p>
-        <form id="account-password-form" class="account-form">
-          <label for="account-new-password">New password</label>
+      </div>
+      <div class="settings-list-row">
+        <div class="settings-list-copy"><strong>Change password</strong><small>Update your password or request a reset email.</small></div>
+        <form id="account-password-form" class="account-inline-form account-password-inline">
           <input id="account-new-password" type="password" required minlength="8" autocomplete="new-password" placeholder="New password">
-          <label for="account-confirm-password">Confirm new password</label>
-          <input id="account-confirm-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Repeat new password">
-          <button type="submit">Change password</button>
-          <button id="account-password-reset" class="secondary-button" type="button">Send password-reset email</button>
+          <input id="account-confirm-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Confirm password">
+          <button type="submit" class="settings-action-button">Update</button>
+          <button id="account-password-reset" class="settings-action-button secondary-button" type="button">Send reset email</button>
         </form>
-      </section>
-
-      <section class="account-settings-panel">
-        <small class="settings-eyebrow">SESSIONS</small><h3>Manage signed-in devices</h3>
-        <p class="muted">End other sessions or sign out everywhere, including this device.</p>
-        <div class="account-action-stack">
-          <button id="account-signout-others" class="secondary-button" type="button">Sign out other devices</button>
-          <button id="account-signout-all" class="danger-button" type="button">Sign out all devices</button>
+      </div>
+      <div class="settings-list-row">
+        <div class="settings-list-copy"><strong>Sessions</strong><small>Sign out other devices or every device.</small></div>
+        <div class="settings-row-actions">
+          <button id="account-signout-others" class="settings-action-button secondary-button" type="button">Sign out other devices</button>
+          <button id="account-signout-all" class="settings-action-button danger-button" type="button">Sign out all</button>
         </div>
-      </section>
-
-      <section class="account-settings-panel">
-        <small class="settings-eyebrow">YOUR DATA</small><h3>Watchlist data</h3>
-        <p class="muted">Export a copy of your saved tickers or remove all watchlist entries from this account.</p>
-        <div class="account-action-stack">
-          <button id="account-export-watchlist" class="secondary-button" type="button">Export watchlist as CSV</button>
-          <button id="account-clear-watchlist" class="danger-button" type="button">Clear watchlist</button>
+      </div>
+      <div class="settings-list-row">
+        <div class="settings-list-copy"><strong>Watchlist data</strong><small>Export or clear your saved watchlist entries.</small></div>
+        <div class="settings-row-actions">
+          <button id="account-export-watchlist" class="settings-action-button secondary-button" type="button">Export CSV</button>
+          <button id="account-clear-watchlist" class="settings-action-button danger-button" type="button">Clear watchlist</button>
         </div>
-      </section>
+      </div>
     </div>
     <p id="account-settings-feedback" class="account-settings-feedback" role="status" aria-live="polite"></p>
   </section>
 
-  <section class="settings-information">
-    <div class="section-title"><div><h3>Information and support</h3><p>Policies, product information and project links.</p></div></div>
-    <a class="settings-link-card" href="./privacy.html"><span><strong>Privacy Policy</strong><small>What information the app handles and how it is used</small></span><span aria-hidden="true">↗</span></a>
-    <a class="settings-link-card" href="./terms.html"><span><strong>Terms of Service</strong><small>Conditions and limitations of using Stock Analyser</small></span><span aria-hidden="true">↗</span></a>
-    <a class="settings-link-card" href="./about.html"><span><strong>About Stock Analyser</strong><small>How the app works, indexers and project information</small></span><span aria-hidden="true">↗</span></a>
-    <a class="settings-link-card" href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer"><span><strong>GitHub repository</strong><small>Source code, issues and project history</small></span><span aria-hidden="true">↗</span></a>
-    <a class="settings-link-card" href="https://github.com/andygeng2023/Stock-Analyser/actions" target="_blank" rel="noopener noreferrer"><span><strong>GitHub Actions</strong><small>Background workers, tests and deployments</small></span><span aria-hidden="true">↗</span></a>
+  <section class="settings-list-section">
+    <h3>Appearance</h3>
+    <div class="settings-list-row">
+      <div class="settings-list-copy"><strong>Theme</strong><small id="theme-status">Dark mode is active.</small></div>
+      <button id="theme-toggle" class="settings-action-button secondary-button" type="button">Switch to light mode</button>
+    </div>
+  </section>
+
+  <section class="settings-list-section">
+    <h3>Information and support</h3>
+    <a class="settings-list-row settings-list-link" href="./privacy.html"><span class="settings-list-copy"><strong>Privacy Policy</strong><small>How account and application information is handled</small></span><span>↗</span></a>
+    <a class="settings-list-row settings-list-link" href="./terms.html"><span class="settings-list-copy"><strong>Terms of Service</strong><small>Conditions and limitations of using Stock Analyser</small></span><span>↗</span></a>
+    <a class="settings-list-row settings-list-link" href="./about.html"><span class="settings-list-copy"><strong>About Stock Analyser</strong><small>Product information and indexer details</small></span><span>↗</span></a>
+    <a class="settings-list-row settings-list-link" href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer"><span class="settings-list-copy"><strong>GitHub repository</strong><small>Source code and project history</small></span><span>↗</span></a>
+    <a class="settings-list-row settings-list-link" href="https://github.com/andygeng2023/Stock-Analyser/actions" target="_blank" rel="noopener noreferrer"><span class="settings-list-copy"><strong>GitHub Actions</strong><small>Background workers, tests and deployments</small></span><span>↗</span></a>
   </section>
 </section>
 <section id="detail-screen" class="app-screen" hidden>
@@ -305,6 +287,6 @@
   <button class="nav-tab" id="nav-watchlist" type="button"><span aria-hidden="true">☆</span>Watchlist</button>
   <button class="nav-tab" id="nav-settings" type="button"><span aria-hidden="true">⚙</span>Settings</button>
 </nav>
-<script src="./app.js?v=settings-account-pages-03"></script>
+<script src="./app.js?v=settings-list-clean-04"></script>
 </body>
 </html>
