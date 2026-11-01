@@ -337,7 +337,7 @@ td:first-child,th:first-child{text-align:left}
 }
 
 
-/* Final layout: no header reservation; queue sits in the bottom-right nav dock. */
+/* Final layout: queue floats above the bottom navigation, never inside it. */
 main,
 .detail-mode main {
   padding-top: 0 !important;
@@ -350,7 +350,7 @@ main,
   top: auto !important;
   left: auto !important;
   right: 14px !important;
-  bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+  bottom: calc(66px + env(safe-area-inset-bottom)) !important;
   z-index: 1200 !important;
   width: max-content;
 }
@@ -361,15 +361,13 @@ main,
   bottom: calc(100% + 10px) !important;
   transform: none !important;
 }
-.bottom-nav {
-  padding-right: 112px;
-}
 @media (min-width: 701px) {
-  .bottom-nav { padding-right: 132px; }
   main,.detail-mode main { padding-top: 0 !important; }
 }
 @media (max-width: 700px) {
-  .bottom-nav { padding-right: 104px; }
   main,.detail-mode main { padding-top: 0 !important; }
-  .global-queue { right: 12px !important; bottom: calc(8px + env(safe-area-inset-bottom)) !important; }
+  .global-queue {
+    right: 12px !important;
+    bottom: calc(66px + env(safe-area-inset-bottom)) !important;
+  }
 }
