@@ -224,7 +224,7 @@ def run(shard, indexer="rapidIndex"):
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
             }
-            db_post("market_index", index_row, conflict="ticker,period,horizon")
+            db_post("market_index", index_row, conflict="ticker,period,horizon,indexer")
             db_post("market_index_catalog", {
                 "ticker": ticker, "market_cap": cap,
                 "avg_dollar_volume": item.get("dollar_volume"),
