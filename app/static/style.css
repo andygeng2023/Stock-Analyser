@@ -436,3 +436,32 @@ form#search.quick-search input{width:100%;min-width:0;padding:9px 0;border:0;bac
   .watch-card-footer{flex-direction:column;gap:3px}
   .watch-card-footer span:last-child{text-align:left}
 }
+
+
+/* Supabase account and email authentication */
+.account-button{position:fixed;top:14px;right:18px;z-index:1001;max-width:min(220px,42vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 13px;border:1px solid #405574;border-radius:999px;background:#192943;color:#e8eef9;box-shadow:0 6px 20px #050a1466;font-size:11px;font-weight:700}
+.account-button.signed-in{background:#182d32;border-color:#38665d;color:#b7eadb}
+.auth-modal{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:18px}
+.auth-modal[hidden]{display:none}
+.auth-backdrop{position:absolute;inset:0;background:#030812c9;backdrop-filter:blur(7px)}
+.auth-dialog{position:relative;z-index:1;width:min(100%,420px);padding:30px;background:#111c2e;border:1px solid #344762;border-radius:17px;box-shadow:0 24px 80px #0009}
+.auth-close{position:absolute;top:12px;right:12px;width:32px;height:32px;padding:0;background:transparent;color:#aab8ce;border:1px solid #344762;font-size:21px;line-height:1}
+.auth-eyebrow{color:#91a0b8;letter-spacing:.14em;font-size:9px;font-weight:800}
+.auth-dialog h2{margin:9px 0 5px;font-size:25px}
+.auth-dialog .muted{margin:0 0 18px}
+.auth-form{display:flex;flex-direction:column;gap:13px;padding:0;background:transparent;border:0}
+.auth-form label{display:flex;flex-direction:column;gap:7px;color:#b8c5d9;font-size:11px;font-weight:650}
+.auth-form input{width:100%;box-sizing:border-box;background:#0b1525}
+.auth-form button{width:100%;margin-top:3px}
+.auth-feedback{min-height:18px;margin:12px 0 4px;color:#a8c4f6;font-size:11px;line-height:1.5}
+.auth-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.auth-links button{padding:5px 0;background:transparent;border:0;color:#9bb5ef;font-size:10px}
+.auth-account-email{margin:10px 0;color:#dce6f7;font-size:13px;font-weight:700;overflow-wrap:anywhere}
+#auth-signout{width:100%;margin-top:15px}
+body.auth-open{overflow:hidden}
+.bottom-nav{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:700px){
+  .account-button{top:10px;right:12px;padding:7px 10px;font-size:10px}
+  .auth-dialog{padding:25px 20px}
+  .auth-links{flex-direction:column;align-items:flex-start}
+}
