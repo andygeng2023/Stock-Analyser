@@ -371,3 +371,16 @@ main,
     bottom: calc(66px + env(safe-area-inset-bottom)) !important;
   }
 }
+
+
+/* Search tab uses the same compact autocomplete search control as Home. */
+form#search.quick-search{display:flex;flex-wrap:nowrap;align-items:center;padding:9px 10px 9px 15px}
+form#search.quick-search .autocomplete-wrap{flex:1;min-width:0}
+form#search.quick-search input{width:100%;min-width:0;padding:9px 0;border:0;background:transparent;text-transform:none}
+.detail-indexer-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.detail-indexer-heading h3{margin:0}
+.detail-indexer-heading p{margin:5px 0 0}
+.indexer-switch{display:inline-flex;align-items:center;gap:4px;padding:4px;background:#0d1728;border:1px solid #30415d;border-radius:10px}
+.indexer-option{padding:8px 12px;background:transparent;color:#91a0b8;border:1px solid transparent;border-radius:7px;font-size:11px;font-weight:700}
+.indexer-option.active{background:#263a59;color:#e8eef9;border-color:#48618a}
+@media(max-width:700px){.detail-indexer-heading{align-items:flex-start;flex-direction:column}.indexer-switch{width:100%}.indexer-option{flex:1}}
