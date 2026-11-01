@@ -62,31 +62,38 @@ function setAuthMode(mode) {
   authMode = mode;
   const reset = mode === "reset";
   const signup = mode === "signup";
-  $("auth-title").textContent = reset ? "Reset password" : signup ? "Create account" : "Sign in";
-  $("auth-description").textContent = reset
-    ? "Enter your email address and we’ll send a password reset link."
-    : signup
-      ? "Create an account to keep your watchlist synced across devices."
-      : "Sign in to access your saved watchlist from any device.";
+  const update = mode === "update";
+  $("auth-title").textContent = update ? "Choose a new password" : reset ? "Reset password" : signup ? "Create account" : "Sign in";
+  $("auth-description").textContent = update
+    ? "Set a new password for your account."
+    : reset
+      ? "Enter your email address and we’ll send a password reset link."
+      : signup
+        ? "Create an account to keep your watchlist synced across devices."
+        : "Sign in to access your saved watchlist from any device.";
   $("auth-password-label").hidden = reset;
   $("auth-password").required = !reset;
-  $("auth-password").autocomplete = signup ? "new-password" : "current-password";
-  $("auth-submit").textContent = reset ? "Send reset link" : signup ? "Create account" : "Sign in";
-  $("auth-mode-toggle").hidden = reset;
+  $("auth-password").autocomplete = signup || update ? "new-password" : "current-password";
+  $("auth-submit").textContent = update ? "Update password" : reset ? "Send reset link" : signup ? "Create account" : "Sign in";
+  $("auth-mode-toggle").hidden = reset || update;
   $("auth-mode-toggle").textContent = signup ? "Already have an account? Sign in" : "Create an account";
-  $("auth-reset-link").hidden = signup || reset;
+  $("auth-reset-link").hidden = signup || reset || update;
   $("auth-feedback").textContent = "";
 }
 
 function openAuthDialog(mode = "signin") {
-  if (authUser) {
+  if (mode === "update") {
+    setAuthMode("update");
+    $("auth-form-panel").hidden = false;
+    $("auth-account-panel").hidden = true;
+  } else if (authUser) {
     updateAuthUI();
   } else {
     setAuthMode(mode);
   }
   $("auth-modal").hidden = false;
   document.body.classList.add("auth-open");
-  if (!authUser) $("auth-email").focus();
+  if (!authUser || mode === "update") $("auth-email").focus();
 }
 
 function closeAuthDialog() {
@@ -117,7 +124,10 @@ async function initializeAuth() {
     $("auth-feedback").textContent = "Supabase URL and publishable key are required to enable accounts.";
     return;
   }
-  authClient.auth.onAuthStateChange((_event, session) => applyAuthSession(session));
+  authClient.auth.onAuthStateChange((event, session) => {
+    applyAuthSession(session);
+    if (event === "PASSWORD_RECOVERY") openAuthDialog("update");
+  });
   const { data, error } = await authClient.auth.getSession();
   if (error) {
     $("auth-feedback").textContent = "Could not restore your sign-in session: " + error.message;
@@ -143,7 +153,16 @@ $("auth-form").addEventListener("submit", async event => {
   submit.disabled = true;
   $("auth-feedback").textContent = authMode === "signup" ? "Creating your account…" : authMode === "reset" ? "Sending reset link…" : "Signing in…";
   try {
-    if (authMode === "signup") {
+    if (authMode === "update") {
+      const { error } = await authClient.auth.updateUser({ password });
+      if (error) throw error;
+      $("auth-password").value = "";
+      $("auth-feedback").textContent = "Your password has been updated.";
+      setAuthMode("signin");
+      $("auth-feedback").textContent = "Your password has been updated. You can now continue using your account.";
+      updateAuthUI();
+      return;
+    } else if (authMode === "signup") {
       const { data, error } = await authClient.auth.signUp({
         email,
         password,
