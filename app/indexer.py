@@ -218,7 +218,7 @@ def run(shard, indexer="rapidIndex"):
             job_id = job[0]["id"]
             cap = item.get("market_cap")
             index_row = {
-                "ticker": ticker, "period": PERIOD, "horizon": HORIZON,
+                "ticker": ticker, "period": period, "horizon": horizon,
                 "result": result, "source_job_id": job_id,
                 "indexed_at": datetime.now(timezone.utc).isoformat(),
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
