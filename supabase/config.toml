@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.market-feed]
 verify_jwt = false
+
+[functions.stock-market-data]
+verify_jwt = false
