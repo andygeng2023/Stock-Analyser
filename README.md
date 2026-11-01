@@ -8,7 +8,7 @@ A responsive stock research dashboard using Yahoo Finance data and a Python ARIM
 - **Supabase Edge Functions** validate requests, apply basic rate limiting, queue jobs and return job status.
 - **GitHub Actions** runs the Python worker on demand using `yfinance`, pandas, statsmodels and scikit-learn.
 - **Supabase PostgreSQL** stores queued jobs and completed analysis JSON.
-- **Turso SQLite-compatible storage** persists per-browser watchlists; WatchIndex reads all saved lists and refreshes missing RapidIndex results.
+- **Supabase Auth + PostgreSQL** provides email accounts, secure per-user watchlists and the shared RapidIndex cache.
 
 This avoids requiring a continuously running Python server while retaining the actual Python `yfinance` package and scientific Python stack.
 
@@ -32,11 +32,13 @@ The repository is public. GitHub documents standard hosted runner usage as free 
 - Detailed stock analysis and Hard rerun use these same profiles. Custom reruns can select a different history period, forecast horizon (up to 504 trading days), and independent save destination.
 - Results are cached separately by ticker, history period, forecast horizon, and destination indexer, so custom results cannot overwrite RapidIndex or SlowIndex entries.
 
-## Watchlist and WatchIndex
+## Accounts, Watchlist and WatchIndex
 
-Watchlists are stored in a persistent Turso database using its SQLite-compatible SQL interface. The browser keeps a random per-profile identity in local storage; this app does not currently have user sign-in, so watchlists are not synchronised between different browsers or devices. The `watch-index.yml` workflow keeps one WatchIndex worker running, checks all distinct tickers in all watchlists, and skips any ticker already present in RapidIndex with an index timestamp less than six hours old. WatchIndex writes refreshed results into the shared RapidIndex cache.
+Email/password accounts are provided by Supabase Auth. A user's watchlist is stored in `public.watchlist_items` in the same Supabase PostgreSQL project, keyed to `auth.users.id` and protected by row-level security. Users can sign up, confirm their email, sign in, reset their password and sign out. The same account can access its watchlist across browsers and devices.
 
-Create a Turso database named `stock-analyser-watchlist` using the Turso engine, then configure `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as Supabase Edge Function secrets and GitHub Actions repository secrets. The `watchlist` Edge Function and worker create the required SQLite table and ticker index automatically. See [the setup instructions](supabase/README.md#watchlist-sqlite-setup).
+The `watch-index.yml` workflow keeps one WatchIndex worker active. It reads all distinct tickers from all authenticated users' watchlists, skips any ticker already indexed by RapidIndex in the previous six hours, and writes newly computed results to the shared RapidIndex cache. No separate SQLite/Turso service is used.
+
+See [Supabase setup instructions](supabase/README.md#email-authentication-and-watchlist).
 
 ## Local Python server
 
