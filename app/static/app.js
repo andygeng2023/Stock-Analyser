@@ -649,26 +649,37 @@ async function waitForResult(id, statusElement, prefix = "search") {
 function stockSparkline(stock) {
   const history = (Array.isArray(stock.history_preview) ? stock.history_preview : [])
     .map(Number).filter(Number.isFinite);
+  const forecast = (Array.isArray(stock.forecast_preview) ? stock.forecast_preview : [])
+    .map(Number).filter(Number.isFinite);
   if (!history.length) return '<div class="stock-chart-placeholder">Loading...</div>';
 
-  const min = Math.min(...history);
-  const max = Math.max(...history);
+  const values = forecast.length ? [...history, ...forecast] : history;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const spread = max - min || Math.max(Math.abs(max) * 0.01, 1);
   const width = 280;
   const height = 54;
   const pad = 5;
-  const total = Math.max(2, history.length);
-  const point = (value, index) => {
-    const x = (index / (total - 1)) * width;
-    const y = height - pad - ((value - min) / spread) * (height - pad * 2);
-    return [x, y];
-  };
+  const split = forecast.length ? width * 0.76 : width;
+  const y = value => height - pad - ((value - min) / spread) * (height - pad * 2);
   const historyPath = history.map((value, index) => {
-    const [x, y] = point(value, index);
-    return (index ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1);
+    const x = (index / Math.max(1, history.length - 1)) * split;
+    return (index ? "L" : "M") + x.toFixed(1) + "," + y(value).toFixed(1);
   }).join(" ");
-  return '<svg class="stock-sparkline" viewBox="0 0 280 54" preserveAspectRatio="none" role="img" aria-label="Historical prices only">' +
-    '<path class="stock-history-line" d="' + historyPath + '"></path></svg>';
+  let forecastPath = "";
+  if (forecast.length) {
+    const forecastPoints = [history[history.length - 1], ...forecast];
+    forecastPath = forecastPoints.map((value, index) => {
+      const x = split + (index / Math.max(1, forecastPoints.length - 1)) * (width - split);
+      return (index ? "L" : "M") + x.toFixed(1) + "," + y(value).toFixed(1);
+    }).join(" ");
+  }
+  const tone = Number(stock.expected_change_percent) < 0 ? "negative" : "positive";
+  return '<svg class="stock-sparkline" viewBox="0 0 280 54" preserveAspectRatio="none" role="img" aria-label="' +
+    (forecast.length ? 'Historical prices and RapidIndex forecast' : 'Historical prices') + '">' +
+    '<path class="stock-history-line" d="' + historyPath + '"></path>' +
+    (forecastPath ? '<path class="stock-forecast-line ' + tone + '" d="' + forecastPath + '"></path>' : '') +
+    '</svg>';
 }
 
 function stockCard(stock) {
@@ -920,7 +931,7 @@ async function refreshVisibleMarketCards(force = false) {
       const live = byTicker.get(ticker);
       if (!live) continue;
       const history = Array.isArray(live.history_preview) ? live.history_preview : [];
-      const chart = stockSparkline({ history_preview: history });
+      const chart = stockSparkline(live);
       const chartNode = card.querySelector(".stock-sparkline, .stock-chart-placeholder");
       if (chartNode && history.length) chartNode.outerHTML = chart;
       const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
