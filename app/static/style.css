@@ -1982,3 +1982,108 @@ html[data-theme="light"] #settings-screen .settings-v2-form input:focus{
   box-shadow:none!important;
   border-radius:0!important;
 }
+
+
+/* Settings account form correction: forms are layout wrappers, not white panels. */
+#settings-screen #account-profile-form,
+#settings-screen #account-email-form,
+#settings-screen #account-password-form{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0;
+  padding:0;
+}
+#settings-screen #account-profile-form input,
+#settings-screen #account-email-form input,
+#settings-screen #account-password-form input{
+  box-sizing:border-box;
+  min-height:42px;
+  border:1px solid #33445f!important;
+  border-radius:8px!important;
+  background:#111d30!important;
+  color:#e8eef9!important;
+  box-shadow:none!important;
+}
+#settings-screen #account-profile-form input::placeholder,
+#settings-screen #account-email-form input::placeholder,
+#settings-screen #account-password-form input::placeholder{
+  color:#8493aa;
+  opacity:1;
+}
+html[data-theme="light"] #settings-screen #account-profile-form,
+html[data-theme="light"] #settings-screen #account-email-form,
+html[data-theme="light"] #settings-screen #account-password-form{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+html[data-theme="light"] #settings-screen #account-profile-form input,
+html[data-theme="light"] #settings-screen #account-email-form input,
+html[data-theme="light"] #settings-screen #account-password-form input{
+  background:#edf2f8!important;
+  border-color:#d3dce8!important;
+  color:#172235!important;
+}
+html[data-theme="light"] #settings-screen #account-profile-form input::placeholder,
+html[data-theme="light"] #settings-screen #account-email-form input::placeholder,
+html[data-theme="light"] #settings-screen #account-password-form input::placeholder{
+  color:#718097;
+}
+#settings-screen .settings-v2-icon{
+  display:grid;
+  place-items:center;
+  box-sizing:border-box;
+  width:42px;
+  height:42px;
+  min-width:42px;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:#9aafd0;
+}
+#settings-screen .settings-v2-icon svg{
+  display:block;
+  width:19px;
+  height:19px;
+  min-width:19px;
+  min-height:19px;
+  overflow:visible;
+}
+#settings-screen .settings-v2-trailing span{
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#settings-screen .settings-v2-trailing span svg{
+  display:block;
+  width:16px;
+  height:16px;
+}
+.nav-tab-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:20px;
+  height:20px;
+  flex:0 0 20px;
+  line-height:0;
+}
+.nav-tab-icon svg{
+  display:block;
+  width:18px;
+  height:18px;
+  overflow:visible;
+}
+@media(max-width:700px){
+  .nav-tab-icon{width:18px;height:18px;flex-basis:18px}
+  .nav-tab-icon svg{width:17px;height:17px}
+}
