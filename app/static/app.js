@@ -929,9 +929,14 @@ function bindStockButtons(root) {
   });
 }
 let visibleMarketRefreshBusy = false;
+let visibleMarketRefreshQueued = false;
 let visibleMarketRefreshAt = 0;
 async function refreshVisibleMarketCards(force = false) {
-  if (visibleMarketRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (!config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (visibleMarketRefreshBusy) {
+    visibleMarketRefreshQueued = visibleMarketRefreshQueued || force;
+    return;
+  }
   if (!force && Date.now() - visibleMarketRefreshAt < 55_000) return;
   await Promise.resolve();
   const visible = [...document.querySelectorAll(".stock-card[data-ticker], .watchlist-v2-item[data-watch-ticker]")]
@@ -1004,6 +1009,10 @@ async function refreshVisibleMarketCards(force = false) {
     }
   } finally {
     visibleMarketRefreshBusy = false;
+    if (visibleMarketRefreshQueued) {
+      visibleMarketRefreshQueued = false;
+      window.setTimeout(() => refreshVisibleMarketCards(true), 0);
+    }
   }
 }
 
