@@ -965,7 +965,6 @@ function renderMarketFeed(data) {
     ? latest.slice(0, 6).map(stockCard).join("")
     : '<div class="empty-feed">No completed background scan is available yet. The section will populate after the next shared scan finishes.</div>';
   bindStockButtons($("home-latest-scan"));
-  refreshVisibleMarketCards();
 
   fillStockGrid("home-recommended", data.recommended, "Research shortlist");
   fillStockGrid("home-trending", data.trending, "Trending");
@@ -978,6 +977,7 @@ function renderMarketFeed(data) {
   fillStockGrid("discover-smaller", data.smaller_companies, "Smaller company");
   fillStockGrid("discover-opportunities", data.opportunities, "Quality screen");
   fillStockGrid("discover-trending", data.trending, "Momentum");
+  refreshVisibleMarketCards();
 
   $("discover-stats").innerHTML = `
     <div><strong>${fmt(data.indexed_count, 0)}</strong><span>Indexed stocks</span></div>
