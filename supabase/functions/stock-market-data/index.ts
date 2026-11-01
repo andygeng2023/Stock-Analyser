@@ -77,6 +77,24 @@ Deno.serve(async (req: Request) => {
       .eq("period", "5y").eq("horizon", 30).eq("indexer", "rapidIndex");
     if (error) throw error;
     const byTicker = new Map((indexed ?? []).map((row: any) => [row.ticker, row]));
+
+    // Some completed analyses predate or failed to populate the index row.
+    // Consult the shared completed-job cache before requesting history from Yahoo.
+    const missingFromIndex = tickers.filter((ticker) => !byTicker.has(ticker));
+    if (missingFromIndex.length) {
+      const { data: jobs, error: jobsError } = await admin.from("analysis_jobs")
+        .select("ticker,result,created_at")
+        .in("ticker", missingFromIndex)
+        .eq("job_type", "analysis").eq("period", "5y").eq("horizon", 30)
+        .eq("status", "completed").not("result", "is", null)
+        .order("created_at", { ascending: false }).limit(1000);
+      if (jobsError) throw jobsError;
+      for (const job of jobs ?? []) {
+        if (!byTicker.has(job.ticker)) {
+          byTicker.set(job.ticker, { ticker: job.ticker, result: job.result, indexed_at: job.created_at });
+        }
+      }
+    }
     const items = await Promise.all(tickers.map(async (ticker) => {
       const row: any = byTicker.get(ticker);
       const cached: any = row?.result ?? {};
