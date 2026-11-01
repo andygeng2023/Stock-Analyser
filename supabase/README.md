@@ -23,7 +23,7 @@ Deploy the functions:
 - `analysis-status` with JWT verification disabled (job UUID acts as an unguessable read token).
 - `watchlist` with JWT verification enabled (only a verified signed-in user can access their own PostgreSQL watchlist).
 
-The analysis endpoints validate inputs and never return or expose server secrets. The status function only returns the result associated with the supplied random job UUID. The `watchlist` endpoint validates a random browser-profile UUID and applies the per-profile 100-item limit.
+The analysis endpoints validate inputs and never return or expose server secrets. The status function returns the result associated with the supplied random job UUID. The `watchlist` endpoint requires a valid signed-in user and applies a 100-item per-account limit.
 
 ## Email authentication and Watchlist
 
