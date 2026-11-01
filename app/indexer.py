@@ -17,11 +17,13 @@ from .scanner import load_universe, fast_filter
 from .worker import request_json
 
 PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "15"))
+SLOW_PER_SHARD_LIMIT = int(os.environ.get("SLOW_INDEX_BATCH_SIZE_PER_SHARD", "2"))
 MARKET_CAP_LOOKUPS = 250
 PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"))
 REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
-PERIOD = "5y"
-HORIZON = 30
+SLOW_REFRESH_AFTER_HOURS = float(os.environ.get("SLOW_INDEX_REFRESH_AFTER_HOURS", "168"))
+RAPID_PERIOD, RAPID_HORIZON = "5y", 30
+SLOW_PERIOD, SLOW_HORIZON = "max", 504
 _UNIVERSE_SNAPSHOT = None
 
 
@@ -64,17 +66,25 @@ def _get_universe_snapshot():
     return _UNIVERSE_SNAPSHOT
 
 
-def run(shard):
+def run(shard, indexer="rapidIndex"):
+    indexer = str(indexer or "rapidIndex")
+    if indexer not in ("rapidIndex", "SlowIndex"):
+        raise ValueError("Unknown market indexer.")
     shard_count = 2
     if shard < 0 or shard >= shard_count:
         raise ValueError("Invalid indexer shard.")
-    print(f"Market indexer shard {shard + 1}/{shard_count} preparing candidates.")
+    is_slow = indexer == "SlowIndex"
+    period, horizon = (SLOW_PERIOD, SLOW_HORIZON) if is_slow else (RAPID_PERIOD, RAPID_HORIZON)
+    cursor_field = "last_slow_indexed_at" if is_slow else "last_indexed_at"
+    refresh_after_hours = SLOW_REFRESH_AFTER_HOURS if is_slow else REFRESH_AFTER_HOURS
+    batch_limit = SLOW_PER_SHARD_LIMIT if is_slow else PER_SHARD_LIMIT
+    print(f"{indexer} shard {shard + 1}/{shard_count} preparing candidates ({period}, {horizon} trading days).")
     ranked, universe_size, eligible = _get_universe_snapshot()
     if not ranked:
         print("No eligible stocks found; nothing to index.")
         return 0
 
-    catalog_rows = db_get("market_index_catalog?select=ticker,last_indexed_at,market_cap&limit=10000")
+    catalog_rows = db_get("market_index_catalog?select=ticker,last_indexed_at,last_slow_indexed_at,market_cap&limit=10000")
     catalog = {row["ticker"]: row for row in catalog_rows or []}
 
     # Enrich a bounded liquid subset with Yahoo's market-cap metadata. If it is
@@ -108,7 +118,7 @@ def run(shard):
     # the eight-hour expiry; market_index tells us whether a usable result exists.
     live_rows = db_get(
         f"market_index?select=ticker,indexed_at,market_cap,avg_dollar_volume,priority"
-        f"&period=eq.{PERIOD}&horizon=eq.{HORIZON}&limit=10000"
+        f"&period=eq.{period}&horizon=eq.{horizon}&limit=10000"
     )
     live_index = {row["ticker"]: row for row in (live_rows or [])}
 
@@ -158,7 +168,7 @@ def run(shard):
     elite = sorted(ranked, key=lambda x: x["_quality"], reverse=True)[:PRIORITY_REFRESH_COUNT]
     refresh_due = [
         item for item in elite
-        if item["_indexed_at"] is None or item["_age_hours"] >= REFRESH_AFTER_HOURS
+        if item["_indexed_at"] is None or item["_age_hours"] >= refresh_after_hours
     ]
     refresh_due.sort(key=lambda x: (
         -(x["_age_hours"] if x["_age_hours"] is not None else 9999),
@@ -171,7 +181,7 @@ def run(shard):
     refresh_tickers = {item["ticker"] for item in refresh_due}
     discovery = [item for item in ranked if item["ticker"] not in refresh_tickers]
     def discovery_key(item):
-        last = parse_time(catalog.get(item["ticker"], {}).get("last_indexed_at"))
+        last = parse_time(catalog.get(item["ticker"], {}).get(cursor_field))
         # Never/least-recently processed names first; stronger names win ties.
         age = (now_dt - last).total_seconds() if last else float("inf")
         return (-age, -item["_quality"])
@@ -186,7 +196,7 @@ def run(shard):
         item for item in ordered
         if hashlib.sha256(item["ticker"].encode()).digest()[0] % shard_count == shard
     ]
-    shard_candidates = candidates[:PER_SHARD_LIMIT]
+    shard_candidates = candidates[:batch_limit]
     print(
         f"Universe={universe_size}, eligible={eligible}, "
         f"priority refresh due={len(refresh_due)}, "
@@ -197,13 +207,13 @@ def run(shard):
         ticker = item["ticker"]
         print(f"[{position}/{len(shard_candidates)}] Indexing {ticker}.")
         try:
-            result = analyze_ticker(ticker, period=PERIOD, horizon=HORIZON)
+            result = analyze_ticker(ticker, period=period, horizon=horizon)
             job = db_post("analysis_jobs", {
-                "ticker": ticker, "period": PERIOD, "horizon": HORIZON,
+                "ticker": ticker, "period": period, "horizon": horizon,
                 "job_type": "analysis", "scan_source": "both",
                 "status": "completed", "result": result, "error": None,
                 "client_ip_hash": "market-indexer", "attempts": 1,
-                "progress": 100, "stage": "Completed by scheduled market indexer",
+                "progress": 100, "stage": f"Completed by {indexer}",
             })
             job_id = job[0]["id"]
             cap = item.get("market_cap")
@@ -219,13 +229,13 @@ def run(shard):
                 "ticker": ticker, "market_cap": cap,
                 "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
-                "last_indexed_at": datetime.now(timezone.utc).isoformat(),
+                cursor_field: datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }, conflict="ticker")
             completed += 1
         except Exception as exc:
             print(f"Indexing failed for {ticker}: {str(exc)[:250]}", file=sys.stderr)
-    print(f"Shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
+    print(f"{indexer} shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
     return 0
 
 
@@ -256,12 +266,14 @@ def _handoff_after_runtime():
 
 def main():
     shard = int(os.environ.get("INDEX_SHARD", "0"))
-    if shard == 0:
+    indexer = os.environ.get("INDEXER_NAME", "rapidIndex")
+    # One leader dispatches the next four-worker generation; avoid duplicate hand-offs.
+    if indexer == "rapidIndex" and shard == 0:
         threading.Thread(target=_handoff_after_runtime, daemon=True).start()
     started = time.monotonic()
     while time.monotonic() - started < 345 * 60:
         try:
-            run(shard)
+            run(shard, indexer)
         except Exception as exc:
             print(f"Indexing cycle failed: {str(exc)[:300]}", file=sys.stderr)
         if time.monotonic() - started < 345 * 60:
