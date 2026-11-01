@@ -965,7 +965,8 @@ async function refreshVisibleMarketCards(force = false) {
         dailyNode.classList.toggle("positive", Number(live.change_percent) >= 0);
       }
       const hasRapidIndex = Array.isArray(live.forecast_preview) && live.forecast_preview.length > 0;
-      if (!hasRapidIndex && !rapidIndexQueuePending.has(ticker)) {
+      const isWatchlistCard = card.matches(".watchlist-v2-item");
+      if (!isWatchlistCard && !hasRapidIndex && !rapidIndexQueuePending.has(ticker)) {
         rapidIndexQueuePending.add(ticker);
         requestAnalysis(ticker, "5y", 30, "analysis", false, false, "rapidIndex")
           .then(job => {
