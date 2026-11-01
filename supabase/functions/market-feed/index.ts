@@ -51,6 +51,65 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
     const cutoff = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
 
+    const searchQuery = new URL(req.url).searchParams.get("q")?.trim().slice(0, 60) ?? "";
+    if (searchQuery) {
+      let suggestions: Array<{ ticker: string; company: string; exchange: string | null; type: string }> = [];
+      try {
+        const yahooUrl = new URL("https://query1.finance.yahoo.com/v1/finance/search");
+        yahooUrl.searchParams.set("q", searchQuery);
+        yahooUrl.searchParams.set("quotesCount", "12");
+        yahooUrl.searchParams.set("newsCount", "0");
+        yahooUrl.searchParams.set("enableFuzzyQuery", "true");
+        const yahooResponse = await fetch(yahooUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 StockAnalyser/1.0", "Accept": "application/json" },
+        });
+        if (yahooResponse.ok) {
+          const yahooData = await yahooResponse.json();
+          suggestions = (yahooData.quotes ?? [])
+            .filter((quote: any) => quote.quoteType === "EQUITY" && quote.symbol)
+            .slice(0, 9)
+            .map((quote: any) => ({
+              ticker: String(quote.symbol),
+              company: String(quote.longname || quote.shortname || quote.symbol),
+              exchange: quote.exchDisp || quote.exchange || null,
+              type: "Stock",
+            }));
+        }
+      } catch (error) {
+        console.warn("Yahoo symbol search unavailable; using indexed fallback:", error);
+      }
+
+      if (!suggestions.length) {
+        const fallback = await admin.from("market_index")
+          .select("ticker,result")
+          .eq("period", "5y")
+          .eq("horizon", 30)
+          .gte("indexed_at", cutoff)
+          .limit(1500);
+        if (fallback.error) throw fallback.error;
+        const q = searchQuery.toLocaleLowerCase();
+        suggestions = (fallback.data ?? [])
+          .map((row: any) => ({
+            ticker: String(row.ticker),
+            company: String(row.result?.company || row.ticker),
+            exchange: row.result?.exchange || null,
+            type: "Indexed stock",
+          }))
+          .filter((item: any) =>
+            item.ticker.toLocaleLowerCase().includes(q) ||
+            item.company.toLocaleLowerCase().includes(q)
+          )
+          .sort((a: any, b: any) => {
+            const aExact = a.ticker.toLocaleLowerCase() === q ? 0 : a.ticker.toLocaleLowerCase().startsWith(q) ? 1 : 2;
+            const bExact = b.ticker.toLocaleLowerCase() === q ? 0 : b.ticker.toLocaleLowerCase().startsWith(q) ? 1 : 2;
+            return aExact - bExact || a.ticker.localeCompare(b.ticker);
+          })
+          .slice(0, 9);
+      }
+
+      return json({ suggestions });
+    }
+
     const [indexResponse, scanResponse] = await Promise.all([
       admin.from("market_index")
         .select("ticker,indexed_at,market_cap,avg_dollar_volume,priority,result")
