@@ -41,7 +41,7 @@ In Authentication → URL Configuration:
 - Add `https://andygeng2023.github.io/Stock-Analyser/**` to the Redirect URLs allow list.
 - If developing locally, also add the exact local development URL you use.
 
-The frontend sends confirmation and password-reset links back to the GitHub Pages app. Supabase's default email sender has sending limits; configure custom SMTP in Auth settings if the built-in sender is insufficient. Do not disable email confirmation for a public deployment.
+The frontend sends confirmation and password-reset links back to the GitHub Pages app. Supabase's built-in email sender is restricted and rate-limited; on a new project it may only deliver to project organisation members. To let the public receive signup and password-reset emails, configure a custom SMTP provider in Authentication → SMTP Settings. Keep email confirmation enabled for a public deployment. Free-tier projects using the built-in sender also cannot freely customise Auth email templates; custom SMTP is required for branded templates.
 
 The account dialog supports sign-up, sign-in, sign-out, password-reset email and setting a new password from the recovery link. Browsing and analysis requests remain available without signing in; adding to or viewing a saved watchlist requires a verified signed-in session.
 
