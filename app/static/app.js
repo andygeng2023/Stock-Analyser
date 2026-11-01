@@ -134,17 +134,20 @@ function stockCard(stock) {
 
   return `
     <button type="button" class="stock-card" data-ticker="${esc(stock.ticker)}" aria-label="Open analysis for ${esc(stock.ticker)}">
-      <span class="stock-card-left">
-        <strong class="stock-ticker">${esc(stock.ticker)}</strong>
-        <span class="stock-company">${esc(company)}</span>
+      <span class="stock-card-heading">
+        <span class="stock-card-left">
+          <strong class="stock-ticker">${esc(stock.ticker)}</strong>
+          <span class="stock-company">${esc(company)}</span>
+        </span>
+        <span class="stock-open-arrow" aria-hidden="true">↗</span>
       </span>
-      <span class="stock-card-middle">
-        ${stockSparkline(stock)}
-        <span class="stock-analysis-meta">${predicted}${statMarkup}</span>
-      </span>
-      <span class="stock-card-right">
+      <span class="stock-card-price-row">
         <strong class="stock-price">${esc(cash(stock.price, stock.currency))}</strong>
         <span class="stock-daily-change ${dailyClass}">${esc(pct(dailyChange))}</span>
+      </span>
+      <span class="stock-card-chart">
+        ${stockSparkline(stock)}
+        <span class="stock-analysis-meta">${predicted}${statMarkup}</span>
       </span>
     </button>`;
 }
