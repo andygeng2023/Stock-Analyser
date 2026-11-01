@@ -12,6 +12,7 @@ let currentScreen = "home";
 let currentTab = "home";
 let detailReturnScreen = "home";
 let currentDetailTicker = "";
+let currentDetailIndexer = "rapidIndex";
 let marketFeed = null;
 let marketFeedLoadedAt = 0;
 let marketFeedLoading = false;
@@ -494,21 +495,17 @@ function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = (
 
 $("quick-search").addEventListener("submit", event => event.preventDefault());
 attachStockAutocomplete("quick-ticker", "quick-suggestions", "home");
-$("horizon").addEventListener("change", () => {
-  if (Number($("horizon").value) === 504) $("period").value = "max";
-});
-$("period").addEventListener("change", () => {
-  if ($("period").value !== "max" && Number($("horizon").value) === 504) $("horizon").value = "30";
-});
-attachStockAutocomplete("ticker", "search-suggestions", "search", () => ({
-  period: $("period").value,
-  horizon: Number($("horizon").value)
-}));
+attachStockAutocomplete("ticker", "search-suggestions", "search");
 
 async function openStockDetails(ticker, options = {}) {
   const symbol = String(ticker || "").trim().toUpperCase();
   if (!symbol) return;
   currentDetailTicker = symbol;
+  const indexer = options.indexer === "SlowIndex" ? "SlowIndex" : "rapidIndex";
+  currentDetailIndexer = indexer;
+  const period = indexer === "SlowIndex" ? "max" : "5y";
+  const horizon = indexer === "SlowIndex" ? 504 : 30;
+  updateDetailIndexerSwitch();
   if (!config.supabaseUrl || !config.supabasePublishableKey) {
     switchScreen("detail");
     $("detail-status").textContent = "Supabase is not configured. Add the project URL and publishable key to the app deployment variables.";
@@ -517,8 +514,6 @@ async function openStockDetails(ticker, options = {}) {
 
   detailReturnScreen = options.returnScreen || (currentScreen === "detail" ? detailReturnScreen : currentScreen);
   $("ticker").value = symbol;
-  $("period").value = options.period || "5y";
-  $("horizon").value = String(options.horizon || 30);
   switchScreen("detail");
 
   $("results").hidden = true;
@@ -529,7 +524,7 @@ async function openStockDetails(ticker, options = {}) {
   try {
     const request = options.jobId
       ? { id: options.jobId, status: "queued", reused: true }
-      : await requestAnalysis(symbol, $("period").value, Number($("horizon").value), "analysis", options.hardRescan === true);
+      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true);
     trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
@@ -563,12 +558,28 @@ async function openStockDetails(ticker, options = {}) {
 }
 
 $("search").addEventListener("submit", event => event.preventDefault());
+function updateDetailIndexerSwitch() {
+  document.querySelectorAll("#detail-indexer-switch [data-indexer]").forEach(button => {
+    const selected = button.dataset.indexer === currentDetailIndexer;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
+$("detail-indexer-switch").addEventListener("click", event => {
+  const button = event.target.closest("[data-indexer]");
+  if (!button || button.dataset.indexer === currentDetailIndexer || !currentDetailTicker) return;
+  openStockDetails(currentDetailTicker, {
+    returnScreen: detailReturnScreen,
+    indexer: button.dataset.indexer
+  });
+});
+
 $("detail-hard-rerun").addEventListener("click", () => {
   if (!currentDetailTicker) return;
   openStockDetails(currentDetailTicker, {
     returnScreen: detailReturnScreen,
-    period: $("period").value,
-    horizon: Number($("horizon").value),
+    indexer: currentDetailIndexer,
     hardRescan: true
   });
 });
