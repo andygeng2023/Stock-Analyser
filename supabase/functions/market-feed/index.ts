@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
 
       if (!suggestions.length) {
         const fallback = await admin.from("market_index")
-          .select("ticker,result")
+          .select("ticker,company:result->>company,exchange:result->>exchange")
           .eq("period", "5y")
           .eq("horizon", 30)
          .eq("indexer", "rapidIndex")
@@ -89,8 +89,8 @@ Deno.serve(async (req: Request) => {
         suggestions = (fallback.data ?? [])
           .map((row: any) => ({
             ticker: String(row.ticker),
-            company: String(row.result?.company || row.ticker),
-            exchange: row.result?.exchange || null,
+            company: String(row.company || row.ticker),
+            exchange: row.exchange || null,
             type: "Indexed stock",
           }))
           .filter((item: any) =>
@@ -110,7 +110,7 @@ Deno.serve(async (req: Request) => {
 
     const [indexResponse, scanResponse] = await Promise.all([
       admin.from("market_index")
-        .select("ticker,indexed_at,market_cap,avg_dollar_volume,priority,result")
+        .select("ticker,indexed_at,market_cap,avg_dollar_volume,priority,company:result->>company,exchange:result->>exchange,currency:result->>currency,price:result->>price,change_percent:result->>change_percent,fundamentals_market_cap:result->fundamentals->>market_cap,return_1m:result->market_summary->>return_1m,return_1y:result->market_summary->>return_1y,annualized_volatility:result->market_summary->>annualized_volatility,max_drawdown:result->market_summary->>max_drawdown,profit_margin:result->fundamentals->>profit_margin,return_on_equity:result->fundamentals->>return_on_equity,expected_change_percent:result->forecast->>expected_change_percent,directional_accuracy:result->model->metrics->hybrid->>directional_accuracy,sector:result->fundamentals->>sector,industry:result->fundamentals->>industry")
         .eq("period", "5y")
         .eq("horizon", 30)
           .eq("indexer", "rapidIndex")
@@ -130,21 +130,16 @@ Deno.serve(async (req: Request) => {
     if (scanResponse.error) throw scanResponse.error;
 
     const records = (indexResponse.data ?? []).map((row: any) => {
-      const result = row.result ?? {};
-      const fundamentals = result.fundamentals ?? {};
-      const market = result.market_summary ?? {};
-      const metrics = result.model?.metrics?.hybrid ?? {};
-      const forecast = result.forecast ?? {};
-      const marketCap = number(row.market_cap ?? fundamentals.market_cap, 0);
+      const marketCap = number(row.market_cap ?? row.fundamentals_market_cap, 0);
       const dollarVolume = number(row.avg_dollar_volume, 0);
-      const return1m = number(market.return_1m, 0);
-      const return1y = number(market.return_1y, 0);
-      const volatility = number(market.annualized_volatility, 100);
-      const drawdown = number(market.max_drawdown, -100);
-      const profitMargin = number(fundamentals.profit_margin, -1);
-      const roe = number(fundamentals.return_on_equity, -1);
-      const expectedChange = optionalNumber(forecast.expected_change_percent);
-      const directionalAccuracy = optionalNumber(metrics.directional_accuracy);
+      const return1m = number(row.return_1m, 0);
+      const return1y = number(row.return_1y, 0);
+      const volatility = number(row.annualized_volatility, 100);
+      const drawdown = number(row.max_drawdown, -100);
+      const profitMargin = number(row.profit_margin, -1);
+      const roe = number(row.return_on_equity, -1);
+      const expectedChange = optionalNumber(row.expected_change_percent);
+      const directionalAccuracy = optionalNumber(row.directional_accuracy);
 
       // This is an editorial screening score, not a predicted return or rating.
       const qualityScore =
@@ -156,11 +151,11 @@ Deno.serve(async (req: Request) => {
 
       return {
         ticker: row.ticker,
-        company: result.company || row.ticker,
-        exchange: result.exchange ?? null,
-        currency: result.currency || "USD",
-        price: result.price ?? null,
-        change_percent: result.change_percent ?? null,
+        company: row.company || row.ticker,
+        exchange: row.exchange ?? null,
+        currency: row.currency || "USD",
+        price: optionalNumber(row.price),
+        change_percent: optionalNumber(row.change_percent),
         market_cap: marketCap || null,
         avg_dollar_volume: dollarVolume || null,
         return_1m: return1m,
@@ -171,31 +166,20 @@ Deno.serve(async (req: Request) => {
         return_on_equity: roe,
         expected_change_percent: expectedChange,
         directional_accuracy: directionalAccuracy,
-        sector: fundamentals.sector ?? null,
-        industry: fundamentals.industry ?? null,
+        sector: row.sector ?? null,
+        industry: row.industry ?? null,
         indexed_at: row.indexed_at,
         quality_score: Math.round(qualityScore * 100) / 100,
       };
     });
 
-    const chartByTicker = new Map<string, { history_preview: number[]; forecast_preview: number[] }>();
-    for (const row of indexResponse.data ?? []) {
-      const result = (row as any).result ?? {};
-      chartByTicker.set((row as any).ticker, {
-        history_preview: sampleSeries(result.history?.close, 44),
-        forecast_preview: sampleSeries(result.forecast?.hybrid, 12),
-      });
-    }
-
     const unique = new Map<string, any>();
+
     for (const record of records) {
       if (!unique.has(record.ticker)) unique.set(record.ticker, record);
     }
     const stocks = [...unique.values()];
-    const withChartPreview = (items: any[]) => items.map((stock) => ({
-      ...stock,
-      ...(chartByTicker.get(stock.ticker) ?? { history_preview: [], forecast_preview: [] }),
-    }));
+    const withChartPreview = (items: any[]) => items;
     const stockByTicker = new Map(stocks.map((stock) => [stock.ticker, stock]));
     const liquid = stocks.filter((s) => s.avg_dollar_volume >= 2_000_000 && s.market_cap >= 100_000_000);
     const smaller = liquid.filter((s) => s.market_cap < 2_000_000_000);
@@ -261,7 +245,6 @@ Deno.serve(async (req: Request) => {
             validation_rmse: item.validation_rmse ?? null,
             return_1m: stockByTicker.get(item.ticker)?.return_1m ?? null,
             annualized_volatility: stockByTicker.get(item.ticker)?.annualized_volatility ?? null,
-            ...(chartByTicker.get(item.ticker) ?? { history_preview: [], forecast_preview: [] }),
           })),
         }
       : null;
