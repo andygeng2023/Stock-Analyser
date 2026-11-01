@@ -210,7 +210,7 @@ def run(shard, indexer="rapidIndex"):
             result = analyze_ticker(ticker, period=period, horizon=horizon)
             job = db_post("analysis_jobs", {
                 "ticker": ticker, "period": period, "horizon": horizon,
-                "job_type": "analysis", "scan_source": "both",
+                "job_type": "analysis", "scan_source": "both", "save_to_indexer": indexer,
                 "status": "completed", "result": result, "error": None,
                 "client_ip_hash": "market-indexer", "attempts": 1,
                 "progress": 100, "stage": f"Completed by {indexer}",
