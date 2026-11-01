@@ -45,7 +45,7 @@ def update_job(job_id: str, payload: dict) -> None:
 
 
 
-def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, result: dict) -> None:
+def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, result: dict, indexer: str) -> None:
     fundamentals = result.get("fundamentals") or {}
     market_cap = fundamentals.get("market_cap") or fundamentals.get("marketCap")
     try:
@@ -53,7 +53,7 @@ def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, res
     except (TypeError, ValueError):
         market_cap = None
     payload = {
-        "ticker": ticker, "period": period, "horizon": horizon, "result": result,
+        "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer, "result": result,
         "source_job_id": job_id, "indexed_at": datetime.now(timezone.utc).isoformat(),
         "market_cap": market_cap,
         "priority": float(result.get("market_summary", {}).get("average_dollar_volume", 0) or 0),
@@ -70,7 +70,8 @@ def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, res
         method="POST",
         payload={
             "ticker": ticker, "market_cap": market_cap,
-            "priority": payload["priority"], "last_indexed_at": payload["indexed_at"],
+            "priority": payload["priority"],
+            ("last_slow_indexed_at" if indexer == "SlowIndex" else "last_indexed_at"): payload["indexed_at"],
             "updated_at": payload["indexed_at"],
         },
         headers={"apikey": key, "Authorization": f"Bearer {key}", "Prefer": "resolution=merge-duplicates,return=minimal"},
@@ -118,9 +119,12 @@ def process_job(job: dict) -> None:
         else:
             result = analyze_ticker(ticker, job["period"], int(job["horizon"]), progress_callback=report_progress)
         update_job(job_id, {"status": "completed", "result": result, "error": None, "progress": 100, "stage": "Complete"})
-        if job.get("job_type") != "scan":
+        if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") != "none":
             try:
-                upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]), result)
+                upsert_market_index(
+                    job_id, ticker, job["period"], int(job["horizon"]), result,
+                    job.get("save_to_indexer") or "rapidIndex",
+                )
             except Exception as index_error:
                 print(f"Could not update market index for {ticker}: {index_error}", file=sys.stderr)
         print(f"Analysis completed for {ticker} ({job_id}).")
