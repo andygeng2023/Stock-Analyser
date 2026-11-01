@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
     const items = await Promise.all(tickers.map(async (ticker) => {
       const row: any = byTicker.get(ticker);
       const cached: any = row?.result ?? {};
-      const cachedHistory = sample(cached.history?.close);
+      const cachedHistory = sample(cached.history?.close ?? cached.history_preview ?? cached.historical?.close ?? cached.price_history);
       // Reuse cached history; only download long history if no cache exists.
       // Routine refreshes use a smaller quote request rather than redownloading a year.
       try {
