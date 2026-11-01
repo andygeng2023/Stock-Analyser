@@ -7,7 +7,7 @@
 <title>Analyser</title>
 <link rel="stylesheet" href="./style.css?v=auth-watchlist-02">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0"></script>
 <script src="./config.js"></script>
 </head>
 <body>
@@ -25,7 +25,7 @@
       <h2 id="auth-title">Sign in</h2>
       <p id="auth-description" class="muted">Sign in to sync your watchlist across devices.</p>
       <form id="auth-form" class="auth-form">
-        <label>Email address<input id="auth-email" type="email" required autocomplete="email" maxlength="254" placeholder="you@example.com"></label>
+        <label id="auth-email-label">Email address<input id="auth-email" type="email" required autocomplete="email" maxlength="254" placeholder="you@example.com"></label>
         <label id="auth-password-label">Password<input id="auth-password" type="password" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters"></label>
         <button id="auth-submit" type="submit">Sign in</button>
       </form>
