@@ -2401,7 +2401,19 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   grid-template-columns: 42px minmax(180px, .8fr) minmax(0, 1.2fr);
   padding: 14px 0;
 }
-#settings-screen .settings-v2-form,
+#settings-screen .settings-v2-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
 #settings-screen .settings-v2-actions {
   display: flex;
   min-width: 0;
@@ -2416,11 +2428,32 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   box-shadow: none;
 }
 #settings-screen .settings-v2-form input {
-  flex: 1 1 160px;
-  width: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+#settings-screen .settings-v2-password-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+#settings-screen .settings-v2-form-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   min-width: 0;
 }
-#settings-screen .settings-v2-password-form input { flex-basis: 130px; }
+#settings-screen .settings-v2-form-fields input {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+#settings-screen .settings-v2-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
 #settings-screen .settings-v2-form button,
 #settings-screen .settings-v2-actions button {
   flex: 0 0 auto;
@@ -2566,20 +2599,19 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   font-weight: 700;
 }
 #settings-screen .settings-v2-profile-fields {
-  display: flex;
-  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: flex-end;
   gap: 10px;
-}
-#settings-screen .settings-v2-profile-fields input {
-  flex: 0 1 360px;
   width: 100%;
   min-width: 0;
-  max-width: 360px;
+}
+#settings-screen .settings-v2-profile-fields input {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 #settings-screen .settings-v2-profile-fields button {
-  flex: 0 0 auto;
   white-space: nowrap;
 }
 #settings-screen .settings-v2-subheading {
@@ -2633,9 +2665,12 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
 }
 @media (max-width: 420px) {
   #settings-screen .settings-v2-profile-fields {
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
-  #settings-screen .settings-v2-profile-fields input {
-    flex-basis: 100%;
+  #settings-screen .settings-v2-profile-fields button {
+    justify-self: end;
+  }
+  #settings-screen .settings-v2-form-actions {
+    justify-content: flex-end;
   }
 }
