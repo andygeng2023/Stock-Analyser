@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1120">
+<title>About Stock Analyser · Stock Analyser</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("stock-analyser-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}</script>
+<link rel="stylesheet" href="./standalone.css?v=account-pages-02">
+</head>
+<body>
+<div class="page-shell">
+  <header class="page-top">
+    <a class="brand" href="./index.html?tab=settings"><span class="brand-mark">A</span><span>Stock Analyser</span></a>
+    <a class="back-link" href="./index.html?tab=settings">← Back to Settings</a>
+  </header>
+  <main class="page-content">
+    <small class="eyebrow">ABOUT THE PROJECT</small>
+    <h1>About Stock Analyser</h1>
+    <p class="lead">An experimental market-data indexing and stock-research application.</p>
+    <div class="prose">
+<h2>What it does</h2>
+<p>Stock Analyser combines a shared market-data index with an experimental ARIMA–SVR analysis model. Search and market screens let you explore indexed companies, while detailed views present historical prices, model forecasts, technical indicators, fundamentals and model diagnostics.</p>
+<h2>Indexers</h2>
+<h3>RapidIndex</h3>
+<p>RapidIndex uses five years of price history and a 30-trading-day forecast horizon. It powers the shared market cache and the WatchIndex refresh process.</p>
+<h3>SlowIndex</h3>
+<p>SlowIndex uses the maximum available history and an approximately one-year forecast horizon. It is intended for a longer-horizon comparison with RapidIndex.</p>
+<h3>WatchIndex</h3>
+<p>WatchIndex checks saved watchlists across accounts. It reuses a recent RapidIndex result when one has been indexed within the six-hour cache window and refreshes stale or missing entries otherwise.</p>
+<h2>Important limitations</h2>
+<p>Forecasts are experimental statistical estimates, not calibrated guarantees or personalised recommendations. Market data may be delayed, incomplete or unavailable. Always check source information independently.</p>
+<h2>Project links</h2>
+<ul>
+<li><a href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer">Source code and project repository</a></li>
+<li><a href="https://github.com/andygeng2023/Stock-Analyser/actions" target="_blank" rel="noopener noreferrer">Background worker, test and deployment runs</a></li>
+<li><a href="https://github.com/andygeng2023/Stock-Analyser/issues" target="_blank" rel="noopener noreferrer">Report an issue or request a change</a></li>
+</ul>
+</div>
+  </main>
+  <footer class="page-footer">Stock Analyser · Research and learning tool · <a href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer">GitHub repository</a></footer>
+</div>
+</body>
+</html>
