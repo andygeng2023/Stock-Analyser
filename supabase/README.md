@@ -21,23 +21,31 @@ Deploy the functions:
 
 - `request-analysis` with JWT verification disabled (public endpoint with server-side rate limiting).
 - `analysis-status` with JWT verification disabled (job UUID acts as an unguessable read token).
-- `watchlist` with JWT verification disabled (the browser supplies a random profile UUID; the function stores the list in Turso and never exposes its database token).
+- `watchlist` with JWT verification enabled (only a verified signed-in user can access their own PostgreSQL watchlist).
 
 The analysis endpoints validate inputs and never return or expose server secrets. The status function only returns the result associated with the supplied random job UUID. The `watchlist` endpoint validates a random browser-profile UUID and applies the per-profile 100-item limit.
 
-## Watchlist SQLite setup
+## Email authentication and Watchlist
 
-The watchlist uses Turso's managed SQLite-compatible database. A local SQLite file inside GitHub Actions disappears when a runner exits, so the list database must persist outside the runner and be reachable by both the Edge Function and WatchIndex. The Turso engine supports concurrent writes and multi-user access.
+The app uses Supabase Auth email/password accounts. Watchlists are stored in `public.watchlist_items` in this project's PostgreSQL database. The migration `20261101030000_create_authenticated_watchlists.sql` creates the table, indexes, grants and ownership-based RLS policies. It has already been applied to the connected project.
 
-1. Create a Turso account and a database named `stock-analyser-watchlist` using the Turso engine.
-2. Copy the database URL (usually starts with `libsql://`) and create a database-scoped SQL auth token with read/write permissions.
-3. In Supabase Dashboard → Project → Edge Functions → Secrets, add `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`.
-4. In GitHub → Stock-Analyser → Settings → Secrets and variables → Actions → Secrets, add the same two secrets.
-5. The `watchlist` Edge Function and WatchIndex worker create the `watchlist_items` table and index automatically on first use. The scheduled WatchIndex workflow then begins polling all unique tickers in all users' lists.
+In Supabase Dashboard → Authentication → Sign In / Providers:
 
-Do not use a Turso organization API token in place of the database SQL auth token, and do not put either value in `app/static/config.js` or frontend code.
+1. Enable the **Email** provider.
+2. Ensure **Allow new users to sign up** is enabled.
+3. Keep email confirmation enabled so new accounts must verify ownership of their email address.
 
-The current dashboard has no sign-in system. Each browser profile gets a random local watchlist identity, so its list is tied to that browser profile and is not synced between devices. Account sign-in would be needed for cross-device syncing.
+In Authentication → URL Configuration:
+
+- Set **Site URL** to `https://andygeng2023.github.io/Stock-Analyser/`.
+- Add `https://andygeng2023.github.io/Stock-Analyser/**` to the Redirect URLs allow list.
+- If developing locally, also add the exact local development URL you use.
+
+The frontend sends confirmation and password-reset links back to the GitHub Pages app. Supabase's default email sender has sending limits; configure custom SMTP in Auth settings if the built-in sender is insufficient. Do not disable email confirmation for a public deployment.
+
+The account dialog supports sign-up, sign-in, sign-out, password-reset email and setting a new password from the recovery link. Browsing and analysis requests remain available without signing in; adding to or viewing a saved watchlist requires a verified signed-in session.
+
+The watchlist Edge Function validates the access token with Supabase Auth and uses the caller's JWT for all watchlist table operations. Row-level security restricts reads, inserts and deletes to rows whose `user_id` equals `auth.uid()`. The service-role key is used only server-side to read shared market-index results. The browser never receives it.
 
 ## 3. Configure GitHub Actions secrets
 
@@ -46,7 +54,7 @@ In GitHub repository Settings → Secrets and variables → Actions → Secrets,
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-The workflow needs these only on the server-side runner to save the completed result.
+The analysis and WatchIndex workflows need these only on the server-side runner to save completed results and read all watchlist tickers.
 
 ## 4. Configure GitHub Pages variables
 
