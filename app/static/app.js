@@ -938,24 +938,24 @@ async function refreshVisibleMarketCards(force = false) {
     .filter(el => el.offsetParent !== null);
   const tickers = [...new Set(visible.map(el => el.dataset.ticker || el.dataset.watchTicker).filter(Boolean))].slice(0, 60);
   if (!tickers.length) return;
+
   visibleMarketRefreshBusy = true;
-  try {
-    const response = await fetch(api("stock-market-data"), {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ tickers })
-    });
-    const payload = await response.json();
-    if (!response.ok) throw Error(payload.error || "Could not refresh market data.");
-    const byTicker = new Map((payload.items || []).map(item => [item.ticker, item]));
-    for (const card of visible) {
-      const ticker = card.dataset.ticker || card.dataset.watchTicker;
-      const live = byTicker.get(ticker);
-      if (!live) continue;
+  visibleMarketRefreshAt = Date.now();
+  const cardsByTicker = new Map();
+  for (const card of visible) {
+    const ticker = card.dataset.ticker || card.dataset.watchTicker;
+    if (!cardsByTicker.has(ticker)) cardsByTicker.set(ticker, []);
+    cardsByTicker.get(ticker).push(card);
+  }
+
+  const applyMarketItem = (ticker, live) => {
+    for (const card of cardsByTicker.get(ticker) || []) {
+      if (!card.isConnected) continue;
       const history = Array.isArray(live.history_preview) ? live.history_preview : [];
       const chart = stockSparkline(live);
       const chartNode = card.querySelector(".stock-sparkline, .stock-chart-placeholder");
       if (chartNode && history.length) chartNode.outerHTML = chart;
+
       const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
       if (priceNode && live.price != null) priceNode.textContent = cash(live.price, live.currency);
       const dailyNode = card.querySelector(".stock-daily-change, .watchlist-v2-daily");
@@ -964,6 +964,7 @@ async function refreshVisibleMarketCards(force = false) {
         dailyNode.classList.toggle("negative", Number(live.change_percent) < 0);
         dailyNode.classList.toggle("positive", Number(live.change_percent) >= 0);
       }
+
       const hasRapidIndex = Array.isArray(live.forecast_preview) && live.forecast_preview.length > 0;
       const isWatchlistCard = card.matches(".watchlist-v2-item");
       if (!isWatchlistCard && !hasRapidIndex && !rapidIndexQueuePending.has(ticker)) {
@@ -978,9 +979,29 @@ async function refreshVisibleMarketCards(force = false) {
           .finally(() => rapidIndexQueuePending.delete(ticker));
       }
     }
-    visibleMarketRefreshAt = Date.now();
-  } catch (error) {
-    console.warn("Live market refresh unavailable:", error);
+  };
+
+  try {
+    // Small sequential batches let each group of charts appear without waiting
+    // for the entire visible market universe to finish loading.
+    const batchSize = 6;
+    for (let offset = 0; offset < tickers.length; offset += batchSize) {
+      const batch = tickers.slice(offset, offset + batchSize);
+      try {
+        const response = await fetch(api("stock-market-data"), {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ tickers: batch })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw Error(payload.error || "Could not refresh market data.");
+        for (const item of payload.items || []) {
+          if (item?.ticker) applyMarketItem(item.ticker, item);
+        }
+      } catch (error) {
+        console.warn("Could not refresh market-data batch:", error);
+      }
+    }
   } finally {
     visibleMarketRefreshBusy = false;
   }
