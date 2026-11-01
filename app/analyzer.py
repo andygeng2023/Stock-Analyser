@@ -60,8 +60,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         raise AnalysisError("Enter a valid ticker.")
     if period not in {"1y","2y","5y","10y","max"}:
         raise AnalysisError("Invalid history period.")
-    if not 1<=horizon<=60:
-        raise AnalysisError("Forecast horizon must be 1–60 trading days.")
+    if not 1<=horizon<=504:
+        raise AnalysisError("Forecast horizon must be 1–504 trading days.")
     try:
         asset=yf.Ticker(ticker)
         history=asset.history(period=period,auto_adjust=True)
@@ -183,7 +183,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         deviation=close.rolling(20).std()
         drawdown=close/close.cummax()-1
         annual_vol=float(returns.tail(252).std()*np.sqrt(252)*100)
-        chart=history.tail(500)
+        chart=history
         forecast_dates=pd.bdate_range(close.index[-1]+pd.offsets.BDay(1),periods=horizon)
 
         return {
