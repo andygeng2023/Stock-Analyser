@@ -737,7 +737,7 @@ function moneyCompact(value) {
 }
 
 function watchlistCard(item) {
-  const data = item.analysis;
+  const data = item.analysis || null;
   const summary = data?.market_summary || {};
   const fundamentals = data?.fundamentals || {};
   const accuracy = data?.model?.metrics?.hybrid?.directional_accuracy;
@@ -748,33 +748,59 @@ function watchlistCard(item) {
   const dailyClass = Number(daily) < 0 ? "negative" : "positive";
   const expectedClass = Number(expected) < 0 ? "negative" : "positive";
   const forecastDays = data?.forecast?.horizon ?? 30;
-  const direction = accuracy == null ? "—" : fmt(accuracy, 0) + "%";
-  const marketCap = moneyCompact(fundamentals.market_cap);
   const meta = fundamentals.sector || fundamentals.industry || "Company research";
-  const status = data ? "RapidIndex" + (updated ? " · Updated " + esc(updated) : "") : "Waiting for WatchIndex";
+  const status = data
+    ? "RapidIndex" + (updated ? " · Updated " + esc(updated) : "")
+    : "Waiting for WatchIndex";
+
+  const stats = [];
+  const addStat = (label, value, formatted, tone = "") => {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return;
+    stats.push(
+      '<span class="watchlist-v2-stat">' +
+        '<small>' + esc(label) + '</small>' +
+        '<strong' + (tone ? ' class="' + tone + '"' : '') + '>' + esc(formatted) + '</strong>' +
+      '</span>'
+    );
+  };
+  addStat("1-month return", summary.return_1m, pct(summary.return_1m), Number(summary.return_1m) < 0 ? "negative" : "positive");
+  addStat("1-year return", summary.return_1y, pct(summary.return_1y), Number(summary.return_1y) < 0 ? "negative" : "positive");
+  addStat("Forecast · " + forecastDays + " days", expected, pct(expected), expectedClass);
+  addStat("Model direction", accuracy, fmt(accuracy, 0) + "%");
+  addStat("Annual volatility", summary.annualized_volatility, pct(summary.annualized_volatility));
+  addStat("Maximum drawdown", summary.max_drawdown, pct(summary.max_drawdown));
+  addStat("Market capitalisation", fundamentals.market_cap, moneyCompact(fundamentals.market_cap));
+
   const chart = stockSparkline({
     history_preview: data?.history_preview || [],
     forecast_preview: data?.forecast_preview || [],
     expected_change_percent: expected
   });
-  return '<article class="watch-card">' +
-    '<button type="button" class="watch-card-open" data-watch-open="' + esc(item.ticker) + '" aria-label="Open analysis for ' + esc(item.ticker) + '">' +
-      '<span class="watch-card-info">' +
-        '<span class="watch-card-head"><span><strong class="watch-card-ticker">' + esc(item.ticker) + '</strong><span class="watch-card-company">' + esc(company) + '</span></span>' +
-        '<span class="watch-card-price">' + esc(cash(data?.price, data?.currency)) + '<small class="watch-card-daily ' + dailyClass + '">' + esc(pct(daily)) + ' today</small></span></span>' +
-        '<span class="watch-card-stats">' +
-          '<span><small>1 month</small><strong>' + esc(pct(summary.return_1m)) + '</strong></span>' +
-          '<span><small>1 year</small><strong>' + esc(pct(summary.return_1y)) + '</strong></span>' +
-          '<span><small>Forecast · ' + esc(forecastDays) + 'D</small><strong class="' + expectedClass + '">' + esc(pct(expected)) + '</strong></span>' +
-          '<span><small>Model direction</small><strong>' + esc(direction) + '</strong></span>' +
-          '<span><small>Volatility</small><strong>' + esc(pct(summary.annualized_volatility)) + '</strong></span>' +
-          '<span><small>Market cap</small><strong>' + esc(marketCap) + '</strong></span>' +
-        '</span>' +
-        '<span class="watch-card-footer"><span>' + esc(meta) + '</span><span>' + status + '</span></span>' +
+  const quote = data
+    ? '<strong class="watchlist-v2-price">' + esc(cash(data.price, data.currency)) + '</strong>' +
+      '<small class="watchlist-v2-daily ' + dailyClass + '">' + esc(pct(daily)) + ' today</small>'
+    : '<strong class="watchlist-v2-price">Pending</strong><small class="watchlist-v2-daily">Awaiting indexed price</small>';
+
+  return '<article class="watchlist-v2-item">' +
+    '<button type="button" class="watchlist-v2-main" data-watch-open="' + esc(item.ticker) + '" aria-label="Open analysis for ' + esc(item.ticker) + '">' +
+      '<span class="watchlist-v2-identity">' +
+        '<strong class="watchlist-v2-ticker">' + esc(item.ticker) + '</strong>' +
+        '<span class="watchlist-v2-company">' + esc(company) + '</span>' +
       '</span>' +
-      '<span class="watch-card-chart">' + chart + '<small>Historical price · RapidIndex forecast</small></span>' +
+      '<span class="watchlist-v2-quote">' + quote + '</span>' +
+      '<span class="watchlist-v2-chart">' +
+        '<span class="watchlist-v2-chart-heading"><span>Price history</span><span>RapidIndex</span></span>' +
+        chart +
+      '</span>' +
     '</button>' +
-    '<button type="button" class="watch-card-remove" data-watch-remove="' + esc(item.ticker) + '" aria-label="Remove ' + esc(item.ticker) + ' from watchlist">Remove</button>' +
+    '<div class="watchlist-v2-stats">' +
+      (stats.length ? stats.join("") : '<span class="watchlist-v2-no-stats">Market statistics will appear when WatchIndex completes this stock.</span>') +
+    '</div>' +
+    '<footer class="watchlist-v2-footer">' +
+      '<span class="watchlist-v2-company-meta">' + esc(meta) + '</span>' +
+      '<span class="watchlist-v2-status">' + status + '</span>' +
+      '<button type="button" class="watch-card-remove watchlist-v2-remove" data-watch-remove="' + esc(item.ticker) + '" aria-label="Remove ' + esc(item.ticker) + ' from watchlist">Remove</button>' +
+    '</footer>' +
   '</article>';
 }
 
