@@ -11,4 +11,4 @@ alter table public.market_index
   add column if not exists indexer text not null default 'rapidIndex';
 update public.market_index
    set indexer = 'SlowIndex'
- where period = 'max' and horizon = 504;
+ where period = 'max' and horizon = 504; -- legacy two-year SlowIndex rows; new rows use 252 days
