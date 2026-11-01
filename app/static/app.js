@@ -26,11 +26,15 @@ let queueRefreshBusy = false;
 const locallyPollingJobIds = new Set();
 
 function loadTrackedJobs() {
-  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); }
-  catch { return []; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+    // Completed/failed requests are not queue entries; discard any left by older versions.
+    return Array.isArray(saved) ? saved.filter(job => job && job.id && !["completed", "failed"].includes(job.status)) : [];
+  } catch { return []; }
 }
 function saveTrackedJobs() {
-  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(trackedJobs.slice(0, 30))); } catch {}
+  trackedJobs = trackedJobs.filter(job => job && job.id && !["completed", "failed"].includes(job.status)).slice(0, 30);
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(trackedJobs)); } catch {}
   renderGlobalQueue();
 }
 function trackJob(job) {
@@ -45,7 +49,10 @@ function updateTrackedJob(id, data) {
   if (!item) return;
   Object.assign(item, { status: data.status || item.status, progress: Math.max(0, Math.min(100, Number(data.progress) || 0)),
     stage: data.stage || item.stage, error: data.error || null });
-  if (["completed", "failed"].includes(item.status)) item.finishedAt = Date.now();
+  // Remove terminal jobs immediately from the dropdown, count, and persisted queue.
+  if (["completed", "failed"].includes(item.status)) {
+    trackedJobs = trackedJobs.filter(job => job.id !== id);
+  }
   saveTrackedJobs();
 }
 function renderGlobalQueue() {
