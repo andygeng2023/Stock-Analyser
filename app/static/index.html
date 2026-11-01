@@ -4,23 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1120">
-<title>Stock Analyser</title>
+<title>Analyser</title>
 <link rel="stylesheet" href="./style.css?v=fixed-analyser-bar-01">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="./config.js"></script>
 </head>
 <body>
-<div class="app-topbar">
-  <a class="topbar-brand" href="./" aria-label="Analyser home">Analyser</a>
-  <div class="global-queue">
-    <button id="global-queue-toggle" class="global-queue-toggle" type="button" aria-label="Show queued requests" aria-expanded="false">Queue <span id="global-queue-count"></span></button>
-    <div id="global-queue-popover" class="global-queue-popover" hidden><div class="queue-popover-title">Queued requests</div><div id="global-queue-list"></div></div>
-  </div>
-  <div class="demo-profile" aria-label="Demo user profile">
-    <span class="demo-avatar" aria-hidden="true">DU</span>
-    <span class="demo-profile-name">Demo User</span>
-    <span class="demo-profile-label">Demo</span>
-  </div>
+<div class="global-queue">
+  <button id="global-queue-toggle" class="global-queue-toggle" type="button" aria-label="Show queued requests" aria-expanded="false">Queue <span id="global-queue-count"></span></button>
+  <div id="global-queue-popover" class="global-queue-popover" hidden><div class="queue-popover-title">Active requests</div><div id="global-queue-list"></div></div>
 </div>
 <main>
 
