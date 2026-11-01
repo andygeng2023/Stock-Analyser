@@ -1894,3 +1894,72 @@ html[data-theme="light"] #settings-screen .settings-v2-account-heading{
     grid-template-columns:42px minmax(0,1fr);
   }
 }
+
+
+/* Settings alignment refinement: keep the expanded account controls on the
+   same content grid as the rest of Settings, without a separate inset panel. */
+#settings-screen .settings-v2-account-block{
+  margin-top:12px;
+}
+#settings-screen .settings-v2-account-controls{
+  padding:4px 0 12px;
+}
+#settings-screen .settings-v2-subheading{
+  padding-left:77px;
+}
+#settings-screen .settings-v2-facts{
+  width:calc(100% - 77px);
+  margin-left:77px;
+}
+#settings-screen .settings-v2-profile-form{
+  padding-left:77px;
+}
+#settings-screen .settings-v2-feedback{
+  margin-left:77px;
+}
+#settings-screen .settings-v2-control-row{
+  padding-left:14px;
+}
+html[data-theme="light"] #settings-screen .settings-v2-profile-form input,
+html[data-theme="light"] #settings-screen .settings-v2-form input{
+  background:#f4f6fa!important;
+  border-color:#d8e1eb!important;
+  color:#172235!important;
+  box-shadow:none!important;
+}
+html[data-theme="light"] #settings-screen .settings-v2-profile-form input:focus,
+html[data-theme="light"] #settings-screen .settings-v2-form input:focus{
+  background:#f8f9fc!important;
+  border-color:#9aafd0!important;
+  outline:2px solid rgba(70,112,174,.18);
+  outline-offset:1px;
+}
+@media(max-width:700px){
+  #settings-screen .settings-v2-subheading{
+    padding-left:64px;
+  }
+  #settings-screen .settings-v2-facts{
+    width:calc(100% - 64px);
+    margin-left:64px;
+  }
+  #settings-screen .settings-v2-profile-form{
+    width:calc(100% - 64px);
+    margin-left:64px;
+    padding:14px 0;
+  }
+  #settings-screen .settings-v2-feedback{
+    margin-left:64px;
+  }
+}
+@media(max-width:390px){
+  #settings-screen .settings-v2-subheading{padding-left:60px}
+  #settings-screen .settings-v2-facts{
+    width:calc(100% - 60px);
+    margin-left:60px;
+  }
+  #settings-screen .settings-v2-profile-form{
+    width:calc(100% - 60px);
+    margin-left:60px;
+  }
+  #settings-screen .settings-v2-feedback{margin-left:60px}
+}
