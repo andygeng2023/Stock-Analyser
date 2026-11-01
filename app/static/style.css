@@ -2569,7 +2569,7 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 10px;
 }
 #settings-screen .settings-v2-profile-fields input {
@@ -2580,6 +2580,7 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
 }
 #settings-screen .settings-v2-profile-fields button {
   flex: 0 0 auto;
+  margin-left: auto;
   white-space: nowrap;
 }
 #settings-screen .settings-v2-subheading {
