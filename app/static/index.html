@@ -5,13 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1120">
 <title>Analyser</title>
-<link rel="stylesheet" href="./style.css?v=auth-watchlist-04">
+<link rel="stylesheet" href="./style.css?v=settings-watchlist-01">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
 <script src="./config.js"></script>
 </head>
 <body>
-<button id="account-button" class="account-button" type="button">Sign in</button>
 <div class="global-queue">
   <button id="global-queue-toggle" class="global-queue-toggle" type="button" aria-label="Show queued requests" aria-expanded="false">Queue <span id="global-queue-count"></span></button>
   <div id="global-queue-popover" class="global-queue-popover" hidden><div class="queue-popover-title">Active requests</div><div id="global-queue-list"></div></div>
@@ -162,6 +161,81 @@
   <div id="watchlist-status" class="muted" role="status" aria-live="polite">Loading watchlist…</div>
   <div id="watchlist-grid" class="watchlist-grid"></div>
 </section>
+<section id="settings-screen" class="app-screen" hidden>
+  <div class="page-heading"><div><small>APP PREFERENCES</small><h2>Settings</h2></div></div>
+
+  <div class="settings-layout">
+    <section class="settings-card settings-account-card">
+      <div class="settings-card-copy">
+        <small class="settings-eyebrow">ACCOUNT</small>
+        <h3>Sign in and sync</h3>
+        <p id="settings-account-status" class="muted">Sign in to sync your watchlist across devices.</p>
+      </div>
+      <button id="settings-account-button" type="button">Sign in or create account</button>
+    </section>
+
+    <section class="settings-card settings-appearance-card">
+      <div class="settings-card-copy">
+        <small class="settings-eyebrow">APPEARANCE</small>
+        <h3>Theme</h3>
+        <p id="theme-status" class="muted">Dark mode is active.</p>
+      </div>
+      <button id="theme-toggle" class="secondary-button" type="button">Switch to light mode</button>
+    </section>
+
+    <section class="settings-information">
+      <details class="settings-disclosure">
+        <summary>Privacy Policy</summary>
+        <div class="settings-prose">
+          <p class="settings-updated">Last updated: 1 November 2026</p>
+          <p>Stock Analyser is a stock-research application. This policy describes the information the application handles when you use it.</p>
+          <h4>Information and how it is used</h4>
+          <ul>
+            <li><strong>Account information:</strong> when you register, your email address and authentication records are handled by Supabase Auth.</li>
+            <li><strong>Watchlist:</strong> stocks you save are stored in Supabase PostgreSQL and associated with your account so the list can be synchronised across devices.</li>
+            <li><strong>Analysis requests:</strong> ticker symbols and analysis settings are sent to the application's backend. Analysis jobs are processed through GitHub Actions using market data obtained through Yahoo Finance tools, and completed results may be kept in a shared cache.</li>
+            <li><strong>Local browser storage:</strong> the application stores active request identifiers in your browser so the request queue can continue to display their status after a reload.</li>
+          </ul>
+          <h4>Service providers</h4>
+          <p>The application relies on Supabase for authentication and database services, GitHub for hosted analysis workers and deployment, and Yahoo Finance data accessed through yfinance. Those providers process information under their own terms and privacy policies. Their availability and practices are outside the application's control.</p>
+          <h4>Access and control</h4>
+          <p>Your saved watchlist is available after signing in. You can remove individual saved stocks from the Watchlist tab and sign out from the account panel in Settings. For questions about account-data access or deletion, use the project's <a href="https://github.com/andygeng2023/Stock-Analyser/issues" target="_blank" rel="noopener noreferrer">GitHub issues page</a>.</p>
+          <h4>Security and changes</h4>
+          <p>Watchlist access is restricted using authenticated requests and database row-level security. No internet service can guarantee absolute security. This policy may be updated as the application changes; the date above will be revised when it does.</p>
+        </div>
+      </details>
+
+      <details class="settings-disclosure">
+        <summary>Terms of Service</summary>
+        <div class="settings-prose">
+          <p class="settings-updated">Last updated: 1 November 2026</p>
+          <h4>Research use only</h4>
+          <p>Stock Analyser is provided for educational and informational research. It is not investment advice, a recommendation, an offer to buy or sell securities, or a financial-planning service. It does not assess your personal circumstances or objectives.</p>
+          <h4>Data and model limitations</h4>
+          <p>Market data may be delayed, incomplete, adjusted or unavailable. Statistical models and forecasts are experimental estimates, can be inaccurate, and are not guarantees of future performance. You are responsible for independently checking information and making your own decisions. Consider obtaining advice from an appropriately qualified professional.</p>
+          <h4>Accounts and acceptable use</h4>
+          <p>You are responsible for keeping your account credentials secure and for activity carried out through your account. Do not misuse the service, attempt to disrupt its infrastructure, or use it in a way that violates applicable law or third-party terms.</p>
+          <h4>Availability and third-party services</h4>
+          <p>The application is provided on an as-available basis. Features, stored results and access may change or be interrupted. Some functionality depends on Supabase, GitHub and Yahoo Finance; their services are governed by their own terms.</p>
+          <h4>Limitation</h4>
+          <p>To the extent permitted by applicable law, the application is provided without warranties regarding accuracy, availability or fitness for a particular purpose. Nothing in these terms excludes rights or remedies that cannot legally be excluded.</p>
+        </div>
+      </details>
+
+      <details class="settings-disclosure">
+        <summary>About Stock Analyser</summary>
+        <div class="settings-prose">
+          <p>Stock Analyser combines market-data indexing with an experimental ARIMA–SVR analysis model. RapidIndex provides five years of history and a 30-trading-day horizon; SlowIndex uses the maximum available history and an approximately one-year horizon. Saved watchlists are refreshed by WatchIndex using the shared RapidIndex cache.</p>
+          <p>The application is built as a research and learning tool. It does not provide personalised investment recommendations.</p>
+          <div class="settings-links">
+            <a href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer">Open GitHub repository ↗</a>
+            <a href="https://github.com/andygeng2023/Stock-Analyser/actions" target="_blank" rel="noopener noreferrer">View GitHub Actions ↗</a>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+</section>
 <section id="detail-screen" class="app-screen" hidden>
   <div class="detail-top">
     <button id="detail-back" class="back-button" type="button"><span aria-hidden="true">←</span> Back</button>
@@ -206,7 +280,8 @@
   <button class="nav-tab" id="nav-search" type="button"><span aria-hidden="true">⌕</span>Search</button>
   <button class="nav-tab" id="nav-discover" type="button"><span aria-hidden="true">◫</span>Discover</button>
   <button class="nav-tab" id="nav-watchlist" type="button"><span aria-hidden="true">☆</span>Watchlist</button>
+  <button class="nav-tab" id="nav-settings" type="button"><span aria-hidden="true">⚙</span>Settings</button>
 </nav>
-<script src="./app.js?v=auth-watchlist-02"></script>
+<script src="./app.js?v=settings-watchlist-01"></script>
 </body>
 </html>
