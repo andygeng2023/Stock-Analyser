@@ -1449,7 +1449,7 @@ html[data-theme="light"] #settings-screen .settings-v2-form input{
 }
 #watchlist-screen .watchlist-v2-item{
   display:grid;
-  grid-template-columns:minmax(115px,1.05fr) minmax(105px,.9fr) minmax(125px,1.1fr) minmax(0,2.35fr) 23px;
+  grid-template-columns:fit-content(170px) max-content minmax(140px,190px) minmax(0,1fr) 23px;
   align-items:center;gap:14px;min-width:0;min-height:76px;padding:7px 8px;
   border:0;border-bottom:1px solid var(--border,#293a55);border-radius:0;
   background:transparent;color:inherit;box-shadow:none;transition:background .14s ease;
@@ -1530,7 +1530,7 @@ html[data-theme="light"] #watchlist-screen .watchlist-v2-chart .stock-chart-plac
 html[data-theme="light"] #watchlist-screen .watchlist-v2-remove{color:#65738a}
 @media(max-width:1050px){
   #watchlist-screen .watchlist-v2-item{
-    grid-template-columns:minmax(100px,1.05fr) minmax(88px,.9fr) minmax(100px,1.05fr) minmax(0,2.2fr) 21px;
+    grid-template-columns:fit-content(145px) max-content minmax(105px,140px) minmax(0,1fr) 21px;
     gap:10px;min-height:70px;padding:6px 4px;
   }
   #watchlist-screen .watchlist-v2-ticker{font-size:17px}
@@ -1542,7 +1542,7 @@ html[data-theme="light"] #watchlist-screen .watchlist-v2-remove{color:#65738a}
 }
 @media(max-width:760px){
   #watchlist-screen .watchlist-v2-item{
-    grid-template-columns:minmax(78px,1fr) minmax(70px,.88fr) minmax(76px,.95fr) minmax(0,1.9fr) 20px;
+    grid-template-columns:fit-content(115px) max-content minmax(78px,105px) minmax(0,1fr) 20px;
     gap:7px;min-height:64px;padding:5px 2px;
   }
   #watchlist-screen .watchlist-v2-ticker{font-size:15px}
@@ -1559,7 +1559,7 @@ html[data-theme="light"] #watchlist-screen .watchlist-v2-remove{color:#65738a}
 }
 @media(max-width:520px){
   #watchlist-screen .watchlist-v2-item{
-    grid-template-columns:minmax(65px,1fr) minmax(58px,.82fr) minmax(58px,.82fr) minmax(0,1.25fr) 18px;
+    grid-template-columns:fit-content(90px) max-content minmax(58px,75px) minmax(0,1fr) 18px;
     gap:5px;min-height:58px;padding:4px 1px;
   }
   #watchlist-screen .watchlist-v2-ticker{font-size:13px}
