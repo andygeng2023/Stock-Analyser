@@ -337,10 +337,12 @@ td:first-child,th:first-child{text-align:left}
 }
 
 
-/* Reserve a consistent header band for the fixed global queue on every screen */
-:root { --global-queue-reserved-space: 42px; }
-main { padding-top: var(--global-queue-reserved-space); }
-.detail-mode main { padding-top: var(--global-queue-reserved-space); }
+/* Reserve an explicit header band below the fixed queue on every page.
+   The detail action row gets additional separation so Hard rerun cannot collide with Queue. */
+:root { --global-queue-reserved-space: 64px; }
+body > main { padding-top: var(--global-queue-reserved-space) !important; }
+body.detail-mode > main { padding-top: var(--global-queue-reserved-space) !important; }
+body.detail-mode .detail-top { margin-top: 8px; }
 @media (max-width: 700px) {
-  :root { --global-queue-reserved-space: 40px; }
+  :root { --global-queue-reserved-space: 60px; }
 }
