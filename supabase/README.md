@@ -17,13 +17,13 @@ Set these secrets in Supabase Edge Function secrets:
 - `GITHUB_ANALYSIS_WORKFLOW`: `analyze-stock.yml`
 - `RATE_LIMIT_SALT`: a random private value used to hash requester IP addresses.
 
-Deploy both functions:
+Deploy the functions:
 
 - `request-analysis` with JWT verification disabled (public endpoint with server-side rate limiting).
 - `analysis-status` with JWT verification disabled (job UUID acts as an unguessable read token).
 - `watchlist` with JWT verification disabled (the browser supplies a random profile UUID; the function stores the list in Turso and never exposes its database token).
 
-The functions validate inputs, enforce a per-IP hourly cap and never return or expose server secrets. The status function only returns the result associated with the supplied random job UUID.
+The analysis endpoints validate inputs and never return or expose server secrets. The status function only returns the result associated with the supplied random job UUID. The `watchlist` endpoint validates a random browser-profile UUID and applies the per-profile 100-item limit.
 
 ## Watchlist SQLite setup
 
