@@ -21,6 +21,21 @@ function applyTheme(theme) {
   const themeMeta = document.querySelector('meta[name="theme-color"]');
   if (themeMeta) themeMeta.setAttribute("content", selected === "light" ? "#f4f6fa" : "#0b1120");
   try { localStorage.setItem("stock-analyser-theme", selected); } catch {}
+  if (window.Plotly) {
+    const fontColor = selected === "light" ? "#52627a" : "#aab8ce";
+    const gridColor = selected === "light" ? "#e5eaf1" : "#263650";
+    document.querySelectorAll(".js-plotly-plot").forEach(plot => {
+      try {
+        window.Plotly.relayout(plot, {
+          "font.color": fontColor,
+          "xaxis.gridcolor": gridColor,
+          "yaxis.gridcolor": gridColor,
+          "paper_bgcolor": "rgba(0,0,0,0)",
+          "plot_bgcolor": "rgba(0,0,0,0)"
+        });
+      } catch {}
+    });
+  }
 }
 
 let currentScreen = "home";
@@ -1265,13 +1280,14 @@ function render(data) {
     " · ADF p-value: " + fmt(model.adf_p_value, 6) +
     " · observations: " + fmt(model.observations, 0);
 
+  const lightTheme = document.documentElement.dataset.theme === "light";
   const layout = {
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
-    font: { color: "#aab8ce" },
+    font: { color: lightTheme ? "#52627a" : "#aab8ce" },
     margin: { l: 55, r: 20, t: 15, b: 40 },
-    xaxis: { gridcolor: "#263650" },
-    yaxis: { gridcolor: "#263650" },
+    xaxis: { gridcolor: lightTheme ? "#e5eaf1" : "#263650" },
+    yaxis: { gridcolor: lightTheme ? "#e5eaf1" : "#263650" },
     hovermode: "x unified"
   };
   const history = data.history || { dates: [], close: [] };
