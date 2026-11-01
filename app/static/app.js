@@ -647,10 +647,19 @@ async function waitForResult(id, statusElement, prefix = "search") {
 }
 
 function stockSparkline(stock) {
-  const history = (Array.isArray(stock.history_preview) ? stock.history_preview : [])
-    .map(Number).filter(Number.isFinite);
-  const forecast = (Array.isArray(stock.forecast_preview) ? stock.forecast_preview : [])
-    .map(Number).filter(Number.isFinite);
+  const historySource = Array.isArray(stock.history_preview) && stock.history_preview.length
+    ? stock.history_preview : (stock.history?.close || []);
+  const forecastSource = Array.isArray(stock.forecast_preview) && stock.forecast_preview.length
+    ? stock.forecast_preview : (stock.forecast?.hybrid || []);
+  const compact = (series, limit) => {
+    const values = (Array.isArray(series) ? series : []).map(Number).filter(Number.isFinite);
+    if (values.length <= limit) return values;
+    return Array.from({ length: limit }, (_, index) =>
+      values[Math.round(index * (values.length - 1) / (limit - 1))]
+    );
+  };
+  const history = compact(historySource, 64);
+  const forecast = compact(forecastSource, 30);
   if (!history.length) return '<div class="stock-chart-placeholder">Loading...</div>';
 
   const values = forecast.length ? [...history, ...forecast] : history;
@@ -765,8 +774,8 @@ function watchlistCard(item) {
   addStat("Market cap", fundamentals.market_cap, moneyCompact(fundamentals.market_cap));
 
   const chart = stockSparkline({
-    history_preview: data?.history_preview || [],
-    forecast_preview: data?.forecast_preview || [],
+    history_preview: data?.history_preview || data?.history?.close || [],
+    forecast_preview: data?.forecast_preview || data?.forecast?.hybrid || [],
     expected_change_percent: expected
   });
   const quote = data
