@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const period = mode === "scan" ? "5y" : (body.period ?? "5y");
     const horizon = mode === "scan" ? 30 : (body.horizon ?? 30);
     const scanSource = mode === "scan" ? String(body.source ?? "both").toLowerCase() : "both";
-    const saveToIndexer = mode === "scan" ? "none" : String(body.save_to_indexer ?? (period === "max" && horizon === 504 ? "SlowIndex" : "rapidIndex"));
+    const saveToIndexer = mode === "scan" ? "none" : String(body.save_to_indexer ?? (period === "max" && horizon === 252 ? "SlowIndex" : "rapidIndex"));
     if (mode === "scan" && !["yfinance", "nasdaq", "both"].includes(scanSource)) {
       return json({ error: "Choose Yahoo Finance, Nasdaq, or both as the scan source." }, 400);
     }
