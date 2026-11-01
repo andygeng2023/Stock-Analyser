@@ -56,6 +56,8 @@ let authMode = "signin";
 let watchlistItems = [];
 let watchlistLoaded = false;
 let watchlistLoading = false;
+let watchlistRefreshTimer = null;
+const rapidIndexQueuePending = new Set();
 async function watchlistRequest(action, ticker) {
   if (!authClient) throw new Error("Supabase Auth is unavailable. Reload the app and try again.");
   const { data, error: sessionError } = await authClient.auth.getSession();
@@ -814,6 +816,7 @@ function renderWatchlist() {
   root.querySelectorAll("[data-watch-open]").forEach(button => {
     button.addEventListener("click", () => openStockDetails(button.dataset.watchOpen, { returnScreen: "watchlist" }));
   });
+  refreshVisibleMarketCards(true);
   root.querySelectorAll("[data-watch-remove]").forEach(button => {
     button.addEventListener("click", async () => {
       const ticker = button.dataset.watchRemove;
@@ -842,14 +845,24 @@ async function loadWatchlist(force = false) {
     watchlistItems = Array.isArray(data.items) ? data.items : [];
     watchlistLoaded = true;
     renderWatchlist();
-    const pending = watchlistItems.filter(item => !item.analysis).length;
+    const pending = watchlistItems.filter(item => !item.analysis || item.index_fresh === false).length;
     $("watchlist-status").textContent = pending
-      ? pending + " stock" + (pending === 1 ? " is" : "s are") + " waiting for WatchIndex. Results appear automatically when indexed."
+      ? pending + " stock" + (pending === 1 ? " is" : "s are") + " being refreshed by WatchIndex. Cached results remain visible; Yahoo Finance history fills gaps."
       : "Your RapidIndex data is up to date.";
+    if (pending) scheduleWatchlistRefresh();
+    else if (watchlistRefreshTimer) { clearTimeout(watchlistRefreshTimer); watchlistRefreshTimer = null; }
   } catch (error) {
     $("watchlist-status").textContent = error.message;
     $("watchlist-grid").innerHTML = '<div class="empty-feed">Your watchlist could not be loaded.</div>';
   } finally { watchlistLoading = false; }
+}
+
+function scheduleWatchlistRefresh() {
+  if (watchlistRefreshTimer || currentScreen !== "watchlist" || !authUser) return;
+  watchlistRefreshTimer = window.setTimeout(async () => {
+    watchlistRefreshTimer = null;
+    if (currentScreen === "watchlist" && authUser) await loadWatchlist(true);
+  }, 30000);
 }
 
 async function updateDetailWatchlistButton() {
@@ -950,6 +963,18 @@ async function refreshVisibleMarketCards(force = false) {
         dailyNode.textContent = pct(live.change_percent);
         dailyNode.classList.toggle("negative", Number(live.change_percent) < 0);
         dailyNode.classList.toggle("positive", Number(live.change_percent) >= 0);
+      }
+      const hasRapidIndex = Array.isArray(live.forecast_preview) && live.forecast_preview.length > 0;
+      if (!hasRapidIndex && !rapidIndexQueuePending.has(ticker)) {
+        rapidIndexQueuePending.add(ticker);
+        requestAnalysis(ticker, "5y", 30, "analysis", false, false, "rapidIndex")
+          .then(job => {
+            if (job?.id && job.status !== "completed") trackJob({
+              id: job.id, ticker, type: "analysis", status: job.status || "queued", stage: "Queued for RapidIndex"
+            });
+          })
+          .catch(error => console.warn("Could not queue RapidIndex for " + ticker + ":", error))
+          .finally(() => rapidIndexQueuePending.delete(ticker));
       }
     }
     visibleMarketRefreshAt = Date.now();
