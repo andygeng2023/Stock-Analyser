@@ -17,7 +17,7 @@ This avoids requiring a continuously running Python server while retaining the a
 See [Supabase setup instructions](supabase/README.md). The database schema is in `supabase/setup.sql`.
 
 1. Create a dedicated Supabase project and run the SQL setup script.
-2. Deploy `request-analysis` and `analysis-status` Edge Functions.
+2. Deploy `request-analysis`, `analysis-status` and `watchlist` Edge Functions.
 3. Set Supabase Edge Function secrets and GitHub Actions secrets as documented.
 4. Add GitHub Actions repository variables `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
 5. Set GitHub Pages → Build and deployment → Source to **GitHub Actions**.
