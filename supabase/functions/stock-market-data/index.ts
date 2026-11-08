@@ -123,7 +123,12 @@ function indexedCardItem(ticker: string, row: any) {
     forecast_preview: cachedForecast,
     expected_change_percent: cached.forecast?.expected_change_percent ?? cached.expected_change_percent ?? null,
     return_1m: cachedSummary.return_1m ?? null,
-    directional_accuracy: cached.model?.metrics?.hybrid?.directional_accuracy ?? null,
+    test_accuracy: cached.model?.metrics?.backtest?.test_accuracy ??
+      cached.model?.metrics?.backtest?.ensemble?.directional_accuracy ??
+      cached.model?.metrics?.hybrid?.directional_accuracy ?? null,
+    directional_accuracy: cached.model?.metrics?.backtest?.test_accuracy ??
+      cached.model?.metrics?.backtest?.ensemble?.directional_accuracy ??
+      cached.model?.metrics?.hybrid?.directional_accuracy ?? null,
     annualized_volatility: cachedSummary.annualized_volatility ?? null,
     indexed_at: row?.indexed_at ?? null,
     has_indexed_chart: cachedHistory.length > 0,
