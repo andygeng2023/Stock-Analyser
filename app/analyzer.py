@@ -180,9 +180,11 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
 
         x_train=train_data[feature_columns]
         svr_validation=make_svr().fit(x_train,train_data["target_residual"])
+        svr_direct_validation=make_svr().fit(x_train,train_data["target_return"])
         svc_validation=make_svc().fit(x_train,train_data["target_direction"].astype(int))
         xgb_validation=make_xgb().fit(x_train,train_data["target_return"])
         predicted_residuals=svr_validation.predict(test_data[feature_columns])
+        predicted_svr=svr_direct_validation.predict(test_data[feature_columns])
         predicted_xgb=xgb_validation.predict(test_data[feature_columns])
         predicted_direction=svc_validation.predict(test_data[feature_columns])
         actual_returns=returns.reindex(validation_dates).to_numpy(dtype=float)
@@ -192,15 +194,22 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             index=test_returns.index,
         ).reindex(validation_dates).to_numpy(dtype=float)
         svr_hybrid=predicted_arima+predicted_residuals
-        # Equal blend is fixed before the holdout is evaluated; no test-window
+        arima_xgb_hybrid=0.5*predicted_arima+0.5*predicted_xgb
+        svr_xgb_hybrid=0.5*predicted_svr+0.5*predicted_xgb
+        all_model_hybrid=(predicted_arima+predicted_svr+predicted_xgb)/3.0
+        # Fixed blends are defined before the holdout is evaluated; no test-window
         # optimisation is allowed to leak into the reported backtest.
         ensemble_predictions=0.5*svr_hybrid+0.5*predicted_xgb
         metrics={
             "arima":_metrics(actual_returns,predicted_arima),
             "svr_residual":_metrics(actual_residuals,predicted_residuals),
             "svm_residual":_metrics(actual_residuals,predicted_residuals),
+            "svr":_metrics(actual_returns,predicted_svr),
             "xgboost":_metrics(actual_returns,predicted_xgb),
             "arima_svr":_metrics(actual_returns,svr_hybrid),
+            "arima_xgboost":_metrics(actual_returns,arima_xgb_hybrid),
+            "svr_xgboost":_metrics(actual_returns,svr_xgb_hybrid),
+            "all_model_hybrid":_metrics(actual_returns,all_model_hybrid),
             "ensemble":_metrics(actual_returns,ensemble_predictions),
             "hybrid":_metrics(actual_returns,ensemble_predictions),
             "svm_directional_accuracy":round(float(accuracy_score(
@@ -228,6 +237,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             raise AnalysisError("Not enough clean observations for the final hybrid models.")
         full_columns=full_features.columns.tolist()
         svr=make_svr().fit(full_data[full_columns],full_data["target_residual"])
+        svr_direct=make_svr().fit(full_data[full_columns],full_data["target_return"])
         svc=make_svc().fit(full_data[full_columns],full_data["target_direction"].astype(int))
         xgb=make_xgb().fit(full_data[full_columns],full_data["target_return"])
 
@@ -236,8 +246,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         recent=list(returns.iloc[-20:].to_numpy(dtype=float))
         errors=list(full_residuals.iloc[-3:].to_numpy(dtype=float))
         last=float(close.iloc[-1])
-        forecast_path=[]; arima_path=[]; arima_svr_price_path=[]; xgb_price_path=[]; lower=[]; upper=[]; xgb_path=[]; svr_path=[]; svm_direction_path=[]
-        svr_price=float(close.iloc[-1]); xgb_price=float(close.iloc[-1])
+        forecast_path=[]; arima_path=[]; arima_svr_price_path=[]; arima_xgb_price_path=[]; svr_xgb_price_path=[]; all_model_hybrid_price_path=[]; svr_direct_price_path=[]; xgb_price_path=[]; lower=[]; upper=[]; xgb_path=[]; svr_path=[]; svr_direct_path=[]; svm_direction_path=[]
+        svr_price=float(close.iloc[-1]); svr_direct_price=float(close.iloc[-1]); xgb_price=float(close.iloc[-1]); arima_xgb_price=float(close.iloc[-1]); svr_xgb_price=float(close.iloc[-1]); all_model_price=float(close.iloc[-1])
         sigma=float(np.nanstd(full_residuals))
         rsi_now=float(full_features["rsi"].iloc[-1])
         macd_now=float(full_features["macd"].iloc[-1])
@@ -254,16 +264,30 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             }
             row_frame=pd.DataFrame([row],columns=full_columns)
             correction=float(svr.predict(row_frame)[0])
+            svr_direct_return=float(svr_direct.predict(row_frame)[0])
             xgb_return=float(xgb.predict(row_frame)[0])
             svm_direction=int(svc.predict(row_frame)[0])
             arima_path.append(float(close.iloc[-1])*float(np.exp(np.sum(base[:i+1]))))
+            arima_return=float(base[i])
             svr_return=float(base[i]+correction)
+            arima_xgb_return=0.5*arima_return+0.5*xgb_return
+            svr_xgb_return=0.5*svr_direct_return+0.5*xgb_return
+            all_model_return=(arima_return+svr_direct_return+xgb_return)/3.0
             next_return=float(0.5*svr_return+0.5*xgb_return)
             svr_path.append(svr_return)
+            svr_direct_path.append(svr_direct_return)
             xgb_path.append(xgb_return)
             svr_price*=float(np.exp(svr_return))
+            svr_direct_price*=float(np.exp(svr_direct_return))
             xgb_price*=float(np.exp(xgb_return))
+            arima_xgb_price*=float(np.exp(arima_xgb_return))
+            svr_xgb_price*=float(np.exp(svr_xgb_return))
+            all_model_price*=float(np.exp(all_model_return))
             arima_svr_price_path.append(svr_price)
+            svr_direct_price_path.append(svr_direct_price)
+            arima_xgb_price_path.append(arima_xgb_price)
+            svr_xgb_price_path.append(svr_xgb_price)
+            all_model_hybrid_price_path.append(all_model_price)
             xgb_price_path.append(xgb_price)
             svm_direction_path.append("up" if svm_direction>0 else "down")
             last*=float(np.exp(next_return))
@@ -343,8 +367,13 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "dates":[date.strftime("%Y-%m-%d") for date in forecast_dates],
                 "arima":[round(value,4) for value in arima_path],
                 "arima_svr":[round(float(value),4) for value in arima_svr_price_path],
+                "svr":[round(float(value),4) for value in svr_direct_price_path],
                 "xgboost":[round(float(value),4) for value in xgb_price_path],
+                "arima_xgboost":[round(float(value),4) for value in arima_xgb_price_path],
+                "svr_xgboost":[round(float(value),4) for value in svr_xgb_price_path],
+                "all_model_hybrid":[round(float(value),4) for value in all_model_hybrid_price_path],
                 "arima_svr_return":[round(float(value),6) for value in svr_path],
+                "svr_return":[round(float(value),6) for value in svr_direct_path],
                 "xgboost_return":[round(float(value),6) for value in xgb_path],
                 "svm_direction":svm_direction_path,
                 "hybrid":[round(value,4) for value in forecast_path],
