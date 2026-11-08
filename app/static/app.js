@@ -1529,7 +1529,11 @@ function render(data) {
   const lower = forecast.lower || [];
 
   const arimaSvr = forecast.arima_svr || [];
+  const svr = forecast.svr || [];
   const xgboost = forecast.xgboost || [];
+  const arimaXgboost = forecast.arima_xgboost || [];
+  const svrXgboost = forecast.svr_xgboost || [];
+  const allModelHybrid = forecast.all_model_hybrid || [];
 
   Plotly.react("history", [{
     x: history.dates,
@@ -1550,22 +1554,40 @@ function render(data) {
       line: { color: "#8aa5ff" }
     },
     {
-      x: dates, y: arimaSvr, name: "ARIMA + SVR",
-      type: "scatter", mode: "lines", line: { dash: "dot", width: 1.5 }
+      x: dates, y: arima, name: "ARIMA",
+      type: "scatter", mode: "lines",
+      line: { color: "#e9b86b", width: 1.8 }
     },
     {
       x: dates, y: xgboost, name: "XGBoost",
-      type: "scatter", mode: "lines", line: { dash: "dash", width: 1.5 }
+      type: "scatter", mode: "lines",
+      line: { dash: "dash", width: 1.8 }
     },
     {
-      x: dates, y: hybrid, name: "Hybrid ensemble (ARIMA + SVM + SVR + XGBoost)",
+      x: dates, y: svr, name: "SVR",
       type: "scatter", mode: "lines",
-      line: { color: "#39c99a", width: 2 }
+      line: { dash: "dashdot", width: 1.8 }
     },
     {
-      x: dates, y: arima, name: "ARIMA",
+      x: dates, y: arimaSvr, name: "ARIMA + SVR",
+      type: "scatter", mode: "lines", line: { dash: "dot", width: 2 }
+    },
+    {
+      x: dates, y: arimaXgboost, name: "ARIMA + XGBoost",
+      type: "scatter", mode: "lines", line: { width: 1.8 }
+    },
+    {
+      x: dates, y: svrXgboost, name: "SVR + XGBoost",
+      type: "scatter", mode: "lines", line: { width: 1.8 }
+    },
+    {
+      x: dates, y: allModelHybrid, name: "All-model hybrid (ARIMA + SVR + XGBoost)",
+      type: "scatter", mode: "lines", line: { width: 2.2 }
+    },
+    {
+      x: dates, y: hybrid, name: "Primary hybrid (ARIMA + SVR + XGBoost)",
       type: "scatter", mode: "lines",
-      line: { color: "#e9b86b", dash: "dot" }
+      line: { color: "#39c99a", width: 3 }
     },
     { x: dates, y: upper, type: "scatter", mode: "lines", line: { width: 0 }, showlegend: false },
     {
