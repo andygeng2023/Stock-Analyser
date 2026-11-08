@@ -1517,7 +1517,7 @@ function render(data) {
     hybrid: "Primary hybrid ensemble"
   };
   const metricRows = Object.entries(metrics)
-    .filter(([name, value]) => name !== "backtest" && name !== "svm_residual" &&
+    .filter(([name, value]) => !["backtest", "svm_residual", "svr_residual", "hybrid"].includes(name) &&
       value && typeof value === "object" && Number.isFinite(Number(value.directional_accuracy)))
     .map(([name, value]) =>
       '<tr><td>' + esc(modelLabels[name] || name) + '</td><td>' + fmt(value.mae, 6) + '</td><td>' +
