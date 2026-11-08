@@ -79,6 +79,11 @@ article{margin:15px 0}
 .row{display:flex;justify-content:space-between;border-bottom:1px solid #263650;padding:11px 0;font-size:12px;gap:15px}
 .row span{color:#91a0b8;text-transform:capitalize}
 .row strong{text-align:right;overflow-wrap:anywhere}
+.backtest-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+.backtest-summary>div{min-width:0;padding:13px;background:#101b2d;border:1px solid #263650;border-radius:9px}
+.backtest-summary small,.backtest-summary strong{display:block}
+.backtest-summary small{font-size:10px;color:#91a0b8;margin-bottom:6px}
+.backtest-summary strong{font-size:14px;line-height:1.4;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .table-wrap{overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:12px}
 td,th{text-align:right;padding:12px;border-bottom:1px solid #263650}
@@ -135,7 +140,7 @@ td:first-child,th:first-child{text-align:left}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
   .card{padding:14px}
   .card strong{font-size:18px}
-  .columns{grid-template-columns:1fr}
+  .columns{grid-template-columns:1fr}.backtest-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
   .chart{height:290px}
   .discover-intro,.scan-panel{padding:16px}
   .discover-stats{gap:7px}
