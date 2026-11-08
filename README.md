@@ -62,7 +62,7 @@ The forecasting system combines four components:
 - **SVR (Support Vector Regression)** estimates nonlinear corrections to ARIMA residuals.
 - **XGBoost** independently estimates next-session returns from lagged returns, volatility, RSI, MACD, volume changes and residual lags.
 
-The continuous-return ensemble is a fixed 50/50 blend of the ARIMA+SVR estimate and XGBoost estimate. SVC supplies a separate directional classification and is evaluated independently; it is not incorrectly treated as a continuous price regressor. The forecast compounds the ensemble's estimated returns into a price path.
+The primary continuous-return ensemble is a fixed 50/50 blend of the ARIMA+SVR estimate and XGBoost estimate. A separate SVR model predicts returns directly so the chart can compare ARIMA, SVR and XGBoost independently. Additional comparison blends include ARIMA+XGBoost, SVR+XGBoost and an equal-weight all-model hybrid. SVC supplies a separate directional classification and is evaluated independently; it is not incorrectly treated as a continuous price regressor. The forecast compounds the ensemble's estimated returns into a price path.
 
 Validation uses a chronological holdout with expanding-window, one-step-ahead ARIMA forecasts. The other models are fitted only on observations before the holdout and evaluated on the later window. The reported backtest is historical out-of-sample evaluation, not a guarantee of future performance. Model metrics include MAE, RMSE and directional accuracy, with component-level results and the combined ensemble.
 
