@@ -236,7 +236,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         recent=list(returns.iloc[-20:].to_numpy(dtype=float))
         errors=list(full_residuals.iloc[-3:].to_numpy(dtype=float))
         last=float(close.iloc[-1])
-        forecast_path=[]; arima_path=[]; lower=[]; upper=[]; xgb_path=[]; svr_path=[]; svm_direction_path=[]
+        forecast_path=[]; arima_path=[]; arima_svr_price_path=[]; xgb_price_path=[]; lower=[]; upper=[]; xgb_path=[]; svr_path=[]; svm_direction_path=[]
+        svr_price=float(close.iloc[-1]); xgb_price=float(close.iloc[-1])
         sigma=float(np.nanstd(full_residuals))
         rsi_now=float(full_features["rsi"].iloc[-1])
         macd_now=float(full_features["macd"].iloc[-1])
@@ -260,6 +261,10 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             next_return=float(0.5*svr_return+0.5*xgb_return)
             svr_path.append(svr_return)
             xgb_path.append(xgb_return)
+            svr_price*=float(np.exp(svr_return))
+            xgb_price*=float(np.exp(xgb_return))
+            arima_svr_price_path.append(svr_price)
+            xgb_price_path.append(xgb_price)
             svm_direction_path.append("up" if svm_direction>0 else "down")
             last*=float(np.exp(next_return))
             forecast_path.append(last)
@@ -337,7 +342,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "horizon":horizon,
                 "dates":[date.strftime("%Y-%m-%d") for date in forecast_dates],
                 "arima":[round(value,4) for value in arima_path],
-                "arima_svr":[round(float(value),6) for value in svr_path],
+                "arima_svr":[round(float(value),4) for value in arima_svr_price_path],
+                "xgboost":[round(float(value),4) for value in xgb_price_path],
+                "arima_svr_return":[round(float(value),6) for value in svr_path],
                 "xgboost_return":[round(float(value),6) for value in xgb_path],
                 "svm_direction":svm_direction_path,
                 "hybrid":[round(value,4) for value in forecast_path],
