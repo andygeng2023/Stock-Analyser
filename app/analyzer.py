@@ -198,9 +198,11 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         metrics={
             "arima":_metrics(actual_returns,predicted_arima),
             "svr_residual":_metrics(actual_residuals,predicted_residuals),
+            "svm_residual":_metrics(actual_residuals,predicted_residuals),
             "xgboost":_metrics(actual_returns,predicted_xgb),
             "arima_svr":_metrics(actual_returns,svr_hybrid),
             "ensemble":_metrics(actual_returns,ensemble_predictions),
+            "hybrid":_metrics(actual_returns,ensemble_predictions),
             "svm_directional_accuracy":round(float(accuracy_score(
                 np.where(actual_returns>=0,1,-1),predicted_direction
             )*100),2),
