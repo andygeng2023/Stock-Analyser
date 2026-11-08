@@ -8,8 +8,9 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVR
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.svm import SVC, SVR
+from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score
+from xgboost import XGBRegressor
 from .errors import AnalysisError
 
 ORDERS = [(1,0,0),(0,0,1),(1,0,1),(2,0,1),(2,0,2)]
@@ -146,7 +147,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         if progress_callback: progress_callback(42, "Validating model", "Running chronological one-step-ahead validation.")
         features=_feature_frame(close,volume,returns,residuals)
         target=residuals.reindex(close.index).shift(-1)
-        data=features.assign(target=target).replace([np.inf,-np.inf],np.nan).dropna()
+        next_return=returns.reindex(close.index).shift(-1)
+        direction=pd.Series(np.where(next_return>=0,1,-1),index=close.index,dtype=float).where(next_return.notna())
+        data=features.assign(target_residual=target,target_return=next_return,target_direction=direction).replace([np.inf,-np.inf],np.nan).dropna()
         feature_dates=returns.index[split-1:-1]
         if len(feature_dates) != len(test_returns):
             raise AnalysisError("Could not map validation features to next-session targets.")
@@ -159,42 +162,79 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             test_returns.index,
         )
         train_data=data.loc[data.index < returns.index[split-1]]
+        feature_columns=features.columns.tolist()
         if len(train_data)<40:
-            raise AnalysisError("Not enough clean observations to train the SVR model.")
+            raise AnalysisError("Not enough clean observations to train the hybrid models.")
 
-        def make_model():
+        def make_svr():
             return make_pipeline(StandardScaler(),SVR(kernel="rbf",C=10,epsilon=0.001))
-        svr_validation=make_model().fit(train_data.drop(columns="target"),train_data["target"])
-        predicted_residuals=svr_validation.predict(test_data.drop(columns="target"))
+        def make_svc():
+            return make_pipeline(StandardScaler(),SVC(C=1.0,kernel="rbf",class_weight="balanced"))
+        def make_xgb():
+            return XGBRegressor(
+                n_estimators=220,max_depth=3,learning_rate=0.035,
+                subsample=0.85,colsample_bytree=0.85,
+                reg_lambda=2.0,objective="reg:squarederror",
+                random_state=42,n_jobs=2,verbosity=0,
+            )
+
+        x_train=train_data[feature_columns]
+        svr_validation=make_svr().fit(x_train,train_data["target_residual"])
+        svc_validation=make_svc().fit(x_train,train_data["target_direction"].astype(int))
+        xgb_validation=make_xgb().fit(x_train,train_data["target_return"])
+        predicted_residuals=svr_validation.predict(test_data[feature_columns])
+        predicted_xgb=xgb_validation.predict(test_data[feature_columns])
+        predicted_direction=svc_validation.predict(test_data[feature_columns])
         actual_returns=returns.reindex(validation_dates).to_numpy(dtype=float)
         actual_residuals=residuals.reindex(validation_dates).to_numpy(dtype=float)
         predicted_arima=pd.Series(
             np.asarray(arima_predictions,dtype=float),
             index=test_returns.index,
         ).reindex(validation_dates).to_numpy(dtype=float)
+        svr_hybrid=predicted_arima+predicted_residuals
+        # Equal blend is fixed before the holdout is evaluated; no test-window
+        # optimisation is allowed to leak into the reported backtest.
+        ensemble_predictions=0.5*svr_hybrid+0.5*predicted_xgb
         metrics={
             "arima":_metrics(actual_returns,predicted_arima),
-            "svm_residual":_metrics(actual_residuals,predicted_residuals),
-            "hybrid":_metrics(actual_returns,predicted_arima+predicted_residuals),
+            "svr_residual":_metrics(actual_residuals,predicted_residuals),
+            "xgboost":_metrics(actual_returns,predicted_xgb),
+            "arima_svr":_metrics(actual_returns,svr_hybrid),
+            "ensemble":_metrics(actual_returns,ensemble_predictions),
+            "svm_directional_accuracy":round(float(accuracy_score(
+                np.where(actual_returns>=0,1,-1),predicted_direction
+            )*100),2),
+            "backtest":{
+                "method":"expanding-window one-step-ahead",
+                "observations":int(len(actual_returns)),
+                "start":str(validation_dates[0].date()),
+                "end":str(validation_dates[-1].date()),
+                "ensemble":_metrics(actual_returns,ensemble_predictions),
+            },
         }
 
-        if progress_callback: progress_callback(65, "Fitting SVR and final ARIMA model", "Training the hybrid model on the full history.")
+        if progress_callback: progress_callback(65, "Training SVM, SVR and XGBoost", "Refitting all model components on the available history.")
         # Refit both components on all available observations for the live forecast.
         full_order,full_arima=_select_order(returns)
         full_residuals=pd.Series(np.asarray(full_arima.resid,dtype=float),index=returns.index)
         full_features=_feature_frame(close,volume,returns,full_residuals)
         full_target=full_residuals.reindex(close.index).shift(-1)
-        full_data=full_features.assign(target=full_target).replace([np.inf,-np.inf],np.nan).dropna()
+        full_next_return=returns.reindex(close.index).shift(-1)
+        full_direction=pd.Series(np.where(full_next_return>=0,1,-1),index=close.index,dtype=float).where(full_next_return.notna())
+        full_data=full_features.assign(target_residual=full_target,target_return=full_next_return,target_direction=full_direction).replace([np.inf,-np.inf],np.nan).dropna()
         if len(full_data)<45:
-            raise AnalysisError("Not enough clean observations for the final SVR model.")
-        svr=make_model().fit(full_data.drop(columns="target"),full_data["target"])
+            raise AnalysisError("Not enough clean observations for the final hybrid models.")
+        full_columns=full_features.columns.tolist()
+        svr=make_svr().fit(full_data[full_columns],full_data["target_residual"])
+        svc=make_svc().fit(full_data[full_columns],full_data["target_direction"].astype(int))
+        xgb=make_xgb().fit(full_data[full_columns],full_data["target_return"])
 
         if progress_callback: progress_callback(80, "Generating forecast", "Calculating the requested forecast horizon.")
         base=np.asarray(full_arima.forecast(horizon),dtype=float)
         recent=list(returns.iloc[-20:].to_numpy(dtype=float))
         errors=list(full_residuals.iloc[-3:].to_numpy(dtype=float))
         last=float(close.iloc[-1])
-        forecast_path=[]; arima_path=[]; lower=[]; upper=[]
+        forecast_path=[]; arima_path=[]; lower=[]; upper=[]; xgb_path=[]; svr_path=[]; svm_direction_path=[]
         sigma=float(np.nanstd(full_residuals))
         rsi_now=float(full_features["rsi"].iloc[-1])
         macd_now=float(full_features["macd"].iloc[-1])
@@ -209,9 +249,16 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "volume_change":volume_change,
                 **{f"e{j}":errors[-j] for j in range(1,4)},
             }
-            correction=float(svr.predict(pd.DataFrame([row],columns=full_data.drop(columns="target").columns))[0])
+            row_frame=pd.DataFrame([row],columns=full_columns)
+            correction=float(svr.predict(row_frame)[0])
+            xgb_return=float(xgb.predict(row_frame)[0])
+            svm_direction=int(svc.predict(row_frame)[0])
             arima_path.append(float(close.iloc[-1])*float(np.exp(np.sum(base[:i+1]))))
-            next_return=float(base[i]+correction)
+            svr_return=float(base[i]+correction)
+            next_return=float(0.5*svr_return+0.5*xgb_return)
+            svr_path.append(svr_return)
+            xgb_path.append(xgb_return)
+            svm_direction_path.append("up" if svm_direction>0 else "down")
             last*=float(np.exp(next_return))
             forecast_path.append(last)
             band=1.96*sigma*np.sqrt(i+1)
@@ -277,6 +324,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "sector":info.get("sector"),"industry":info.get("industry"),
             },
             "model":{
+                "model_family":"ARIMA + SVC + SVR + XGBoost ensemble",
                 "arima_order":list(full_order),
                 "adf_p_value":round(float(adfuller(returns)[1]),6),
                 "observations":len(returns),
@@ -287,6 +335,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "horizon":horizon,
                 "dates":[date.strftime("%Y-%m-%d") for date in forecast_dates],
                 "arima":[round(value,4) for value in arima_path],
+                "arima_svr":[round(float(value),6) for value in svr_path],
+                "xgboost_return":[round(float(value),6) for value in xgb_path],
+                "svm_direction":svm_direction_path,
                 "hybrid":[round(value,4) for value in forecast_path],
                 "lower":[round(float(value),4) for value in lower],
                 "upper":[round(float(value),4) for value in upper],
