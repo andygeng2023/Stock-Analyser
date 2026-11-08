@@ -1,6 +1,6 @@
 # Stock Analyser
 
-A responsive stock research dashboard using Yahoo Finance data and a Python ARIMA–SVR hybrid forecasting model.
+A responsive stock research dashboard using Yahoo Finance data and a walk-forward-tested ARIMA, SVM, SVR and XGBoost forecasting ensemble.
 
 ## Architecture
 
@@ -55,9 +55,18 @@ Open http://127.0.0.1:8000. API documentation: /docs.
 
 ## Model
 
-ARIMA models daily log returns. An RBF-kernel Support Vector Regressor models nonlinear ARIMA residual corrections using lagged returns, rolling volatility, RSI, MACD, volume changes and residual lags. The forecast combines the ARIMA return estimate with the SVR residual correction.
+The forecasting system combines four components:
 
-Validation is chronological. Forecast bands are approximate residual-dispersion bands, not calibrated prediction intervals. Business-day offsets do not account for exchange holidays. Yahoo Finance data can be delayed, incomplete or rate-limited.
+- **ARIMA** models daily log returns and supplies the statistical time-series baseline.
+- **SVC (Support Vector Classification)** predicts the next session's direction.
+- **SVR (Support Vector Regression)** estimates nonlinear corrections to ARIMA residuals.
+- **XGBoost** independently estimates next-session returns from lagged returns, volatility, RSI, MACD, volume changes and residual lags.
+
+The continuous-return ensemble is a fixed 50/50 blend of the ARIMA+SVR estimate and XGBoost estimate. SVC supplies a separate directional classification and is evaluated independently; it is not incorrectly treated as a continuous price regressor. The forecast compounds the ensemble's estimated returns into a price path.
+
+Validation uses a chronological holdout with expanding-window, one-step-ahead ARIMA forecasts. The other models are fitted only on observations before the holdout and evaluated on the later window. The reported backtest is historical out-of-sample evaluation, not a guarantee of future performance. Model metrics include MAE, RMSE and directional accuracy, with component-level results and the combined ensemble.
+
+Forecast bands remain approximate residual-dispersion bands, not calibrated prediction intervals. Business-day offsets do not account for exchange holidays. Yahoo Finance data can be delayed, incomplete or rate-limited. XGBoost adds a dependency and CPU training cost; model fitting may take longer than the previous ARIMA–SVR implementation.
 
 ## Security
 
