@@ -1528,6 +1528,9 @@ function render(data) {
   const upper = forecast.upper || [];
   const lower = forecast.lower || [];
 
+  const arimaSvr = forecast.arima_svr || [];
+  const xgboost = forecast.xgboost || [];
+
   Plotly.react("history", [{
     x: history.dates,
     y: history.close,
@@ -1547,7 +1550,15 @@ function render(data) {
       line: { color: "#8aa5ff" }
     },
     {
-      x: dates, y: hybrid, name: "ARIMA + SVR",
+      x: dates, y: arimaSvr, name: "ARIMA + SVR",
+      type: "scatter", mode: "lines", line: { dash: "dot", width: 1.5 }
+    },
+    {
+      x: dates, y: xgboost, name: "XGBoost",
+      type: "scatter", mode: "lines", line: { dash: "dash", width: 1.5 }
+    },
+    {
+      x: dates, y: hybrid, name: "Hybrid ensemble (ARIMA + SVM + SVR + XGBoost)",
       type: "scatter", mode: "lines",
       line: { color: "#39c99a", width: 2 }
     },
