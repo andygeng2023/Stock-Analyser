@@ -705,8 +705,9 @@ function stockCard(stock) {
   const stats = [];
   if (stock.return_1m != null) stats.push({ label: "1M", value: pct(stock.return_1m) });
   else if (stock.validation_rmse != null) stats.push({ label: "RMSE", value: fmt(stock.validation_rmse, 4) });
-  if (stock.directional_accuracy != null) {
-    stats.push({ label: "Accuracy", value: fmt(stock.directional_accuracy, 0) + "%" });
+  const testAccuracy = stock.test_accuracy ?? stock.directional_accuracy;
+  if (testAccuracy != null) {
+    stats.push({ label: "Test accuracy", value: fmt(testAccuracy, 0) + "%" });
   } else if (stock.annualized_volatility != null) {
     stats.push({ label: "Volatility", value: pct(stock.annualized_volatility) });
   }
@@ -750,7 +751,9 @@ function watchlistCard(item) {
   const data = item.analysis || null;
   const summary = data?.market_summary || {};
   const fundamentals = data?.fundamentals || {};
-  const accuracy = data?.model?.metrics?.hybrid?.directional_accuracy;
+  const accuracy = data?.model?.metrics?.backtest?.test_accuracy ??
+    data?.model?.metrics?.backtest?.ensemble?.directional_accuracy ??
+    data?.model?.metrics?.hybrid?.directional_accuracy;
   const expected = data?.forecast?.expected_change_percent;
   const daily = data?.change_percent;
   const company = data?.company || item.ticker;
@@ -770,7 +773,7 @@ function watchlistCard(item) {
   addStat("1M return", summary.return_1m, pct(summary.return_1m), Number(summary.return_1m) < 0 ? "negative" : "positive");
   addStat("1Y return", summary.return_1y, pct(summary.return_1y), Number(summary.return_1y) < 0 ? "negative" : "positive");
   addStat(forecastDays + "D forecast", expected, pct(expected), Number(expected) < 0 ? "negative" : "positive");
-  addStat("Direction accuracy", accuracy, fmt(accuracy, 0) + "%");
+  addStat("Test accuracy", accuracy, fmt(accuracy, 0) + "%");
   addStat("Volatility", summary.annualized_volatility, pct(summary.annualized_volatility));
   addStat("Max drawdown", summary.max_drawdown, pct(summary.max_drawdown));
   addStat("Market cap", fundamentals.market_cap, moneyCompact(fundamentals.market_cap));
@@ -978,7 +981,8 @@ function applyCardChart(ticker, data, cardsByTicker) {
         '"><strong>' + esc(pct(data.expected_change_percent)) + '</strong><small>30D</small></span>';
       const stats = [];
       if (data.return_1m != null) stats.push({ label: "1M", value: pct(data.return_1m) });
-      if (data.directional_accuracy != null) stats.push({ label: "Accuracy", value: fmt(data.directional_accuracy, 0) + "%" });
+      const testAccuracy = data.test_accuracy ?? data.directional_accuracy;
+      if (testAccuracy != null) stats.push({ label: "Test accuracy", value: fmt(testAccuracy, 0) + "%" });
       else if (data.annualized_volatility != null) stats.push({ label: "Volatility", value: pct(data.annualized_volatility) });
       metaNode.innerHTML = predicted + stats.slice(0, 2).map(stat =>
         '<span class="stock-analysis-stat"><strong>' + esc(stat.value) +
@@ -1498,18 +1502,51 @@ function render(data) {
     '<div class="card"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></div>'
   ).join("");
 
-  const metricRows = Object.entries(model.metrics || {}).map(([name, value]) =>
-    '<tr><td>' + esc(name) + '</td><td>' + fmt(value.mae, 6) + '</td><td>' +
-    fmt(value.rmse, 6) + '</td><td>' + fmt(value.directional_accuracy) + '%</td></tr>'
-  ).join("");
+  const metrics = model.metrics || {};
+  const backtest = metrics.backtest || {};
+  const modelLabels = {
+    arima: "ARIMA",
+    svr_residual: "SVR residual correction",
+    svr: "SVR",
+    xgboost: "XGBoost",
+    arima_svr: "ARIMA + SVR",
+    arima_xgboost: "ARIMA + XGBoost",
+    svr_xgboost: "SVR + XGBoost",
+    all_model_hybrid: "All-model hybrid",
+    ensemble: "Primary hybrid ensemble",
+    hybrid: "Primary hybrid ensemble"
+  };
+  const metricRows = Object.entries(metrics)
+    .filter(([name, value]) => name !== "backtest" && name !== "svm_residual" &&
+      value && typeof value === "object" && Number.isFinite(Number(value.directional_accuracy)))
+    .map(([name, value]) =>
+      '<tr><td>' + esc(modelLabels[name] || name) + '</td><td>' + fmt(value.mae, 6) + '</td><td>' +
+      fmt(value.rmse, 6) + '</td><td>' + fmt(value.directional_accuracy, 2) + '%</td></tr>'
+    );
+  if (Number.isFinite(Number(metrics.svm_directional_accuracy))) {
+    metricRows.push('<tr><td>SVC direction classifier</td><td>—</td><td>—</td><td>' +
+      fmt(metrics.svm_directional_accuracy, 2) + '%</td></tr>');
+  }
+  const backtestSummary = backtest.observations
+    ? '<div class="backtest-summary">' +
+      '<div><small>Validation method</small><strong>' + esc(backtest.method || "Chronological holdout") + '</strong></div>' +
+      '<div><small>Test observations</small><strong>' + fmt(backtest.observations, 0) + '</strong></div>' +
+      '<div><small>Test period</small><strong>' + esc(backtest.start || "—") + ' – ' + esc(backtest.end || "—") + '</strong></div>' +
+      '<div><small>Primary hybrid test accuracy</small><strong>' + fmt(backtest.test_accuracy ?? backtest.ensemble?.directional_accuracy, 2) + '%</strong></div>' +
+      '<div><small>Primary hybrid MAE</small><strong>' + fmt(backtest.ensemble?.mae, 6) + '</strong></div>' +
+      '<div><small>Primary hybrid RMSE</small><strong>' + fmt(backtest.ensemble?.rmse, 6) + '</strong></div>' +
+      '</div>'
+    : '<p class="muted">Chronological backtest details are not available in this saved result. Re-run the analysis to generate them.</p>';
   $("metrics").innerHTML =
-    '<div class="table-wrap"><table><thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>Directional accuracy</th></tr></thead><tbody>' +
-    metricRows + '</tbody></table></div>';
+    backtestSummary +
+    '<div class="table-wrap"><table><thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>Test directional accuracy</th></tr></thead><tbody>' +
+    metricRows.join("") + '</tbody></table></div>';
 
   $("model-note").textContent =
-    "ARIMA order: " + (Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—") +
+    "All reported model scores use the same chronological held-out test window. ARIMA order: " +
+    (Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—") +
     " · ADF p-value: " + fmt(model.adf_p_value, 6) +
-    " · observations: " + fmt(model.observations, 0);
+    " · total observations: " + fmt(model.observations, 0);
 
   const lightTheme = document.documentElement.dataset.theme === "light";
   const layout = {
