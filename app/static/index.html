@@ -137,7 +137,7 @@
 
   <section class="scan-panel">
     <div class="section-title scan-section-title">
-      <div><h3>Market scan</h3><p>Two-stage universe filter followed by ARIMA–SVR refinement · refreshes every 5 minutes</p></div>
+      <div><h3>Market scan</h3><p>Two-stage universe filter followed by ARIMA–SVM–SVR–XGBoost refinement · refreshes every 5 minutes</p></div>
       <div class="hard-rerun-wrap scan-hard-rerun-wrap">
         <button id="hard-rescan" class="secondary-button detail-rerun" type="button" aria-haspopup="true" aria-expanded="false">Hard rerun <span aria-hidden="true">▾</span></button>
       </div>
@@ -362,7 +362,7 @@
     <div class="company"><div><small id="symbol"></small><h2 id="name"></h2></div><div><strong id="price"></strong><p id="change"></p></div></div>
     <div class="cards" id="summary"></div>
     <article><h3>Historical price</h3><div id="history" class="chart"></div></article>
-    <article><div class="detail-indexer-heading"><div><h3>ARIMA–SVR forecast</h3><p class="muted">Switch indexers to compare the forecast and its underlying history.</p></div><div id="detail-indexer-switch" class="indexer-switch" role="group" aria-label="Choose prediction indexer"><button type="button" class="indexer-option active" data-indexer="rapidIndex" aria-pressed="true">rapidIndex</button><button type="button" class="indexer-option" data-indexer="SlowIndex" aria-pressed="false">SlowIndex</button></div></div><div class="cards" id="forecast-summary"></div><div id="forecast" class="chart"></div><p class="muted">Approximate residual-dispersion band, not a calibrated confidence interval.</p></article>
+    <article><div class="detail-indexer-heading"><div><h3>ARIMA–SVM–SVR–XGBoost forecast</h3><p class="muted">Switch indexers to compare the forecast and its underlying history.</p></div><div id="detail-indexer-switch" class="indexer-switch" role="group" aria-label="Choose prediction indexer"><button type="button" class="indexer-option active" data-indexer="rapidIndex" aria-pressed="true">rapidIndex</button><button type="button" class="indexer-option" data-indexer="SlowIndex" aria-pressed="false">SlowIndex</button></div></div><div class="cards" id="forecast-summary"></div><div id="forecast" class="chart"></div><p class="muted">Approximate residual-dispersion band, not a calibrated confidence interval.</p></article>
     <div class="columns"><article><h3>Technical indicators</h3><div id="technicals"></div></article><article><h3>Fundamentals</h3><div id="fundamentals"></div></article></div>
     <article><h3>Model diagnostics · chronological holdout</h3><div id="metrics"></div><p id="model-note" class="muted"></p></article>
     <p class="disclaimer">Experimental statistical estimates only. Not personalised investment advice. Yahoo Finance data may be delayed, incomplete or rate-limited.</p>
