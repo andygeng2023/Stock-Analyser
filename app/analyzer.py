@@ -220,6 +220,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "observations":int(len(actual_returns)),
                 "start":str(validation_dates[0].date()),
                 "end":str(validation_dates[-1].date()),
+                "test_accuracy":_metrics(actual_returns,ensemble_predictions)["directional_accuracy"],
                 "ensemble":_metrics(actual_returns,ensemble_predictions),
             },
         }
