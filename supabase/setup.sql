@@ -74,6 +74,10 @@ create table if not exists public.market_index (
   constraint market_index_pkey primary key (ticker,period,horizon,indexer)
 );
 
+alter table public.market_index add column if not exists indexer text not null default 'rapidIndex';
+alter table public.market_index drop constraint if exists market_index_pkey;
+alter table public.market_index add constraint market_index_pkey primary key (ticker,period,horizon,indexer);
+
 create index if not exists market_index_expiry_idx on public.market_index(indexed_at);
 create index if not exists market_index_lookup_idx
   on public.market_index (ticker,indexer,period,horizon,indexed_at desc);
@@ -93,6 +97,15 @@ create table if not exists public.market_index_catalog (
   slow_last_error text,
   updated_at timestamptz not null default now()
 );
+
+alter table public.market_index_catalog
+  add column if not exists last_slow_indexed_at timestamptz,
+  add column if not exists rapid_attempted_at timestamptz,
+  add column if not exists rapid_retry_after timestamptz,
+  add column if not exists rapid_last_error text,
+  add column if not exists slow_attempted_at timestamptz,
+  add column if not exists slow_retry_after timestamptz,
+  add column if not exists slow_last_error text;
 
 create index if not exists market_index_catalog_priority_idx
   on public.market_index_catalog(last_indexed_at asc nulls first, market_cap desc nulls last, avg_dollar_volume desc nulls last);
