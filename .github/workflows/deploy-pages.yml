@@ -37,6 +37,9 @@ jobs:
           fi
           mkdir -p site
           cp app/static/*.html app/static/*.css app/static/*.js site/
+          # Give every deployment a unique asset URL so browsers cannot keep
+          # executing an older cached JavaScript or stylesheet bundle.
+          sed -i "s|./style.css?v=[^\"']*|./style.css?v=${GITHUB_SHA}|g; s|./app.js?v=[^\"']*|./app.js?v=${GITHUB_SHA}|g" site/index.html
           python - <<'PY'
           import json, os
           config = {
