@@ -11,6 +11,44 @@ const api = name => config.supabaseUrl.replace(/\/$/, "") + "/functions/v1/" + n
 const headers = () => ({ "Content-Type": "application/json", "apikey": config.supabasePublishableKey });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Bound network waits and retry transient failures on safe, read-only requests.
+async function fetchWithRetry(url, options = {}, settings = {}) {
+  const timeoutMs = settings.timeoutMs ?? 12000;
+  const attempts = settings.attempts ?? 3;
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      if (response.ok || (response.status < 500 && response.status !== 429) || attempt === attempts - 1) {
+        return response;
+      }
+      lastError = new Error("Server temporarily unavailable (" + response.status + ").");
+    } catch (error) {
+      lastError = error.name === "AbortError"
+        ? new Error("The server took too long to respond. Please try again.")
+        : error;
+      if (attempt === attempts - 1) throw lastError;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+    await wait(350 * (attempt + 1));
+  }
+  throw lastError || new Error("The request could not be completed.");
+}
+
+let visibleMarketRetryTimer = null;
+function scheduleMarketCardRetry() {
+  if (visibleMarketRetryTimer) return;
+  visibleMarketRetryTimer = window.setTimeout(() => {
+    visibleMarketRetryTimer = null;
+    if (["home", "search", "discover", "watchlist"].includes(currentScreen)) {
+      refreshVisibleMarketCards(true);
+    }
+  }, 15000);
+}
+
 function applyTheme(theme) {
   const selected = theme === "light" ? "light" : "dark";
   document.documentElement.dataset.theme = selected;
@@ -599,11 +637,11 @@ async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardR
   const payload = mode === "scan"
     ? { mode: "scan", source: "both", hard_rescan: hardRescan, latest_only: latestOnly }
     : { ticker, period, horizon, hard_rescan: hardRescan, save_to_indexer: saveToIndexer };
-  const response = await fetch(api("request-analysis"), {
+  const response = await fetchWithRetry(api("request-analysis"), {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(payload)
-  });
+  }, { timeoutMs: 20000, attempts: 1 });
   const data = await response.json();
   if (!response.ok) throw Error(data.error || "Could not start analysis.");
   return data;
@@ -628,9 +666,9 @@ async function waitForResult(id, statusElement, prefix = "search") {
   try {
     const started = Date.now();
     while (Date.now() - started < 15 * 60 * 1000) {
-      const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(id), {
+      const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(id), {
         headers: { "apikey": config.supabasePublishableKey }
-      });
+      }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
       updateProgress(prefix, data);
@@ -997,11 +1035,11 @@ async function requestCardMarketMode(mode, tickers, onItem) {
   for (let offset = 0; offset < tickers.length; offset += batchSize) {
     const batch = tickers.slice(offset, offset + batchSize);
     try {
-      const response = await fetch(api("stock-market-data"), {
+      const response = await fetchWithRetry(api("stock-market-data"), {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({ tickers: batch, mode })
-      });
+      }, { timeoutMs: 15000, attempts: 3 });
       const payload = await response.json();
       if (!response.ok) throw Error(payload.error || "Could not refresh market data.");
       for (const item of payload.items || []) {
@@ -1009,6 +1047,7 @@ async function requestCardMarketMode(mode, tickers, onItem) {
       }
     } catch (error) {
       console.warn("Could not refresh " + mode + " market-data batch:", error);
+      scheduleMarketCardRetry();
     }
   }
 }
@@ -1179,7 +1218,7 @@ async function loadMarketFeed(force = false) {
   if (!force && marketFeed && Date.now() - marketFeedLoadedAt < 60_000) return;
   marketFeedLoading = true;
   try {
-    const response = await fetch(api("market-feed"), { method: "GET", headers: { "apikey": config.supabasePublishableKey } });
+    const response = await fetchWithRetry(api("market-feed"), { method: "GET", headers: { "apikey": config.supabasePublishableKey } }, { timeoutMs: 15000, attempts: 3 });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not load market overview.");
     renderMarketFeed(data);
@@ -1386,9 +1425,9 @@ async function openStockDetails(ticker, options = {}) {
     trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
-      const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
+      const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
         headers: { "apikey": config.supabasePublishableKey }
-      });
+      }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve cached analysis.");
       result = data.result;
