@@ -1260,7 +1260,9 @@ async function loadMarketFeed(force = false) {
   } catch (error) {
     if (marketFeed && marketFeedFromCache) {
       $("market-feed-updated").textContent = "Offline snapshot · live data unavailable";
-      $("home-latest-scan").insertAdjacentHTML("afterbegin", '<div class="empty-feed">Showing saved market data. Live data is temporarily unavailable; reconnecting automatically.</div>');
+      if (!$("home-latest-scan").querySelector(".offline-feed-banner")) {
+        $("home-latest-scan").insertAdjacentHTML("afterbegin", '<div class="empty-feed offline-feed-banner">Showing saved market data. Live data is temporarily unavailable; reconnecting automatically.</div>');
+      }
     }
     if (!marketFeed) {
       $("home-latest-scan").innerHTML = '<div class="empty-feed">Could not load market data: ' + esc(error.message) + '. Retrying automatically…</div>';
