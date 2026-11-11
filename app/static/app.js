@@ -1225,7 +1225,13 @@ async function loadMarketFeed(force = false) {
     marketFeedLoadedAt = Date.now();
   } catch (error) {
     if (!marketFeed) {
-      $("home-latest-scan").innerHTML = '<div class="empty-feed">Could not load market data: ' + esc(error.message) + '</div>';
+      $("home-latest-scan").innerHTML = '<div class="empty-feed">Could not load market data: ' + esc(error.message) + '. Retrying automatically…</div>';
+    }
+    if (["home", "search", "discover"].includes(currentScreen) && !visibleMarketRetryTimer) {
+      visibleMarketRetryTimer = window.setTimeout(() => {
+        visibleMarketRetryTimer = null;
+        loadMarketFeed(true);
+      }, 12000);
     }
   } finally {
     marketFeedLoading = false;
