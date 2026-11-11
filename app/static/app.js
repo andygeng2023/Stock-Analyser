@@ -18,6 +18,10 @@ async function fetchWithRetry(url, options = {}, settings = {}) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
+    const externalSignal = options.signal;
+    const abortFromCaller = () => controller.abort();
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, { ...options, signal: controller.signal });
@@ -26,12 +30,14 @@ async function fetchWithRetry(url, options = {}, settings = {}) {
       }
       lastError = new Error("Server temporarily unavailable (" + response.status + ").");
     } catch (error) {
+      if (error.name === "AbortError" && externalSignal?.aborted) throw error;
       lastError = error.name === "AbortError"
         ? new Error("The server took too long to respond. Please try again.")
         : error;
       if (attempt === attempts - 1) throw lastError;
     } finally {
       window.clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abortFromCaller);
     }
     await wait(350 * (attempt + 1));
   }
@@ -589,9 +595,9 @@ async function refreshGlobalQueue() {
     const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status) && !locallyPollingJobIds.has(job.id));
     await Promise.all(active.map(async job => {
       try {
-        const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(job.id), {
+        const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(job.id), {
           headers: { "apikey": config.supabasePublishableKey }
-        });
+        }, { timeoutMs: 10000, attempts: 2 });
         const data = await response.json();
         if (response.ok) updateTrackedJob(job.id, data);
       } catch {}
@@ -1340,10 +1346,10 @@ function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = (
       const controller = new AbortController();
       autocompleteControllers.set(inputId, controller);
       try {
-        const response = await fetch(api("market-feed") + "?q=" + encodeURIComponent(query), {
+        const response = await fetchWithRetry(api("market-feed") + "?q=" + encodeURIComponent(query), {
           headers: { "apikey": config.supabasePublishableKey },
           signal: controller.signal
-        });
+        }, { timeoutMs: 10000, attempts: 2 });
         const data = await response.json();
         if (sequence !== requestSequence) return;
         if (!response.ok) throw Error(data.error || "Stock search is temporarily unavailable.");
@@ -1720,9 +1726,9 @@ async function startScan(hard = false) {
     $("scan-progress").hidden = false;
     let result;
     if (request.status === "completed" && request.cached) {
-      const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
+      const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
         headers: { "apikey": config.supabasePublishableKey }
-      });
+      }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve cached scan.");
       result = data.result;
