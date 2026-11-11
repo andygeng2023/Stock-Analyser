@@ -24,7 +24,7 @@ async function fetchWithRetry(url, options = {}, settings = {}) {
     else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
+      const response = await fetch(url, { ...options, cache: options.cache || "no-store", signal: controller.signal });
       if (response.ok || (response.status < 500 && response.status !== 429) || attempt === attempts - 1) {
         return response;
       }
@@ -45,6 +45,7 @@ async function fetchWithRetry(url, options = {}, settings = {}) {
 }
 
 let visibleMarketRetryTimer = null;
+let marketFeedRetryTimer = null;
 function scheduleMarketCardRetry() {
   if (visibleMarketRetryTimer) return;
   visibleMarketRetryTimer = window.setTimeout(() => {
@@ -1229,13 +1230,25 @@ async function loadMarketFeed(force = false) {
     if (!response.ok) throw Error(data.error || "Could not load market overview.");
     renderMarketFeed(data);
     marketFeedLoadedAt = Date.now();
+    if (marketFeedRetryTimer) {
+      window.clearTimeout(marketFeedRetryTimer);
+      marketFeedRetryTimer = null;
+    }
   } catch (error) {
     if (!marketFeed) {
       $("home-latest-scan").innerHTML = '<div class="empty-feed">Could not load market data: ' + esc(error.message) + '. Retrying automatically…</div>';
+      ["home-recommended", "home-trending", "home-popular", "home-opportunities",
+       "search-trending", "search-popular", "discover-smaller", "discover-opportunities", "discover-trending"]
+        .forEach(id => {
+          const node = $(id);
+          if (node && !node.children.length) node.innerHTML = '<div class="empty-feed">Market data is temporarily unavailable. Retrying…</div>';
+        });
     }
-    if (["home", "search", "discover"].includes(currentScreen) && !visibleMarketRetryTimer) {
-      visibleMarketRetryTimer = window.setTimeout(() => {
-        visibleMarketRetryTimer = null;
+    // Keep feed retries independent from card retries. Sharing one timer caused
+    // a failed card request to suppress the only retry for the entire feed.
+    if (["home", "search", "discover"].includes(currentScreen) && !marketFeedRetryTimer) {
+      marketFeedRetryTimer = window.setTimeout(() => {
+        marketFeedRetryTimer = null;
         loadMarketFeed(true);
       }, 12000);
     }
