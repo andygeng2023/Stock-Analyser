@@ -90,6 +90,18 @@ let currentDetailTicker = "";
 let currentDetailIndexer = "rapidIndex";
 let marketFeed = null;
 let marketFeedLoadedAt = 0;
+let marketFeedFromCache = false;
+const MARKET_FEED_STORAGE_KEY = "stock-analyser-market-feed-v1";
+function readCachedMarketFeed() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MARKET_FEED_STORAGE_KEY) || "null");
+    return saved && saved.data && typeof saved.data === "object" ? saved : null;
+  } catch { return null; }
+}
+function saveCachedMarketFeed(data) {
+  try { localStorage.setItem(MARKET_FEED_STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), data })); }
+  catch (error) { console.warn("Could not save the offline market snapshot:", error); }
+}
 let marketFeedLoading = false;
 let marketFeedRefreshQueued = false;
 let latestScanId = null;
@@ -1066,9 +1078,12 @@ async function refreshVisibleMarketCards(force = false) {
     return;
   }
   if (!force && Date.now() - visibleMarketRefreshAt < 55_000) return;
-  await Promise.resolve();
   const visible = [...document.querySelectorAll(".stock-card[data-ticker], .watchlist-v2-item[data-watch-ticker]")]
-    .filter(el => el.offsetParent !== null);
+    .filter(el => {
+      if (el.offsetParent === null) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.bottom >= -500 && rect.top <= window.innerHeight + 500;
+    });
   const tickers = [...new Set(visible.map(el => el.dataset.ticker || el.dataset.watchTicker).filter(Boolean))].slice(0, 60);
   if (!tickers.length) return;
 
@@ -1174,19 +1189,20 @@ function fillStockGrid(id, stocks, tag = "") {
     template.innerHTML = batch.map(stockCard).join("");
     root.appendChild(template.content);
     bindStockButtons(root);
-    refreshVisibleMarketCards(true);
     offset += batch.length;
     if (offset < stocks.length) window.setTimeout(appendBatch, 0);
   };
   appendBatch();
 }
 
-function renderMarketFeed(data) {
+function renderMarketFeed(data, options = {}) {
   marketFeed = data;
+  marketFeedFromCache = options.fromCache === true;
+  if (!marketFeedFromCache) saveCachedMarketFeed(data);
   const updated = data.generated_at ? new Date(data.generated_at) : null;
   $("market-feed-updated").textContent = updated && !Number.isNaN(updated.valueOf())
-    ? "Updated " + updated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "";
+    ? (marketFeedFromCache ? "Saved snapshot · " : "Updated ") + updated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : (marketFeedFromCache ? "Saved snapshot" : "");
 
   const latest = data.latest_scan?.results || [];
   $("home-latest-scan").innerHTML = latest.length
@@ -1222,7 +1238,14 @@ async function loadMarketFeed(force = false) {
     marketFeedRefreshQueued = marketFeedRefreshQueued || force;
     return;
   }
-  if (!force && marketFeed && Date.now() - marketFeedLoadedAt < 60_000) return;
+  if (!marketFeed) {
+    const cached = readCachedMarketFeed();
+    if (cached) {
+      renderMarketFeed(cached.data, { fromCache: true });
+      marketFeedLoadedAt = Number(cached.savedAt) || 0;
+    }
+  }
+  if (!force && marketFeed && !marketFeedFromCache && Date.now() - marketFeedLoadedAt < 60_000) return;
   marketFeedLoading = true;
   try {
     const response = await fetchWithRetry(api("market-feed"), { method: "GET", headers: { "apikey": config.supabasePublishableKey } }, { timeoutMs: 15000, attempts: 3 });
@@ -1235,6 +1258,10 @@ async function loadMarketFeed(force = false) {
       marketFeedRetryTimer = null;
     }
   } catch (error) {
+    if (marketFeed && marketFeedFromCache) {
+      $("market-feed-updated").textContent = "Offline snapshot · live data unavailable";
+      $("home-latest-scan").insertAdjacentHTML("afterbegin", '<div class="empty-feed">Showing saved market data. Live data is temporarily unavailable; reconnecting automatically.</div>');
+    }
     if (!marketFeed) {
       $("home-latest-scan").innerHTML = '<div class="empty-feed">Could not load market data: ' + esc(error.message) + '. Retrying automatically…</div>';
       ["home-recommended", "home-trending", "home-popular", "home-opportunities",
