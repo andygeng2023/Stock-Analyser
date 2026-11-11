@@ -74,9 +74,16 @@ create table if not exists public.market_index (
   constraint market_index_pkey primary key (ticker,period,horizon,indexer)
 );
 
-alter table public.market_index add column if not exists indexer text not null default 'rapidIndex';
-alter table public.market_index drop constraint if exists market_index_pkey;
-alter table public.market_index add constraint market_index_pkey primary key (ticker,period,horizon,indexer);
+alter table public.market_index
+  add column if not exists indexer text not null default 'rapidIndex';
+alter table public.market_index
+  drop constraint if exists market_index_horizon_check,
+  add constraint market_index_horizon_check check (horizon between 1 and 504),
+  drop constraint if exists market_index_indexer_check,
+  add constraint market_index_indexer_check check (indexer in ('rapidIndex','SlowIndex')),
+  drop constraint if exists market_index_pkey;
+alter table public.market_index
+  add constraint market_index_pkey primary key (ticker,period,horizon,indexer);
 
 create index if not exists market_index_expiry_idx on public.market_index(indexed_at);
 create index if not exists market_index_lookup_idx
