@@ -24,7 +24,7 @@ async function fetchWithRetry(url, options = {}, settings = {}) {
     else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { ...options, cache: options.cache || "no-store", signal: controller.signal });
+      const response = await fetch(url, { ...options, cache: options.cache || "default", signal: controller.signal });
       if (response.ok || (response.status < 500 && response.status !== 429) || attempt === attempts - 1) {
         return response;
       }
