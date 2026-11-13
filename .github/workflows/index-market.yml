@@ -23,27 +23,6 @@ jobs:
         indexer: [rapidIndex, SlowIndex]
         shard: [0, 1]
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install analysis dependencies
-        run: python -m pip install -r requirements.txt
-      - name: Incrementally index liquid stocks
-        env:
-          INDEXER_NAME: ${{ matrix.indexer }}
-          CLOUDFLARE_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
-          CLOUDFLARE_ADMIN_API_TOKEN: ${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
-          INDEX_SHARD: ${{ matrix.shard }}
-          INDEX_PRIORITY_REFRESH_COUNT: ${{ vars.INDEX_PRIORITY_REFRESH_COUNT || '20' }}
-          INDEX_REFRESH_AFTER_HOURS: ${{ vars.INDEX_REFRESH_AFTER_HOURS || '6.0' }}
-          INDEX_BATCH_SIZE_PER_SHARD: ${{ vars.INDEX_BATCH_SIZE_PER_SHARD || '15' }}
-          SLOW_INDEX_BATCH_SIZE_PER_SHARD: ${{ vars.SLOW_INDEX_BATCH_SIZE_PER_SHARD || '2' }}
-          SLOW_INDEX_REFRESH_AFTER_HOURS: ${{ vars.SLOW_INDEX_REFRESH_AFTER_HOURS || '168' }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-        run: python -m app.indexer
+      - name: Background indexing paused to protect the D1 daily write allowance
+        run: echo "Indexing paused. On-demand analysis remains available."
+

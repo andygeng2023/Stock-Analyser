@@ -16,38 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check WatchIndex configuration
-        id: config
-        env:
-          CLOUDFLARE_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
-          CLOUDFLARE_ADMIN_API_TOKEN: ${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
-        run: |
-          if [ -n "$CLOUDFLARE_API_URL" ] && [ -n "$CLOUDFLARE_ADMIN_API_TOKEN" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Check out source
-        if: steps.config.outputs.configured == 'true'
-        uses: actions/checkout@v4
-      - name: Set up Python
-        if: steps.config.outputs.configured == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install analysis dependencies
-        if: steps.config.outputs.configured == 'true'
-        run: python -m pip install -r requirements.txt
-      - name: Refresh all authenticated watchlists through RapidIndex
-        if: steps.config.outputs.configured == 'true'
-        env:
-          CLOUDFLARE_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
-          CLOUDFLARE_ADMIN_API_TOKEN: ${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-        run: python -m app.watch_indexer
-      - name: Report missing credentials
-        if: steps.config.outputs.configured != 'true'
-        run: echo "::notice::Add CLOUDFLARE_API_URL and CLOUDFLARE_ADMIN_API_TOKEN as Actions secrets to enable WatchIndex."
+      - name: Background service paused to protect the D1 daily write allowance
+        run: echo "Background service paused. On-demand analysis remains available."
+
