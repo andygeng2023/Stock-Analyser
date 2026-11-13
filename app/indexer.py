@@ -168,8 +168,8 @@ def run(shard, indexer="rapidIndex"):
             "last_indexed_at": old.get("last_indexed_at"),
             "updated_at": now,
         })
-    for start in range(0, len(metadata), 500):
-        db_post("market_index_catalog", metadata[start:start + 500], conflict="ticker")
+    for start in range(0, len(metadata), 50):
+        db_post("market_index_catalog", metadata[start:start + 50], conflict="ticker")
 
     # Read the live cache separately from the catalogue. The catalogue survives
     # the eight-hour expiry; market_index tells us whether a usable result exists.
