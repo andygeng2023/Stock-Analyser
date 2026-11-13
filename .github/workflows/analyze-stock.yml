@@ -36,7 +36,7 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Drain the shared Supabase analysis queue
         env:
-          CLOUDFLARE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+          CLOUDFLARE_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
           CLOUDFLARE_ADMIN_API_TOKEN: ${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
