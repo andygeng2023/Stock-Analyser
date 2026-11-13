@@ -2,7 +2,7 @@ name: Analyse stock queue
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -18,12 +18,12 @@ concurrency:
 jobs:
   analyse:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 10
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
-        worker: [1, 2]
+        worker: [1]
     steps:
       - name: Check out source
         uses: actions/checkout@v4
