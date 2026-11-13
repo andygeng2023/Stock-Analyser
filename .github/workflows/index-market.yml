@@ -1,16 +1,6 @@
 name: Incremental market indexing
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/index-market.yml"
-      - "app/worker.py"
-      - "app/analyzer.py"
-      - "app/scanner.py"
-      - "app/indexer.py"
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -22,7 +12,7 @@ permissions:
 jobs:
   index:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 10
     concurrency:
       group: stock-market-indexer-v2-${{ matrix.indexer }}-${{ matrix.shard }}
       cancel-in-progress: true
