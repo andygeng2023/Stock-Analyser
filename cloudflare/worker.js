@@ -63,6 +63,10 @@ async function authRoutes(req,env,url) {
     const row=await authenticate(req,env); if(!row) return json({error:"Sign in again."},401);
     await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(row.id).run(); return json({success:true});
   }
+  if(route==="logout-others" && req.method==="POST") {
+    const row=await authenticate(req,env); if(!row) return json({error:"Sign in again."},401);
+    await env.DB.prepare("DELETE FROM sessions WHERE user_id=? AND token_hash<>?").bind(row.id,await sha(tokenFrom(req))).run(); return json({success:true});
+  }
   if(route==="profile" && req.method==="PATCH") {
     const row=await authenticate(req,env); if(!row) return json({error:"Sign in again."},401);
     if(body.email) return json({error:"Email changes are disabled until an email verification service is configured."},400);
@@ -216,7 +220,7 @@ async function restApi(req,env,url) {
   if(req.method==="POST"){
     const body=await req.json(),records=Array.isArray(body)?body:[body],conflict=(params.get("on_conflict")||"").split(",").filter(x=>allowed[table].includes(x));
     const statements=[];
-    for(const record of records){const keys=Object.keys(record).filter(k=>allowed[table].includes(k));if(!keys.length)continue;
+    for(const original of records){const record={...original};if(table==="analysis_jobs"&&!record.id)record.id=crypto.randomUUID();if(table==="watchlist_items"&&!record.id)record.id=crypto.randomUUID();const keys=Object.keys(record).filter(k=>allowed[table].includes(k));if(!keys.length)continue;
       const vals=keys.map(k=>k==="result"&&record[k]!=null?JSON.stringify(record[k]):record[k]);
       const update=keys.filter(k=>!conflict.includes(k)&&k!=="id").map(k=>k+"=excluded."+k).join(",");
       const suffix=conflict.length?" ON CONFLICT("+conflict.join(",")+") "+(update?"DO UPDATE SET "+update:"DO NOTHING"):"";
