@@ -1,15 +1,6 @@
 name: WatchIndex shared watchlist refresh
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/watch-index.yml"
-      - "app/worker.py"
-      - "app/analyzer.py"
-      - "app/watch_indexer.py"
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,7 +14,7 @@ concurrency:
 jobs:
   watch-index:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 10
     steps:
       - name: Check WatchIndex configuration
         id: config
