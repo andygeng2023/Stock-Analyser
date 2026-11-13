@@ -17,7 +17,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: stock-watch-indexer
+  group: stock-watch-indexer-v2
   cancel-in-progress: true
 
 jobs:
