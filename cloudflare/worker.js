@@ -193,7 +193,7 @@ async function stockMarketData(req,env) {
   return json({items,generated_at:now(),mode});
 }
 async function restApi(req,env,url) {
-  if(tokenFrom(req)!==env.ADMIN_API_TOKEN)return json({error:"Unauthorized"},401);
+  if(!env.ADMIN_API_TOKEN || tokenFrom(req)!==env.ADMIN_API_TOKEN)return json({error:"Unauthorized"},401);
   const parts=url.pathname.split("/"),table=parts.at(-1),rpc=parts.at(-2)==="rpc"?table:null;
   if(rpc==="claim_next_analysis_job"&&req.method==="POST"){
     const row=await env.DB.prepare("UPDATE analysis_jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=? WHERE id=(SELECT id FROM analysis_jobs WHERE status='queued' ORDER BY created_at LIMIT 1) RETURNING *").bind(now()).first();
