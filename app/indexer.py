@@ -5,6 +5,7 @@ recently indexed names, and computes a bounded number of full baseline analyses.
 """
 import hashlib
 import os
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import time
 import threading
@@ -18,7 +19,8 @@ from .worker import request_json
 
 PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "15"))
 SLOW_PER_SHARD_LIMIT = int(os.environ.get("SLOW_INDEX_BATCH_SIZE_PER_SHARD", "2"))
-MARKET_CAP_LOOKUPS = 250
+MARKET_CAP_LOOKUPS = 40
+MARKET_CAP_LOOKUP_WORKERS = 5
 PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"))
 REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
 SLOW_REFRESH_AFTER_HOURS = float(os.environ.get("SLOW_INDEX_REFRESH_AFTER_HOURS", "168"))
@@ -144,11 +146,27 @@ def run(shard, indexer="rapidIndex"):
     )
     catalog = {row["ticker"]: row for row in catalog_rows or []}
 
-    # Enrich a bounded liquid subset with Yahoo's market-cap metadata. If it is
-    # unavailable, liquidity and the fast-screen score remain the fallback.
-    for item in ranked[:MARKET_CAP_LOOKUPS]:
+    # Enrich only a small subset in parallel. Yahoo fast_info calls are
+    # network-bound; doing hundreds serially delayed the first catalogue write
+    # and made a healthy indexer appear stalled.
+    lookup_items = ranked[:MARKET_CAP_LOOKUPS]
+    missing_cap_items = [
+        item for item in lookup_items
+        if not catalog.get(item["ticker"], {}).get("market_cap")
+    ]
+    with ThreadPoolExecutor(max_workers=MARKET_CAP_LOOKUP_WORKERS) as pool:
+        looked_up_caps = list(pool.map(
+            market_cap_for,
+            [item["ticker"] for item in missing_cap_items],
+        ))
+    fetched_caps = {
+        item["ticker"]: cap
+        for item, cap in zip(missing_cap_items, looked_up_caps)
+        if cap is not None
+    }
+    for item in lookup_items:
         old = catalog.get(item["ticker"], {})
-        cap = old.get("market_cap") or market_cap_for(item["ticker"])
+        cap = old.get("market_cap") or fetched_caps.get(item["ticker"])
         item["market_cap"] = cap
         if cap is not None:
             catalog.setdefault(item["ticker"], {})["market_cap"] = cap
