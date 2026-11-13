@@ -1,4 +1,4 @@
-"""Long-running WatchIndex worker backed by Supabase Postgres watchlists."""
+"""Long-running WatchIndex worker backed by Cloudflare D1 watchlists."""
 import os
 import sys
 import time
@@ -138,7 +138,7 @@ def dispatch_successor():
 
 
 def main():
-    required = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "GITHUB_TOKEN")
+    required = ("CLOUDFLARE_API_URL", "CLOUDFLARE_ADMIN_API_TOKEN", "GITHUB_TOKEN")
     missing = [key for key in required if not os.environ.get(key)]
     if missing:
         print("Missing WatchIndex secrets: " + ", ".join(missing), file=sys.stderr)
