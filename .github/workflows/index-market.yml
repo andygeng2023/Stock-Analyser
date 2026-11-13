@@ -42,7 +42,7 @@ jobs:
       - name: Incrementally index liquid stocks
         env:
           INDEXER_NAME: ${{ matrix.indexer }}
-          CLOUDFLARE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+          CLOUDFLARE_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
           CLOUDFLARE_ADMIN_API_TOKEN: ${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
           INDEX_SHARD: ${{ matrix.shard }}
           INDEX_PRIORITY_REFRESH_COUNT: ${{ vars.INDEX_PRIORITY_REFRESH_COUNT || '20' }}
