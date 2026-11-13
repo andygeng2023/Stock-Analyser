@@ -9,7 +9,7 @@ on:
       - "app/analyzer.py"
       - "app/watch_indexer.py"
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: stock-watch-indexer
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   watch-index:
