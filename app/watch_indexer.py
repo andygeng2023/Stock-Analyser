@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from .analyzer import analyze_ticker
-from .worker import supabase_request, upsert_market_index
+from .worker import database_request, upsert_market_index
 
 PERIOD = "5y"
 HORIZON = 30
@@ -23,7 +23,7 @@ def watchlist_tickers():
     offset = 0
     page_size = 1000
     while True:
-        rows = supabase_request(
+        rows = database_request(
             "watchlist_items?select=ticker&order=created_at.asc"
             f"&limit={page_size}&offset={offset}"
         )
@@ -50,7 +50,7 @@ def recent_rapid_index(tickers):
         if not batch:
             continue
         symbols = ",".join(batch)
-        rows = supabase_request(
+        rows = database_request(
             "market_index?select=ticker,indexed_at"
             f"&ticker=in.({symbols})"
             f"&period=eq.{PERIOD}&horizon=eq.{HORIZON}"
@@ -82,7 +82,7 @@ def save_analysis(ticker, result):
         "created_at": now,
         "updated_at": now,
     }
-    supabase_request("analysis_jobs", method="POST", payload=payload)
+    database_request("analysis_jobs", method="POST", payload=payload)
     upsert_market_index(job_id, ticker, PERIOD, HORIZON, result, "rapidIndex")
 
 
