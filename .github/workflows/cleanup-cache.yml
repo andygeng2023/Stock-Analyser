@@ -1,6 +1,11 @@
 name: Expire shared analysis cache
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-cache.yml"
+      - "app/maintenance.py"
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
