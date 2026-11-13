@@ -30,7 +30,7 @@ async function issueSession(env,userId) {
   return token;
 }
 function userShape(row) {
-  return {id:row.id,email:row.email,created_at:row.created_at,last_sign_in_at:row.last_sign_in_at,email_confirmed_at:row.created_at,user_metadata:{display_name:row.display_name||""}};
+  return {id:row.id,email:row.email,created_at:row.created_at,last_sign_in_at:row.last_sign_in_at,email_confirmed_at:null,user_metadata:{display_name:row.display_name||""}};
 }
 async function authRoutes(req,env,url) {
   const route=url.pathname.split("/").pop(), body=req.method==="POST"||req.method==="PATCH"?await req.json().catch(()=>({})): {};
@@ -105,7 +105,7 @@ async function watchlist(req,env) {
   const map=new Map(indexed.results.map(row=>[row.ticker,row]));
   const cutoff=Date.now()-6*3600000;
   const stale=tickers.filter(t=>{const r=map.get(t);return !r?.indexed_at||Date.parse(r.indexed_at)<cutoff;});
-  if(stale.length && env.GITHUB_TOKEN) await dispatchWorkflow(env,"watch-index.yml").catch(e=>console.warn("WatchIndex dispatch failed",e));
+  // WatchIndex is scheduled by GitHub Actions; no outbound GitHub credential is needed here.
   const compact=(raw,at)=>{const r=parse(raw);if(!r)return null;const sample=(v,n)=>{if(!Array.isArray(v))return[];const a=v.map(Number).filter(Number.isFinite);return a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);};return {company:r.company||r.ticker,currency:r.currency||"USD",price:r.price??null,change_percent:r.change_percent??null,as_of:r.as_of??null,indexed_at:at,history_preview:sample(r.history?.close,72),forecast_preview:sample(r.forecast?.hybrid,30),market_summary:r.market_summary||{},fundamentals:{market_cap:r.fundamentals?.market_cap??null,sector:r.fundamentals?.sector??null,industry:r.fundamentals?.industry??null,profit_margin:r.fundamentals?.profit_margin??null,return_on_equity:r.fundamentals?.return_on_equity??null},model:{metrics:{hybrid:r.model?.metrics?.hybrid||{}}},forecast:{horizon:r.forecast?.horizon||30,expected_change_percent:r.forecast?.expected_change_percent??null}};};
   return json({items:items.results.map(item=>{const row=map.get(item.ticker);return {ticker:item.ticker,added_at:item.created_at,analysis:compact(row?.result,row?.indexed_at||null),indexed_at:row?.indexed_at||null,index_fresh:Boolean(row?.indexed_at&&Date.parse(row.indexed_at)>=cutoff),awaiting_watchindex:stale.includes(item.ticker)};}),refreshing:stale.length>0});
 }
@@ -141,8 +141,7 @@ async function requestAnalysis(req,env) {
   if(queued.n>=100)return json({error:"The analysis queue is currently full. Please try again shortly."},503);
   const id=crypto.randomUUID(), created=now();
   await env.DB.prepare("INSERT INTO analysis_jobs(id,ticker,period,horizon,job_type,scan_source,save_to_indexer,status,client_ip_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'queued','public',?,?)").bind(id,ticker,period,horizon,mode,scanSource,save,created,created).run();
-  try { await dispatchWorkflow(env,"analyze-stock.yml"); }
-  catch(e){await env.DB.prepare("UPDATE analysis_jobs SET status='failed',error='Could not start the analysis worker.',updated_at=? WHERE id=?").bind(now(),id).run();return json({error:"Could not start the analysis worker. Check the GitHub token and workflow setup."},502);}
+  // The queue worker polls on a five-minute GitHub Actions schedule. This avoids requiring a GitHub token in the public API Worker.
   return json({id,status:"queued",ticker,mode},202);
 }
 async function marketFeed(req,env,url) {
