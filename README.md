@@ -28,9 +28,7 @@ Set these values before deploying the application:
 
 1. In Cloudflare → Workers & Pages → `stock-analyser-api` → Settings → Variables and Secrets, add a secret named `ADMIN_API_TOKEN`. Use a newly generated, high-entropy random value (at least 32 random bytes).
 2. In GitHub → repository Settings → Secrets and variables → Actions → Secrets, add `CLOUDFLARE_ADMIN_API_TOKEN` with exactly the same value.
-3. In GitHub → Settings → Secrets and variables → Actions → Variables, add `CLOUDFLARE_API_URL` with `https://stock-analyser-api.stock-analyser-2026.workers.dev`.
-4. Keep the existing `STOCK_ANALYSER_GITHUB_TOKEN` secret only if another workflow still requires it. The public Worker does not need a GitHub token; analysis jobs are picked up by the scheduled GitHub Actions worker.
-5. Merge the migration branch into `main`. GitHub Pages will then publish the frontend using the Cloudflare API URL.
+3. Merge the migration branch into `main`. GitHub Pages and the scheduled workflows already contain the public Cloudflare API URL; no URL variable is required.
 
 The `CLOUDFLARE_ADMIN_API_TOKEN` value is an application-to-application shared secret, not a Cloudflare account API token. Do not put it in frontend configuration or commit it to the repository.
 
