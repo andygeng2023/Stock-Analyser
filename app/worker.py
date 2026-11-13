@@ -28,7 +28,7 @@ def request_json(url: str, *, method: str = "GET", payload=None, headers=None):
         return json.loads(raw) if raw else None
 
 
-def supabase_request(path: str, *, method: str = "GET", payload=None):
+def database_request(path: str, *, method: str = "GET", payload=None):
     base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
     key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
     return request_json(
@@ -41,7 +41,7 @@ def supabase_request(path: str, *, method: str = "GET", payload=None):
 
 def update_job(job_id: str, payload: dict) -> None:
     payload = {**payload, "updated_at": datetime.now(timezone.utc).isoformat()}
-    supabase_request(f"analysis_jobs?id=eq.{job_id}", method="PATCH", payload=payload)
+    database_request(f"analysis_jobs?id=eq.{job_id}", method="PATCH", payload=payload)
 
 
 
@@ -79,12 +79,12 @@ def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, res
 
 
 def claim_next_job():
-    rows = supabase_request("rpc/claim_next_analysis_job", method="POST", payload={})
+    rows = database_request("rpc/claim_next_analysis_job", method="POST", payload={})
     return rows[0] if rows else None
 
 
 def queue_has_pending_jobs() -> bool:
-    rows = supabase_request("analysis_jobs?select=id&status=eq.queued&limit=1")
+    rows = database_request("analysis_jobs?select=id&status=eq.queued&limit=1")
     return bool(rows)
 
 
