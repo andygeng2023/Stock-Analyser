@@ -17,7 +17,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: stock-background-scanner
+  group: stock-background-scanner-v2
   cancel-in-progress: true
 
 jobs:
