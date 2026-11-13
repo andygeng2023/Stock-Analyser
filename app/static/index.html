@@ -32,7 +32,7 @@
       <p id="auth-feedback" class="auth-feedback" role="status" aria-live="polite"></p>
       <div class="auth-links">
         <button id="auth-mode-toggle" type="button">Create an account</button>
-        <button id="auth-reset-link" type="button">Forgot password?</button>
+        <button id="auth-reset-link" type="button" disabled title="Email delivery is not configured">Password reset unavailable</button>
       </div>
     </div>
     <div id="auth-account-panel" hidden>
@@ -224,11 +224,11 @@
             <span class="settings-v2-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg></span>
             <div class="settings-v2-copy">
               <strong>Change email address</strong>
-              <small>Confirm the new address to complete the change.</small>
+              <small>Email changes are unavailable without an email verification service.</small>
             </div>
             <form id="account-email-form" class="settings-v2-form">
-              <input id="account-new-email" type="email" required maxlength="254" autocomplete="email" placeholder="New email address">
-              <button type="submit" class="settings-v2-button">Update email</button>
+              <input id="account-new-email" type="email" required disabled maxlength="254" autocomplete="email" placeholder="New email address">
+              <button type="submit" class="settings-v2-button" disabled>Unavailable</button>
             </form>
           </div>
 
@@ -245,7 +245,7 @@
               </div>
               <div class="settings-v2-form-actions">
                 <button type="submit" class="settings-v2-button">Update password</button>
-                <button id="account-password-reset" class="settings-v2-button secondary-button" type="button">Send reset email</button>
+                <button id="account-password-reset" class="settings-v2-button secondary-button" type="button" disabled title="Email delivery is not configured">Reset email unavailable</button>
               </div>
             </form>
           </div>
