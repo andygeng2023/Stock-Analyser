@@ -1,24 +1,17 @@
-"""Hourly cleanup for expired shared analysis and market-index cache rows."""
-import json
+"""Cleanup expired Cloudflare D1 analysis and market-index cache rows."""
 import os
-import urllib.request
+from .worker import request_json
 
 
 def main():
-    base = os.environ["SUPABASE_URL"].rstrip("/")
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    request = urllib.request.Request(
-        f"{base}/rest/v1/rpc/cleanup_expired_analysis_cache",
-        data=b"{}",
+    base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
+    key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
+    result = request_json(
+        f"{base}/internal/rest/v1/rpc/cleanup_expired_analysis_cache",
         method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-        },
+        payload={},
+        headers={"Authorization": f"Bearer {key}"},
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        result = json.loads(response.read().decode("utf-8"))
     print("Expired cache cleanup:", result)
 
 

@@ -4,41 +4,54 @@ A responsive stock research dashboard using Yahoo Finance data and a walk-forwar
 
 ## Architecture
 
-- **GitHub Pages** serves the static dashboard.
-- **Supabase Edge Functions** validate requests, apply basic rate limiting, queue jobs and return job status.
-- **GitHub Actions** runs the Python worker on demand using `yfinance`, pandas, statsmodels and scikit-learn.
-- **Supabase PostgreSQL** stores queued jobs and completed analysis JSON.
-- **Supabase Auth + PostgreSQL** provides email accounts, secure per-user watchlists and the shared RapidIndex cache.
+- **GitHub Pages** hosts the static dashboard.
+- **Cloudflare Workers** provides the public API, authentication and request handling.
+- **Cloudflare D1 (SQLite)** stores analysis jobs, RapidIndex/SlowIndex results, the market catalogue, accounts, sessions and watchlists.
+- **GitHub Actions** runs the Python analysis worker, scheduled market indexing and WatchIndex.
+- **Yahoo Finance** supplies quotes, historical data and symbol search.
 
-This avoids requiring a continuously running Python server while retaining the actual Python `yfinance` package and scientific Python stack.
+Supabase is no longer part of the runtime architecture. The Worker uses a D1 binding; Python workers use a narrowly scoped internal API protected by a shared secret. The public frontend never receives that secret.
 
-## Setup
+## Cloudflare resources
 
-See [Supabase setup instructions](supabase/README.md). The database schema is in `supabase/setup.sql`.
+The migration branch is configured for:
 
-1. Create a dedicated Supabase project and run the SQL setup script.
-2. Deploy `request-analysis`, `analysis-status` and `watchlist` Edge Functions.
-3. Set Supabase Edge Function secrets and GitHub Actions secrets as documented.
-4. Add GitHub Actions repository variables `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
-5. Set GitHub Pages → Build and deployment → Source to **GitHub Actions**.
-6. Merge to `main`; the Pages workflow publishes the frontend. The analysis workflow is triggered for each accepted ticker request.
+- D1 database: `stock-analyser` (EU jurisdiction).
+- Worker: `stock-analyser-api`.
+- Worker URL: `https://stock-analyser-api.stock-analyser-2026.workers.dev`.
 
-The repository is public. GitHub documents standard hosted runner usage as free for public repositories. Private repositories instead use the account's included Actions quota and may incur charges if exceeded.
+The D1 schema is maintained in `cloudflare/schema.sql`; the deployed API source is `cloudflare/worker.js`.
+
+## Required configuration
+
+Set these values before deploying the application:
+
+1. In Cloudflare → Workers & Pages → `stock-analyser-api` → Settings → Variables and Secrets, add a secret named `ADMIN_API_TOKEN`. Use a newly generated, high-entropy random value (at least 32 random bytes).
+2. In GitHub → repository Settings → Secrets and variables → Actions → Secrets, add `CLOUDFLARE_ADMIN_API_TOKEN` with exactly the same value.
+3. Merge the migration branch into `main`. GitHub Pages and the scheduled workflows already contain the public Cloudflare API URL; no URL variable is required.
+
+The `CLOUDFLARE_ADMIN_API_TOKEN` value is an application-to-application shared secret, not a Cloudflare account API token. Do not put it in frontend configuration or commit it to the repository.
+
+## Zero-cost account limitations
+
+The replacement account system stores salted PBKDF2 password hashes and hashed session tokens in D1. Sessions expire after 30 days. Users can sign up, sign in, change their password, update their display name and sign out sessions.
+
+There is no transactional email provider in this zero-cost setup. Consequently, email verification, password-reset emails and email-address changes are unavailable. Users should keep access to their account and change their password while signed in. Do not use a password that is important elsewhere.
+
+## Data migration
+
+The new D1 database is currently initialised with an empty schema. The previous Supabase project was reporting exhausted egress/database connectivity errors, so existing indexed results, user accounts and watchlists have not been transferred. Once Supabase data becomes readable, a separate export/import can recover compatible records. Otherwise RapidIndex and SlowIndex will repopulate through the scheduled indexers, and users will need to recreate accounts and watchlists.
 
 ## Indexing profiles
 
-- **rapidIndex** indexes five years of price history and a 30-trading-day forecast.
-- **SlowIndex** indexes the maximum available history and a 252-trading-day (approximately one-year) forecast.
+- **RapidIndex** indexes five years of price history and a 30-trading-day forecast.
+- **SlowIndex** indexes the maximum available history and a 252-trading-day forecast.
 - Detailed stock analysis and Hard rerun use these same profiles. Custom reruns can select a different history period, forecast horizon (up to 504 trading days), and independent save destination.
-- Results are cached separately by ticker, history period, forecast horizon, and destination indexer, so custom results cannot overwrite RapidIndex or SlowIndex entries.
+- Results are cached separately by ticker, history period, forecast horizon, and destination indexer.
 
 ## Accounts, Watchlist and WatchIndex
 
-Email/password accounts are provided by Supabase Auth. A user's watchlist is stored in `public.watchlist_items` in the same Supabase PostgreSQL project, keyed to `auth.users.id` and protected by row-level security. Users can sign up, confirm their email, sign in, reset their password and sign out. The same account can access its watchlist across browsers and devices.
-
-The `watch-index.yml` workflow keeps one WatchIndex worker active. It reads all distinct tickers from all authenticated users' watchlists, skips any ticker already indexed by RapidIndex in the previous six hours, and writes newly computed results to the shared RapidIndex cache. No separate SQLite/Turso service is used.
-
-See [Supabase setup instructions](supabase/README.md#email-authentication-and-watchlist).
+Watchlists are stored in D1 and are scoped to the authenticated account. WatchIndex reads all distinct watchlist tickers, skips tickers with a RapidIndex result from the previous six hours, and writes newly computed results to the shared RapidIndex cache.
 
 ## Local Python server
 
@@ -51,7 +64,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Open http://127.0.0.1:8000. API documentation: /docs.
+The local FastAPI server is separate from the deployed Cloudflare API. API documentation: `/docs`.
 
 ## Model
 
@@ -59,17 +72,17 @@ The forecasting system combines four components:
 
 - **ARIMA** models daily log returns and supplies the statistical time-series baseline.
 - **SVC (Support Vector Classification)** predicts the next session's direction.
-- **SVR (Support Vector Regression)** estimates nonlinear corrections to ARIMA residuals.
+- **SVR (Support Vector Regression)** estimates nonlinear corrections to ARIMA residuals and also predicts returns directly.
 - **XGBoost** independently estimates next-session returns from lagged returns, volatility, RSI, MACD, volume changes and residual lags.
 
-The primary continuous-return ensemble is a fixed 50/50 blend of the ARIMA+SVR estimate and XGBoost estimate. A separate SVR model predicts returns directly so the chart can compare ARIMA, SVR and XGBoost independently. Additional comparison blends include ARIMA+XGBoost, SVR+XGBoost and an equal-weight all-model hybrid. SVC supplies a separate directional classification and is evaluated independently; it is not incorrectly treated as a continuous price regressor. The forecast compounds the ensemble's estimated returns into a price path.
+The primary continuous-return ensemble is a fixed 50/50 blend of the ARIMA+SVR estimate and XGBoost estimate. Additional comparison blends include ARIMA+XGBoost, SVR+XGBoost and an equal-weight all-model hybrid. SVC supplies a separate directional classification and is evaluated independently; it is not treated as a continuous price regressor.
 
-Validation uses a chronological holdout with expanding-window, one-step-ahead ARIMA forecasts. The other models are fitted only on observations before the holdout and evaluated on the later window. The reported backtest is historical out-of-sample evaluation, not a guarantee of future performance. Model metrics include MAE, RMSE and directional accuracy, with component-level results and the combined ensemble.
+Validation uses a chronological holdout with expanding-window, one-step-ahead ARIMA forecasts. The other models are fitted only on observations before the holdout and evaluated on the later window. Reported backtests are historical out-of-sample evaluations, not guarantees of future performance.
 
-Forecast bands remain approximate residual-dispersion bands, not calibrated prediction intervals. Business-day offsets do not account for exchange holidays. Yahoo Finance data can be delayed, incomplete or rate-limited. XGBoost adds a dependency and CPU training cost; model fitting may take longer than the previous ARIMA–SVR implementation.
+## Free-tier limits and reliability
 
-## Security
+Cloudflare Free has daily D1 row-read and row-write limits and a finite database storage allowance. The application uses bounded queries, indexed filters and scheduled batches, but a large indexing universe or unusually high traffic can exhaust those limits. When a free-tier limit is reached, D1 queries can fail until the daily reset. Monitor D1 row metrics in the Cloudflare dashboard.
 
-Never put the Supabase service-role key or GitHub token in frontend files. Only the Supabase publishable key belongs in the browser. Keep the GitHub token restricted to this repository and grant only Actions read/write permission. The analysis endpoints apply a basic per-IP hourly cap; this is a small personal-project safeguard, not a substitute for production-grade abuse prevention.
+Yahoo Finance data can be delayed, incomplete or rate-limited. GitHub Actions schedules are not real-time and can be delayed by GitHub.
 
 For research and education only. Not investment advice.

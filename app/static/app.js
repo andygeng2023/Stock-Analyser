@@ -1,14 +1,14 @@
 const $ = id => document.getElementById(id);
 const config = window.STOCK_ANALYSER_CONFIG || {};
-const authClient = config.supabaseUrl && config.supabasePublishableKey && window.supabase?.createClient
-  ? window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, { auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true } })
+const authClient = config.apiBaseUrl && window.stockAnalyserAuth?.createClient
+  ? window.stockAnalyserAuth.createClient(config.apiBaseUrl)
   : null;
 const fmt = (v, d = 2) => v == null || !Number.isFinite(Number(v)) ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
 const pct = v => v == null || !Number.isFinite(Number(v)) ? "—" : (Number(v) > 0 ? "+" : "") + fmt(v) + "%";
 const cash = (v, c) => v == null || !Number.isFinite(Number(v)) ? "—" : new Intl.NumberFormat(undefined, { style: "currency", currency: c || "USD", maximumFractionDigits: 2 }).format(Number(v));
 const esc = s => String(s ?? "—").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const api = name => config.supabaseUrl.replace(/\/$/, "") + "/functions/v1/" + name;
-const headers = () => ({ "Content-Type": "application/json", "apikey": config.supabasePublishableKey });
+const api = name => config.apiBaseUrl.replace(/\/$/, "") + "/api/" + name;
+const headers = () => ({ "Content-Type": "application/json" });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Bound network waits and retry transient failures on safe, read-only requests.
@@ -116,7 +116,7 @@ let watchlistLoading = false;
 let watchlistRefreshTimer = null;
 const rapidIndexQueuePending = new Set();
 async function watchlistRequest(action, ticker) {
-  if (!authClient) throw new Error("Supabase Auth is unavailable. Reload the app and try again.");
+  if (!authClient) throw new Error("Authentication is unavailable. Reload the app and try again.");
   const { data, error: sessionError } = await authClient.auth.getSession();
   if (sessionError) throw sessionError;
   const session = data.session || authSession;
@@ -161,7 +161,7 @@ function updateAuthUI() {
   if (signedIn) {
     const verified = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
     $("account-current-email").textContent = authUser.email || "—";
-    $("account-email-status").textContent = verified ? "Verified" : "Confirmation pending";
+    $("account-email-status").textContent = verified ? "Verified" : "Not verified · email delivery unavailable";
     $("account-created").textContent = authUser.created_at ? new Date(authUser.created_at).toLocaleString() : "—";
     $("account-last-signin").textContent = authUser.last_sign_in_at ? new Date(authUser.last_sign_in_at).toLocaleString() : "—";
     $("account-display-name").value = authUser.user_metadata?.display_name || "";
@@ -234,7 +234,7 @@ async function initializeAuth() {
   if (!authClient) {
     $("settings-account-button").disabled = true;
     $("settings-account-button").textContent = "Authentication unavailable";
-    $("auth-feedback").textContent = "Supabase URL and publishable key are required to enable accounts.";
+    $("auth-feedback").textContent = "Cloudflare API configuration is required to enable accounts.";
     return;
   }
   authClient.auth.onAuthStateChange((event, session) => {
@@ -317,7 +317,7 @@ $("account-email-form").addEventListener("submit", async event => {
     );
     if (error) throw error;
     $("account-new-email").value = "";
-    setAccountFeedback("Email change requested. Follow the confirmation instructions sent by your email provider.");
+    setAccountFeedback("");
   } catch (error) {
     setAccountFeedback(error.message || "Could not update the email address.", true);
   } finally {
@@ -602,14 +602,14 @@ function renderGlobalQueue() {
   }));
 }
 async function refreshGlobalQueue() {
-  if (queueRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (queueRefreshBusy || !config.apiBaseUrl) return;
   queueRefreshBusy = true;
   try {
     const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status) && !locallyPollingJobIds.has(job.id));
     await Promise.all(active.map(async job => {
       try {
         const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(job.id), {
-          headers: { "apikey": config.supabasePublishableKey }
+          headers: { "Content-Type": "application/json" }
         }, { timeoutMs: 10000, attempts: 2 });
         const data = await response.json();
         if (response.ok) updateTrackedJob(job.id, data);
@@ -686,7 +686,7 @@ async function waitForResult(id, statusElement, prefix = "search") {
     const started = Date.now();
     while (Date.now() - started < 15 * 60 * 1000) {
       const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(id), {
-        headers: { "apikey": config.supabasePublishableKey }
+        headers: { "Content-Type": "application/json" }
       }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
@@ -1072,7 +1072,7 @@ async function requestCardMarketMode(mode, tickers, onItem) {
 }
 
 async function refreshVisibleMarketCards(force = false) {
-  if (!config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (!config.apiBaseUrl) return;
   if (visibleMarketRefreshBusy) {
     visibleMarketRefreshQueued = visibleMarketRefreshQueued || force;
     return;
@@ -1230,8 +1230,8 @@ function renderMarketFeed(data, options = {}) {
 }
 
 async function loadMarketFeed(force = false) {
-  if (!config.supabaseUrl || !config.supabasePublishableKey) {
-    $("home-latest-scan").innerHTML = '<div class="empty-feed">Supabase is not configured. Add the project URL and publishable key to the app deployment variables.</div>';
+  if (!config.apiBaseUrl) {
+    $("home-latest-scan").innerHTML = '<div class="empty-feed">Cloudflare API is not configured. Add CLOUDFLARE_API_URL to the GitHub Pages deployment variables.</div>';
     return;
   }
   if (marketFeedLoading) {
@@ -1248,7 +1248,7 @@ async function loadMarketFeed(force = false) {
   if (!force && marketFeed && !marketFeedFromCache && Date.now() - marketFeedLoadedAt < 60_000) return;
   marketFeedLoading = true;
   try {
-    const response = await fetchWithRetry(api("market-feed"), { method: "GET", headers: { "apikey": config.supabasePublishableKey } }, { timeoutMs: 15000, attempts: 3 });
+    const response = await fetchWithRetry(api("market-feed"), { method: "GET", headers: { "Content-Type": "application/json" } }, { timeoutMs: 15000, attempts: 3 });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not load market overview.");
     renderMarketFeed(data);
@@ -1375,7 +1375,7 @@ function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = (
     clearTimeout(autocompleteTimers.get(inputId));
     autocompleteControllers.get(inputId)?.abort();
     if (!query) { close(); return; }
-    if (!config.supabaseUrl || !config.supabasePublishableKey) {
+    if (!config.apiBaseUrl) {
       dropdown.innerHTML = '<div class="autocomplete-message">Search is not configured.</div>';
       dropdown.hidden = false;
       input.setAttribute("aria-expanded", "true");
@@ -1389,7 +1389,7 @@ function attachStockAutocomplete(inputId, dropdownId, returnScreen, settings = (
       autocompleteControllers.set(inputId, controller);
       try {
         const response = await fetchWithRetry(api("market-feed") + "?q=" + encodeURIComponent(query), {
-          headers: { "apikey": config.supabasePublishableKey },
+          headers: { "Content-Type": "application/json" },
           signal: controller.signal
         }, { timeoutMs: 10000, attempts: 2 });
         const data = await response.json();
@@ -1457,9 +1457,9 @@ async function openStockDetails(ticker, options = {}) {
   const period = options.customPeriod || (indexer === "SlowIndex" ? "max" : "5y");
   const horizon = Number(options.customHorizon || (indexer === "SlowIndex" ? 252 : 30));
   updateDetailIndexerSwitch();
-  if (!config.supabaseUrl || !config.supabasePublishableKey) {
+  if (!config.apiBaseUrl) {
     switchScreen("detail");
-    $("detail-status").textContent = "Supabase is not configured. Add the project URL and publishable key to the app deployment variables.";
+    $("detail-status").textContent = "Cloudflare API is not configured. Add CLOUDFLARE_API_URL to the GitHub Pages deployment variables.";
     return;
   }
 
@@ -1480,7 +1480,7 @@ async function openStockDetails(ticker, options = {}) {
     let result;
     if (request.status === "completed" && request.cached) {
       const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
-        headers: { "apikey": config.supabasePublishableKey }
+        headers: { "Content-Type": "application/json" }
       }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve cached analysis.");
@@ -1754,8 +1754,8 @@ function renderScan(data) {
 }
 
 async function startScan(hard = false) {
-  if (!config.supabaseUrl || !config.supabasePublishableKey) {
-    $("scan-status").textContent = "Supabase is not configured. Add the project URL and publishable key to the app deployment variables.";
+  if (!config.apiBaseUrl) {
+    $("scan-status").textContent = "Cloudflare API is not configured. Add CLOUDFLARE_API_URL to the GitHub Pages deployment variables.";
     return;
   }
   $("hard-rescan").disabled = true;
@@ -1769,7 +1769,7 @@ async function startScan(hard = false) {
     let result;
     if (request.status === "completed" && request.cached) {
       const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
-        headers: { "apikey": config.supabasePublishableKey }
+        headers: { "Content-Type": "application/json" }
       }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve cached scan.");
@@ -1801,7 +1801,7 @@ async function startScan(hard = false) {
 $("hard-rescan").addEventListener("click", () => startScan(true));
 
 async function loadLatestScan() {
-  if (latestScanLoaded || !config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (latestScanLoaded || !config.apiBaseUrl) return;
   latestScanLoaded = true;
   try {
     $("scan-status").textContent = "Checking the latest shared background scan…";
@@ -1811,7 +1811,7 @@ async function loadLatestScan() {
       return;
     }
     const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
-      headers: { "apikey": config.supabasePublishableKey }
+      headers: { "Content-Type": "application/json" }
     });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Could not retrieve the latest scan.");
@@ -1830,13 +1830,13 @@ async function loadLatestScan() {
 }
 
 async function refreshLatestScan() {
-  if (currentScreen !== "discover" || latestScanRefreshBusy || !config.supabaseUrl || !config.supabasePublishableKey) return;
+  if (currentScreen !== "discover" || latestScanRefreshBusy || !config.apiBaseUrl) return;
   latestScanRefreshBusy = true;
   try {
     const request = await requestAnalysis(null, null, null, "scan", false, true);
     if (request.id && request.id !== latestScanId) {
       const response = await fetch(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
-        headers: { "apikey": config.supabasePublishableKey }
+        headers: { "Content-Type": "application/json" }
       });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve the updated scan.");

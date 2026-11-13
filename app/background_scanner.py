@@ -14,8 +14,8 @@ SCAN_HORIZON = 30
 
 
 def save_scan(result):
-    base = os.environ["SUPABASE_URL"].rstrip("/")
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
+    key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "ticker": "SCAN",
@@ -34,11 +34,10 @@ def save_scan(result):
         "updated_at": now,
     }
     rows = request_json(
-        f"{base}/rest/v1/analysis_jobs",
+        f"{base}/internal/rest/v1/analysis_jobs",
         method="POST",
         payload=payload,
         headers={
-            "apikey": key,
             "Authorization": f"Bearer {key}",
             "Prefer": "return=representation",
         },
