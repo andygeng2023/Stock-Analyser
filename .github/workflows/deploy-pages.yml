@@ -28,7 +28,7 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Build static site and runtime configuration
         env:
-          CLOUDFLARE_API_URL: ${{ vars.CLOUDFLARE_API_URL || secrets.CLOUDFLARE_API_URL }}
+          CLOUDFLARE_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
         run: |
           if [ -z "$CLOUDFLARE_API_URL" ]; then
             echo "Missing Cloudflare configuration. Add CLOUDFLARE_API_URL as a GitHub Actions variable."
