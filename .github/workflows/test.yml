@@ -24,5 +24,8 @@ jobs:
         run: python -m compileall -q app tests
       - name: Run offline input validation tests
         run: python -m unittest discover -s tests -v
-      - name: Check frontend JavaScript syntax
-        run: node --check app/static/app.js
+      - name: Check frontend and Worker JavaScript syntax
+        run: |
+          node --check app/static/app.js
+          node --check app/static/auth.js
+          node --check cloudflare/worker.js
