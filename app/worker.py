@@ -19,7 +19,10 @@ MAX_RUNTIME_SECONDS = 345 * 60
 
 def request_json(url: str, *, method: str = "GET", payload=None, headers=None):
     body = None if payload is None else json.dumps(payload).encode()
-    request_headers = {"Content-Type": "application/json"}
+    request_headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "StockAnalyser-Worker/1.0",
+    }
     if headers:
         request_headers.update(headers)
     request = urllib.request.Request(url, data=body, method=method, headers=request_headers)
