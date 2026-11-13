@@ -8,6 +8,12 @@ const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(bod
   status, headers: { ...cors, "Cache-Control": "no-store", ...extra },
 });
 const now = () => new Date().toISOString();
+async function allowRate(env, req, bucket, limit, windowMs) {
+  const ip=req.headers.get("CF-Connecting-IP")||"unknown";
+  const key=await sha(bucket+":"+ip), current=Date.now(), cutoff=current-windowMs;
+  const row=await env.DB.prepare("INSERT INTO api_rate_limits(bucket_key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET attempts=CASE WHEN window_start<=? THEN 1 ELSE attempts+1 END,window_start=CASE WHEN window_start<=? THEN ? ELSE window_start END RETURNING attempts").bind(key,current,cutoff,cutoff,current).first();
+  return Number(row?.attempts||0)<=limit;
+}
 const validTicker = value => /^[A-Z0-9.^=-]{1,20}$/.test(String(value || ""));
 const parse = value => { try { return typeof value === "string" ? JSON.parse(value) : value; } catch { return null; } };
 const tokenFrom = req => (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
@@ -34,6 +40,11 @@ function userShape(row) {
 }
 async function authRoutes(req,env,url) {
   const route=url.pathname.split("/").pop(), body=req.method==="POST"||req.method==="PATCH"?await req.json().catch(()=>({})): {};
+  if(["signup","login","reset"].includes(route)) {
+    const limits={signup:[5,3600000],login:[10,900000],reset:[3,3600000]};
+    const [limit,windowMs]=limits[route];
+    if(!await allowRate(env,req,"auth-"+route,limit,windowMs))return json({error:"Too many attempts. Please wait before trying again."},429);
+  }
   if(route==="signup" && req.method==="POST") {
     const email=String(body.email||"").trim().toLowerCase(), password=String(body.password||"");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length<8||password.length>256) return json({error:"Enter a valid email and a password of at least 8 characters."},400);
@@ -114,6 +125,7 @@ async function dispatchWorkflow(env,workflow) {
   if(!res.ok) throw new Error("GitHub workflow dispatch failed: "+res.status);
 }
 async function requestAnalysis(req,env) {
+  if(!await allowRate(env,req,"analysis-request",20,3600000))return json({error:"Analysis request limit reached for this connection. Please try again later."},429);
   const body=await req.json(), mode=body.mode==="scan"?"scan":"analysis", ticker=mode==="scan"?"SCAN":String(body.ticker||"").trim().toUpperCase();
   const period=mode==="scan"?"5y":String(body.period||"5y"), horizon=mode==="scan"?30:Number(body.horizon||30);
   const scanSource=mode==="scan"?String(body.source||"both").toLowerCase():"both";
@@ -199,9 +211,13 @@ async function restApi(req,env,url) {
     const cutoffRapid=new Date(Date.now()-8*3600000).toISOString(),cutoffSlow=new Date(Date.now()-30*86400000).toISOString();
     const a=await env.DB.prepare("DELETE FROM market_index WHERE (indexer='SlowIndex' AND indexed_at<?) OR (indexer<>'SlowIndex' AND indexed_at<?)").bind(cutoffSlow,cutoffRapid).run();
     const b=await env.DB.prepare("DELETE FROM analysis_jobs WHERE status='completed' AND ((save_to_indexer='SlowIndex' AND created_at<?) OR (save_to_indexer<>'SlowIndex' AND created_at<?))").bind(cutoffSlow,cutoffRapid).run();
+    await env.DB.prepare("DELETE FROM api_rate_limits WHERE window_start<?").bind(Date.now()-86400000).run();
     return json({expired_index_rows:a.meta?.changes||0,expired_completed_jobs:b.meta?.changes||0});
   }
   if(rpc==="claim_next_analysis_job"&&req.method==="POST"){
+    const stale=new Date(Date.now()-90*60000).toISOString();
+    await env.DB.prepare("UPDATE analysis_jobs SET status='queued',error='Recovered after an interrupted worker.',updated_at=? WHERE status='running' AND updated_at<? AND attempts<3").bind(now(),stale).run();
+    await env.DB.prepare("UPDATE analysis_jobs SET status='failed',error='Worker stopped repeatedly before completing this analysis.',updated_at=? WHERE status='running' AND updated_at<? AND attempts>=3").bind(now(),stale).run();
     const row=await env.DB.prepare("UPDATE analysis_jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=? WHERE id=(SELECT id FROM analysis_jobs WHERE status='queued' ORDER BY created_at LIMIT 1) RETURNING *").bind(now()).first();
     if(row&&row.result)row.result=parse(row.result);return json(row?[row]:[]);
   }
