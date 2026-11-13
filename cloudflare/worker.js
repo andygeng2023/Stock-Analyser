@@ -195,6 +195,12 @@ async function stockMarketData(req,env) {
 async function restApi(req,env,url) {
   if(!env.ADMIN_API_TOKEN || tokenFrom(req)!==env.ADMIN_API_TOKEN)return json({error:"Unauthorized"},401);
   const parts=url.pathname.split("/"),table=parts.at(-1),rpc=parts.at(-2)==="rpc"?table:null;
+  if(rpc==="cleanup_expired_analysis_cache"&&req.method==="POST"){
+    const cutoffRapid=new Date(Date.now()-8*3600000).toISOString(),cutoffSlow=new Date(Date.now()-30*86400000).toISOString();
+    const a=await env.DB.prepare("DELETE FROM market_index WHERE (indexer='SlowIndex' AND indexed_at<?) OR (indexer<>'SlowIndex' AND indexed_at<?)").bind(cutoffSlow,cutoffRapid).run();
+    const b=await env.DB.prepare("DELETE FROM analysis_jobs WHERE status='completed' AND ((save_to_indexer='SlowIndex' AND created_at<?) OR (save_to_indexer<>'SlowIndex' AND created_at<?))").bind(cutoffSlow,cutoffRapid).run();
+    return json({expired_index_rows:a.meta?.changes||0,expired_completed_jobs:b.meta?.changes||0});
+  }
   if(rpc==="claim_next_analysis_job"&&req.method==="POST"){
     const row=await env.DB.prepare("UPDATE analysis_jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=? WHERE id=(SELECT id FROM analysis_jobs WHERE status='queued' ORDER BY created_at LIMIT 1) RETURNING *").bind(now()).first();
     if(row&&row.result)row.result=parse(row.result);return json(row?[row]:[]);
@@ -226,7 +232,7 @@ async function restApi(req,env,url) {
       statements.push(env.DB.prepare("INSERT INTO "+table+"("+keys.join(",")+") VALUES("+keys.map(()=>"?").join(",")+")"+suffix).bind(...vals));
     }
     if(statements.length)await env.DB.batch(statements);
-    if((req.headers.get("Prefer")||"").includes("return=representation"))return json(records);
+    if((req.headers.get("Prefer")||"").includes("return=representation"))return json(output);
     return json([]);
   }
   if(req.method==="PATCH"){
