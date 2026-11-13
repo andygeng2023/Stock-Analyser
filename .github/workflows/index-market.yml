@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 350
     concurrency:
       group: stock-market-indexer-${{ matrix.indexer }}-${{ matrix.shard }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       max-parallel: 4
