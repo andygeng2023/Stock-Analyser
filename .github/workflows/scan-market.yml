@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/scan-market.yml"
+      - "app/worker.py"
       - "app/background_scanner.py"
       - "app/scanner.py"
   schedule:
