@@ -1,6 +1,7 @@
 """Cleanup expired Cloudflare D1 analysis and market-index cache rows."""
 import json
 import os
+import urllib.error
 import urllib.request
 
 
@@ -17,9 +18,13 @@ def main():
             "Authorization": f"Bearer {key}",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        raw = response.read()
-        result = json.loads(raw) if raw else None
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:1000]
+        raise RuntimeError(f"Cloudflare cleanup API returned HTTP {exc.code}: {detail}") from exc
+    result = json.loads(raw) if raw else None
     print("Expired cache cleanup:", result)
 
 
