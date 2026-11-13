@@ -14,3 +14,5 @@ CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS watchlist_items (id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,ticker TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(user_id,ticker));
 CREATE INDEX IF NOT EXISTS watchlist_items_ticker_created_idx ON watchlist_items(ticker,created_at);
 CREATE INDEX IF NOT EXISTS watchlist_items_user_created_idx ON watchlist_items(user_id,created_at);
+CREATE TABLE IF NOT EXISTS api_rate_limits (bucket_key TEXT PRIMARY KEY,window_start INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS api_rate_limits_window_idx ON api_rate_limits(window_start);
