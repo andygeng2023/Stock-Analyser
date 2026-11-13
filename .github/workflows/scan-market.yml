@@ -1,6 +1,10 @@
 name: Continuous background market scanning
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/scan-market.yml"
   workflow_dispatch:
 
 permissions:

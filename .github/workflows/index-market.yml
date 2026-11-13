@@ -1,6 +1,10 @@
 name: Incremental market indexing
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/index-market.yml"
   workflow_dispatch:
 
 permissions:

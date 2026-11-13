@@ -1,6 +1,10 @@
 name: WatchIndex shared watchlist refresh
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/watch-index.yml"
   workflow_dispatch:
 
 permissions:
