@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/index-market.yml"
+      - "app/worker.py"
+      - "app/analyzer.py"
+      - "app/scanner.py"
       - "app/indexer.py"
   schedule:
     - cron: "0 */6 * * *"
