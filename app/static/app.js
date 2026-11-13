@@ -161,7 +161,7 @@ function updateAuthUI() {
   if (signedIn) {
     const verified = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
     $("account-current-email").textContent = authUser.email || "—";
-    $("account-email-status").textContent = verified ? "Verified" : "Confirmation pending";
+    $("account-email-status").textContent = verified ? "Verified" : "Not verified · email delivery unavailable";
     $("account-created").textContent = authUser.created_at ? new Date(authUser.created_at).toLocaleString() : "—";
     $("account-last-signin").textContent = authUser.last_sign_in_at ? new Date(authUser.last_sign_in_at).toLocaleString() : "—";
     $("account-display-name").value = authUser.user_metadata?.display_name || "";
@@ -317,7 +317,7 @@ $("account-email-form").addEventListener("submit", async event => {
     );
     if (error) throw error;
     $("account-new-email").value = "";
-    setAccountFeedback("Email change requested. Follow the confirmation instructions sent by your email provider.");
+    setAccountFeedback("");
   } catch (error) {
     setAccountFeedback(error.message || "Could not update the email address.", true);
   } finally {
