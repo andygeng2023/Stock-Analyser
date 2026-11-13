@@ -40,7 +40,7 @@ async function authRoutes(req,env,url) {
     const salt=hex(crypto.getRandomValues(new Uint8Array(16))), hash=await passwordHash(password,salt), id=crypto.randomUUID(), created=now();
     try { await env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,created_at,last_sign_in_at) VALUES(?,?,?,?,?,?)").bind(id,email,hash,salt,created,created).run(); }
     catch { return json({error:"An account with that email may already exist."},409); }
-    const token=await issueSession(env,id), user={id,email,created_at:created,last_sign_in_at:created,email_confirmed_at:created,user_metadata:{display_name:""}};
+    const token=await issueSession(env,id), user={id,email,created_at:created,last_sign_in_at:created,email_confirmed_at:null,user_metadata:{display_name:""}};
     return json({user,session:{access_token:token,token_type:"bearer",expires_at:Math.floor(Date.now()/1000)+2592000,user}},201);
   }
   if(route==="login" && req.method==="POST") {
