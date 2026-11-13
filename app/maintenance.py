@@ -15,6 +15,7 @@ def main():
         method="POST",
         headers={
             "Content-Type": "application/json",
+            "User-Agent": "StockAnalyser-Worker/1.0",
             "Authorization": f"Bearer {key}",
         },
     )
