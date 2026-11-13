@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     concurrency:
-      group: stock-market-indexer-${{ matrix.indexer }}-${{ matrix.shard }}
+      group: stock-market-indexer-v2-${{ matrix.indexer }}-${{ matrix.shard }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
