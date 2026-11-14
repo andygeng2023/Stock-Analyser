@@ -66,7 +66,7 @@ def connect():
             )
         options["password"] = password
     return psycopg.connect(
-        options,
+        **options,
         connect_timeout=15,
         row_factory=dict_row,
         application_name="stock-analyser-actions",
