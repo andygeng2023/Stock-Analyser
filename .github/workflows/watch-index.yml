@@ -15,7 +15,7 @@ permissions:
   actions: write
 concurrency:
   group: stock-watch-indexer-tidb-v2
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   watch-index:
     runs-on: ubuntu-latest

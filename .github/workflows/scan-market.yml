@@ -15,7 +15,7 @@ permissions:
   actions: write
 concurrency:
   group: stock-background-scanner-tidb-v2
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   scan:
     runs-on: ubuntu-latest

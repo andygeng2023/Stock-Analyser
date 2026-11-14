@@ -15,7 +15,7 @@ permissions:
   actions: write
 concurrency:
   group: stock-analysis-queue
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   analyse:
     runs-on: ubuntu-latest
