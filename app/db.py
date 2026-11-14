@@ -31,20 +31,20 @@ def normalize_dsn(value: str) -> str:
         except ValueError as exc:
             raise RuntimeError("DATABASE_URL contains unmatched shell quotes.") from exc
 
-    # The TiDB PostgreSQL CLI template uses dbname=<DB> as a placeholder.
+        r"(?i)(\bdbname\s*=\s*)[\"']?<DB>;?[\"']?",
     # The starter instance's built-in database is named postgres. A semicolon
     # copied immediately after <DB> is part of the placeholder text, not a
     # libpq attribute separator, so replace the whole placeholder.
     dsn = re.sub(
-        r"(?i)(\\bdbname\\s*=\\s*)[\"']?<DB>;?[\"']?",
-        r"\\1postgres",
+        r"(?i)(\bdbname\s*=\s*)[\"']?<DB>;?[\"']?",
+        r"\1postgres",
         dsn,
     )
 
     # Also accept PostgreSQL URIs copied with the database placeholder.
     dsn = re.sub(
         r"(?i)(/)<DB>(?=[?;]|$)",
-        r"\\1postgres",
+        r"\1postgres",
         dsn,
     )
     return dsn
