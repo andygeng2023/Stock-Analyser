@@ -14,7 +14,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: stock-background-scanner-tidb
+  group: stock-background-scanner-tidb-v2
   cancel-in-progress: false
 jobs:
   scan:

@@ -14,7 +14,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: stock-watch-indexer-tidb
+  group: stock-watch-indexer-tidb-v2
   cancel-in-progress: false
 jobs:
   watch-index:
