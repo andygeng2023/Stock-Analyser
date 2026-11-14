@@ -47,15 +47,15 @@ def normalize_dsn(value: str) -> str:
     # copied immediately after <DB> is part of the placeholder text, not a
     # libpq attribute separator, so replace the whole placeholder.
     dsn = re.sub(
-        r"(?i)(\\bdbname\\s*=\\s*)[\"']?<DB>;?[\"']?",
-        r"\\1postgres",
+        r"(?i)(\bdbname\s*=\s*)[\"']?<DB>;?[\"']?",
+        r"\1postgres",
         dsn,
     )
 
     # Also accept PostgreSQL URIs copied with the database placeholder.
     dsn = re.sub(
         r"(?i)(/)<DB>(?=[?;]|$)",
-        r"\\1postgres",
+        r"\1postgres",
         dsn,
     )
     return dsn
