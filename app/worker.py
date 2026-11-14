@@ -1,5 +1,6 @@
 """Analysis queue worker using TiDB directly."""
 import json
+import math
 import os
 import sys
 import time
@@ -31,24 +32,56 @@ def update_job(job_id, payload):
                {**payload, "updated_at": datetime.now(timezone.utc).isoformat()})
 
 
+def _finite_number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def upsert_market_index(job_id, ticker, period, horizon, result, indexer):
     fundamentals = result.get("fundamentals") or {}
-    cap = fundamentals.get("market_cap") or fundamentals.get("marketCap")
-    try:
-        cap = float(cap) if cap is not None else None
-    except (TypeError, ValueError):
-        cap = None
-    indexed_at = datetime.now(timezone.utc).isoformat()
     summary = result.get("market_summary") or {}
+    existing_index = fetch_one(
+        """SELECT market_cap,avg_dollar_volume,priority FROM market_index
+           WHERE ticker=%s AND period=%s AND horizon=%s AND indexer=%s""",
+        (ticker, period, horizon, indexer),
+    ) or {}
+    existing_catalog = fetch_one(
+        "SELECT market_cap,avg_dollar_volume,priority FROM market_index_catalog WHERE ticker=%s",
+        (ticker,),
+    ) or {}
+
+    cap = _finite_number(fundamentals.get("market_cap") or fundamentals.get("marketCap"))
+    if cap is None:
+        cap = _finite_number(existing_index.get("market_cap"))
+    if cap is None:
+        cap = _finite_number(existing_catalog.get("market_cap"))
+
+    dollar_volume = _finite_number(summary.get("average_dollar_volume"))
+    if dollar_volume is None:
+        dollar_volume = _finite_number(existing_index.get("avg_dollar_volume"))
+    if dollar_volume is None:
+        dollar_volume = _finite_number(existing_catalog.get("avg_dollar_volume"))
+
+    priority = dollar_volume
+    if priority is None:
+        priority = _finite_number(existing_index.get("priority"))
+    if priority is None:
+        priority = _finite_number(existing_catalog.get("priority"))
+    if priority is None:
+        priority = 0.0
+
+    indexed_at = datetime.now(timezone.utc).isoformat()
     upsert_one("market_index", {
         "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
         "result": result, "source_job_id": job_id, "indexed_at": indexed_at,
-        "market_cap": cap,
-        "priority": float(summary.get("average_dollar_volume", 0) or 0),
+        "market_cap": cap, "avg_dollar_volume": dollar_volume, "priority": priority,
     }, ("ticker", "period", "horizon", "indexer"))
     upsert_one("market_index_catalog", {
         "ticker": ticker, "market_cap": cap,
-        "priority": float(summary.get("average_dollar_volume", 0) or 0),
+        "avg_dollar_volume": dollar_volume, "priority": priority,
         ("last_slow_indexed_at" if indexer == "SlowIndex" else "last_indexed_at"): indexed_at,
         "updated_at": indexed_at,
     }, ("ticker",))
@@ -105,14 +138,11 @@ def process_job(job):
         else:
             result = analyze_ticker(ticker, job["period"], int(job["horizon"]),
                                     progress_callback=progress)
+        if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") != "none":
+            upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]),
+                                result, job.get("save_to_indexer") or "rapidIndex")
         update_job(job_id, {"status": "completed", "result": result, "error": None,
                             "progress": 100, "stage": "Complete"})
-        if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") != "none":
-            try:
-                upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]),
-                                    result, job.get("save_to_indexer") or "rapidIndex")
-            except Exception as exc:
-                print(f"Index cache update failed for {ticker}: {exc}", file=sys.stderr)
     except Exception as exc:
         try:
             update_job(job_id, {"status": "failed", "error": str(exc)[:500],
