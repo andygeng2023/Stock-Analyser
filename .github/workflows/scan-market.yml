@@ -1,7 +1,7 @@
 name: Continuous background market scanning
+on:
   schedule:
     - cron: '23 */6 * * *'
-on:
   workflow_dispatch:
 
 permissions:
