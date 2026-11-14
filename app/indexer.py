@@ -15,6 +15,7 @@ import yfinance as yf
 
 from .analyzer import analyze_ticker
 from .scanner import load_universe, fast_filter
+from .db import fetch_all, insert_one, upsert_many, upsert_one
 from .worker import request_json
 
 PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "15"))
@@ -28,26 +29,6 @@ ATTEMPT_LEASE_MINUTES = int(os.environ.get("INDEX_ATTEMPT_LEASE_MINUTES", "45"))
 RAPID_PERIOD, RAPID_HORIZON = "5y", 30
 SLOW_PERIOD, SLOW_HORIZON = "max", 252
 _UNIVERSE_SNAPSHOT = None
-
-
-def db_get(path):
-    base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
-    key = os.environ["ADMIN_API_TOKEN"]
-    return request_json(f"{base}/api/internal/rest/v1/{path}", headers={
-        "Authorization": f"Bearer {key}",
-    })
-
-
-def db_post(path, payload, *, conflict=None):
-    base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
-    key = os.environ["ADMIN_API_TOKEN"]
-    url = f"{base}/api/internal/rest/v1/{path}"
-    if conflict:
-        url += "?on_conflict=" + conflict
-    return request_json(url, method="POST", payload=payload, headers={
-        "Authorization": f"Bearer {key}",
-        "Prefer": "resolution=merge-duplicates,return=representation",
-    })
 
 
 def _retry_fields(indexer):
@@ -139,11 +120,9 @@ def run(shard, indexer="rapidIndex"):
         print("No eligible stocks found; nothing to index.")
         return 0
 
-    catalog_rows = db_get(
-        "market_index_catalog?select=ticker,last_indexed_at,last_slow_indexed_at,"
-        "rapid_attempted_at,rapid_retry_after,rapid_last_error,"
-        "slow_attempted_at,slow_retry_after,slow_last_error,market_cap&limit=10000"
-    )
+    catalog_rows = fetch_all("""SELECT ticker,last_indexed_at,last_slow_indexed_at,
+        rapid_attempted_at,rapid_retry_after,rapid_last_error,slow_attempted_at,
+        slow_retry_after,slow_last_error,market_cap FROM market_index_catalog""")
     catalog = {row["ticker"]: row for row in catalog_rows or []}
 
     # Enrich only a small subset in parallel. Yahoo fast_info calls are
@@ -186,15 +165,13 @@ def run(shard, indexer="rapidIndex"):
             "last_indexed_at": old.get("last_indexed_at"),
             "updated_at": now,
         })
-    for start in range(0, len(metadata), 50):
-        db_post("market_index_catalog", metadata[start:start + 50], conflict="ticker")
+    for start in range(0, len(metadata), 250):
+        upsert_many("market_index_catalog", metadata[start:start + 250], ("ticker",))
 
     # Read the live cache separately from the catalogue. The catalogue survives
     # the eight-hour expiry; market_index tells us whether a usable result exists.
-    live_rows = db_get(
-        f"market_index?select=ticker,indexed_at,market_cap,avg_dollar_volume,priority"
-        f"&period=eq.{period}&horizon=eq.{horizon}&limit=10000"
-    )
+    live_rows = fetch_all("""SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority
+        FROM market_index WHERE period=%s AND horizon=%s""", (period, horizon))
     live_index = {row["ticker"]: row for row in (live_rows or [])}
 
     def parse_time(value):
@@ -294,22 +271,23 @@ def run(shard, indexer="rapidIndex"):
         try:
             # Persist the attempt before expensive work so a process interruption
             # cannot leave this symbol at the front of the discovery queue.
-            db_post("market_index_catalog", {
-                "ticker": ticker,
-                attempt_field: attempted_at,
+            upsert_one("market_index_catalog", {
+                "ticker": ticker, attempt_field: attempted_at,
                 retry_field: (attempted_dt + timedelta(minutes=ATTEMPT_LEASE_MINUTES)).isoformat(),
-                error_field: None,
-                "updated_at": attempted_at,
-            }, conflict="ticker")
+                error_field: None, "updated_at": attempted_at,
+            }, ("ticker",))
             result = analyze_ticker(ticker, period=period, horizon=horizon)
-            job = db_post("analysis_jobs", {
+            job = insert_one("analysis_jobs", {
+                "id": __import__("uuid").uuid4().hex,
                 "ticker": ticker, "period": period, "horizon": horizon,
                 "job_type": "analysis", "scan_source": "both", "save_to_indexer": indexer,
                 "status": "completed", "result": result, "error": None,
                 "client_ip_hash": "market-indexer", "attempts": 1,
                 "progress": 100, "stage": f"Completed by {indexer}",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             })
-            job_id = job[0]["id"]
+            job_id = job["id"]
             cap = item.get("market_cap")
             indexed_at = datetime.now(timezone.utc).isoformat()
             index_row = {
@@ -319,29 +297,24 @@ def run(shard, indexer="rapidIndex"):
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
             }
-            db_post("market_index", index_row, conflict="ticker,period,horizon,indexer")
-            db_post("market_index_catalog", {
+            upsert_one("market_index", index_row, ("ticker", "period", "horizon", "indexer"))
+            upsert_one("market_index_catalog", {
                 "ticker": ticker, "market_cap": cap,
                 "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
-                cursor_field: indexed_at,
-                attempt_field: attempted_at,
-                retry_field: None,
-                error_field: None,
-                "updated_at": indexed_at,
-            }, conflict="ticker")
+                cursor_field: indexed_at, attempt_field: attempted_at,
+                retry_field: None, error_field: None, "updated_at": indexed_at,
+            }, ("ticker",))
             completed += 1
         except Exception as exc:
             failed_at = datetime.now(timezone.utc)
             retry_at = _retry_after_for_failure(exc, failed_at)
             try:
-                db_post("market_index_catalog", {
-                    "ticker": ticker,
-                    attempt_field: failed_at.isoformat(),
-                    retry_field: retry_at.isoformat(),
-                    error_field: str(exc)[:250],
+                upsert_one("market_index_catalog", {
+                    "ticker": ticker, attempt_field: failed_at.isoformat(),
+                    retry_field: retry_at.isoformat(), error_field: str(exc)[:250],
                     "updated_at": failed_at.isoformat(),
-                }, conflict="ticker")
+                }, ("ticker",))
             except Exception as persist_exc:
                 print(
                     f"Could not persist cooldown for {ticker}: {str(persist_exc)[:180]}",

@@ -1,32 +1,25 @@
 name: Expire shared analysis cache
-
 on:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/cleanup-cache.yml"
-      - "app/maintenance.py"
+    paths: [".github/workflows/cleanup-cache.yml", "app/maintenance.py", "app/db.py"]
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   cleanup:
-    if: ${{ vars.STOCK_ANALYSER_API_URL != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Delete expired shared cache entries
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Clean TiDB cache
         env:
-          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL }}
-          ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
         run: python -m app.maintenance

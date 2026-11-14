@@ -1,45 +1,29 @@
 name: Analyse stock queue
-
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
-
 permissions:
   contents: read
   actions: write
-
-# Two workers share one workflow run; a single pending run wakes the pool
-# after the current run drains the durable queue.
 concurrency:
   group: stock-analysis-queue
   cancel-in-progress: false
-
 jobs:
   analyse:
-    if: ${{ vars.STOCK_ANALYSER_API_URL != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        worker: [1]
+    timeout-minutes: 350
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install analysis dependencies
-        run: python -m pip install -r requirements.txt
-      - name: Drain the shared TiDB analysis queue
+      - run: python -m pip install -r requirements.txt
+      - name: Drain TiDB analysis queue
         env:
-          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL }}
-          ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: \${{ github.token }}
+          GITHUB_REPOSITORY: \${{ github.repository }}
+          GITHUB_REF_NAME: \${{ github.ref_name }}
         run: python -m app.worker

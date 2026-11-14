@@ -1,25 +1,21 @@
 name: Incremental market indexing
-
 on:
+  schedule:
+    - cron: "0 */5 * * *"
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/index-market.yml"
+    paths: [".github/workflows/index-market.yml", "app/indexer.py", "app/db.py"]
   workflow_dispatch:
-
 permissions:
   contents: read
   actions: write
-
-# RapidIndex and SlowIndex each have two independent shards.
-# Separate concurrency keys allow all four workers to run simultaneously.
 jobs:
   index:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 350
     concurrency:
-      group: stock-market-indexer-v2-${{ matrix.indexer }}-${{ matrix.shard }}
-      cancel-in-progress: true
+      group: stock-market-indexer-tidb-\${{ matrix.indexer }}-\${{ matrix.shard }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -27,6 +23,18 @@ jobs:
         indexer: [rapidIndex, SlowIndex]
         shard: [0, 1]
     steps:
-      - name: Background indexing paused to protect the D1 daily write allowance
-        run: echo "Indexing paused. On-demand analysis remains available."
-
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Run \${{ matrix.indexer }} shard \${{ matrix.shard }}
+        env:
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: \${{ github.token }}
+          GITHUB_REPOSITORY: \${{ github.repository }}
+          GITHUB_REF_NAME: \${{ github.ref_name }}
+          INDEXER_NAME: \${{ matrix.indexer }}
+          INDEX_SHARD: \${{ matrix.shard }}
+        run: python -m app.indexer

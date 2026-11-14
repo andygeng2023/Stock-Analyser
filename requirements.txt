@@ -7,3 +7,4 @@ statsmodels==0.14.4
 scikit-learn==1.6.1
 pydantic==2.11.4
 xgboost==2.1.4
+psycopg[binary]==3.2.9
