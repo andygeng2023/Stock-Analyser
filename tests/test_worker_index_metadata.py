@@ -62,7 +62,7 @@ class WorkerIndexMetadataTests(unittest.TestCase):
         events = []
         analyze.return_value = {"ticker": "MSFT"}
         index.side_effect = lambda *args, **kwargs: events.append("indexed")
-        update.side_effect = lambda job_id, payload: events.append(payload["status"])
+        update.side_effect = lambda job_id, payload: events.append(payload["status"]) if "status" in payload else None
 
         worker.process_job({
             "id": "job-3",

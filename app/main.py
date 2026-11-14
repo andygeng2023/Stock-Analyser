@@ -18,7 +18,7 @@ def health():
     return {"status":"ok"}
 
 @app.get("/api/analyze/{ticker}")
-def analyze(ticker:str,period:str=Query("5y",pattern="^(1y|2y|5y|10y|max)$"),horizon:int=Query(30,ge=1,le=60)):
+def analyze(ticker:str,period:str=Query("5y",pattern="^(1y|2y|5y|10y|max)$"),horizon:int=Query(30,ge=1,le=504)):
     try:
         return analyze_ticker(ticker,period,horizon)
     except AnalysisError as error:
