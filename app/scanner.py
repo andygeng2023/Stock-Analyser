@@ -13,7 +13,7 @@ from .analyzer import analyze_ticker
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
-NON_COMMON_SECURITY = re.compile(r"\\b(ETF|ETN|WARRANTS?|RIGHTS?|UNITS?|PREFERRED|DEBENTURES?|BONDS?|NOTES?|MUTUAL FUNDS?)\\b", re.IGNORECASE)
+NON_COMMON_SECURITY = re.compile(r"\b(ETF|ETN|WARRANTS?|RIGHTS?|UNITS?|PREFERRED|DEBENTURES?|BONDS?|NOTES?|MUTUAL FUNDS?)\b", re.IGNORECASE)
 FAST_CANDIDATES = 25
 FINAL_RESULTS = 10
 MIN_UNIVERSE = 1000
@@ -58,7 +58,7 @@ def _load_yfinance_universe():
 
 def _parse_symbol_directory(payload, other_listed=False):
     """Parse Nasdaq Trader's pipe-delimited symbol directory, excluding test issues and funds."""
-    reader = csv.DictReader(io.StringIO(payload.lstrip("\\ufeff")), delimiter="|")
+    reader = csv.DictReader(io.StringIO(payload.lstrip("\ufeff")), delimiter="|")
     if not reader.fieldnames:
         return set()
 
