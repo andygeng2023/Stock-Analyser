@@ -23,7 +23,7 @@ def save_scan(result):
         "progress": 100, "stage": "Background market scan completed",
         "created_at": now, "updated_at": now,
     })
-    print(f"Published background scan {row['id']} with {len(result.get('results') or [])} results.")
+    print(f"Published background scan {row['id']} with {len(result.get('results') or [])} results.", flush=True)
 
 
 def dispatch_successor():
@@ -47,15 +47,18 @@ def handoff():
 def main():
     if not os.environ.get("DATABASE_URL") or not os.environ.get("GITHUB_TOKEN"):
         raise RuntimeError("DATABASE_URL and GITHUB_TOKEN are required.")
-    print("Database preflight:", verify_database())
+    print("Database preflight:", verify_database(), flush=True)
+    print("Background scanner started; using shared market-universe providers.", flush=True)
     threading.Thread(target=handoff, daemon=True).start()
     started = time.monotonic()
     while time.monotonic() - started < MAX_RUNTIME_SECONDS:
         try:
-            result = run_market_scan("both")
+            def report_progress(percent, stage, detail):
+                print(f"SCAN {percent:3d}% | {stage} | {detail}", flush=True)
+            result = run_market_scan("both", progress_callback=report_progress)
             save_scan(result)
         except Exception as exc:
-            print(f"Background scan failed: {str(exc)[:300]}", file=sys.stderr)
+            print(f"Background scan failed: {str(exc)[:300]}", file=sys.stderr, flush=True)
             time.sleep(60)
     return 0
 
