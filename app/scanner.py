@@ -136,22 +136,27 @@ def load_universe(source="both", progress_callback=None):
     yahoo_count = 0
     nasdaq_count = 0
 
-    if progress_callback: progress_callback(4, "Discovering stock universe", "Querying selected stock-universe providers.")
-    if source in ("yfinance", "both"):
-        yahoo_symbols, yahoo_errors = _load_yfinance_universe()
-        yahoo_count = len(yahoo_symbols)
-        symbols.update(yahoo_symbols)
-        errors.extend("Yahoo Finance: " + item for item in yahoo_errors[:3])
-        if progress_callback: progress_callback(10, "Discovering stock universe", f"Yahoo Finance supplied {yahoo_count:,} unique symbols.")
-
+    if progress_callback: progress_callback(4, "Discovering stock universe", "Loading the official exchange symbol directories.")
     if source in ("nasdaq", "both"):
         try:
             nasdaq_symbols = _load_nasdaq_universe()
             nasdaq_count = len(nasdaq_symbols)
             symbols.update(nasdaq_symbols)
         except Exception as exc:
-            errors.append("Nasdaq: " + str(exc)[:180])
-        if progress_callback: progress_callback(14, "Discovering stock universe", f"Combined universe currently contains {len(symbols):,} symbols.")
+            errors.append("Nasdaq Trader: " + str(exc)[:180])
+        if progress_callback:
+            progress_callback(10, "Discovering stock universe", f"Nasdaq Trader supplied {nasdaq_count:,} unique symbols.")
+
+    # The Yahoo screener has started returning HTTP 401. Do not make eight
+    # failing calls on every scan when the official exchange directories have
+    # already supplied a sufficiently broad universe. Keep Yahoo as a fallback.
+    if source == "yfinance" or (source == "both" and len(symbols) < MIN_UNIVERSE):
+        yahoo_symbols, yahoo_errors = _load_yfinance_universe()
+        yahoo_count = len(yahoo_symbols)
+        symbols.update(yahoo_symbols)
+        errors.extend("Yahoo Finance: " + item for item in yahoo_errors[:3])
+        if progress_callback:
+            progress_callback(14, "Discovering stock universe", f"Yahoo Finance supplied {yahoo_count:,} additional symbols.")
 
     symbols = sorted(symbols)
     if len(symbols) < MIN_UNIVERSE:
