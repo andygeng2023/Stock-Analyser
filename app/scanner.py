@@ -1,6 +1,8 @@
 """Two-stage market scan: fast universe filter, then the existing ARIMA–SVR model."""
-import json
+import csv
+import io
 import math
+import re
 import urllib.request
 
 import numpy as np
@@ -9,7 +11,9 @@ import yfinance as yf
 
 from .analyzer import analyze_ticker
 
-NASDAQ_URL = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=5000&offset=0&exchange=nasdaq,nyse,amex"
+NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
+NON_COMMON_SECURITY = re.compile(r"\\b(ETF|ETN|WARRANTS?|RIGHTS?|UNITS?|PREFERRED|DEBENTURES?|BONDS?|NOTES?|MUTUAL FUNDS?)\\b", re.IGNORECASE)
 FAST_CANDIDATES = 25
 FINAL_RESULTS = 10
 MIN_UNIVERSE = 1000
@@ -52,42 +56,73 @@ def _load_yfinance_universe():
     return sorted(symbols), errors
 
 
-def _load_nasdaq_universe():
-    request = urllib.request.Request(
-        NASDAQ_URL,
-        headers={
-            "User-Agent": "Mozilla/5.0 (compatible; StockAnalyser/1.0)",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://www.nasdaq.com",
-            "Referer": "https://www.nasdaq.com/",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=45) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    data = payload.get("data") or {}
-    table = data.get("table") or {}
-    rows = table.get("rows") or data.get("rows") or []
-    headers = table.get("headers") or []
-    header_names = [
-        str(item.get("name", "") if isinstance(item, dict) else item).strip().lower()
-        for item in headers
-    ]
+def _parse_symbol_directory(payload, other_listed=False):
+    """Parse Nasdaq Trader's pipe-delimited symbol directory, excluding test issues and funds."""
+    reader = csv.DictReader(io.StringIO(payload.lstrip("\\ufeff")), delimiter="|")
+    if not reader.fieldnames:
+        return set()
+
+    columns = {str(name or "").strip().lower(): name for name in reader.fieldnames}
+
+    def field(row, *names):
+        for name in names:
+            key = columns.get(name.lower())
+            if key is not None and row.get(key) is not None:
+                value = str(row.get(key)).strip()
+                if value:
+                    return value
+        return ""
+
     symbols = set()
-    for row in rows if isinstance(rows, list) else []:
-        raw_symbol = None
-        if isinstance(row, dict):
-            fields = {str(key).strip().lower(): value for key, value in row.items()}
-            raw_symbol = fields.get("symbol") or fields.get("ticker") or fields.get("nasdaq symbol")
-        elif isinstance(row, (list, tuple)):
-            for candidate in ("symbol", "ticker"):
-                try:
-                    raw_symbol = row[header_names.index(candidate)]
-                    break
-                except (ValueError, IndexError):
-                    continue
-        symbol = _clean_symbol(raw_symbol)
+    for row in reader:
+        raw_symbol = (
+            field(row, "cqs symbol", "act symbol", "symbol", "nasdaq symbol")
+            if other_listed
+            else field(row, "symbol", "nasdaq symbol")
+        )
+        if not raw_symbol or raw_symbol.lower().startswith("file creation time"):
+            continue
+        if field(row, "test issue").upper() == "Y":
+            continue
+        if any(field(row, name).upper() == "Y" for name in (
+            "etf", "leveraged etp flag", "inverse etp flag"
+        )):
+            continue
+        security_name = field(row, "security name")
+        if NON_COMMON_SECURITY.search(security_name):
+            continue
+        # Yahoo Finance uses hyphens for class-share tickers (e.g. BRK-B).
+        symbol = _clean_symbol(raw_symbol.replace(".", "-"))
         if symbol:
             symbols.add(symbol)
+    return symbols
+
+
+def _load_nasdaq_universe():
+    """Load the official, periodically refreshed Nasdaq Trader symbol directories."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; StockAnalyser/1.0)",
+        "Accept": "text/plain,*/*",
+    }
+    symbols = set()
+    errors = []
+    for url, other_listed in (
+        (NASDAQ_LISTED_URL, False),
+        (OTHER_LISTED_URL, True),
+    ):
+        try:
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=45) as response:
+                payload = response.read().decode("utf-8-sig")
+            parsed = _parse_symbol_directory(payload, other_listed=other_listed)
+            symbols.update(parsed)
+            print(f"Nasdaq Trader directory {url.rsplit('/', 1)[-1]}: {len(parsed):,} symbols.", flush=True)
+        except Exception as exc:
+            errors.append(f"{url.rsplit('/', 1)[-1]}: {str(exc)[:160]}")
+    if not symbols:
+        raise RuntimeError("Nasdaq Trader symbol directories returned no symbols. " + " | ".join(errors))
+    if errors:
+        print("Nasdaq Trader partial provider errors: " + " | ".join(errors), flush=True)
     return sorted(symbols)
 
 
