@@ -31,9 +31,9 @@ _UNIVERSE_SNAPSHOT = None
 
 
 def db_get(path):
-    base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
-    key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
-    return request_json(f"{base}/internal/rest/v1/{path}", headers={
+    base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
+    key = os.environ["ADMIN_API_TOKEN"]
+    return request_json(f"{base}/api/internal/rest/v1/{path}", headers={
         "Authorization": f"Bearer {key}",
     })
 

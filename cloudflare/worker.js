@@ -221,7 +221,7 @@ async function restApi(req,env,url) {
     const row=await env.DB.prepare("UPDATE analysis_jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=? WHERE id=(SELECT id FROM analysis_jobs WHERE status='queued' ORDER BY created_at LIMIT 1) RETURNING *").bind(now()).first();
     if(row&&row.result)row.result=parse(row.result);return json(row?[row]:[]);
   }
-  const allowed={analysis_jobs:["id","ticker","period","horizon","job_type","scan_source","save_to_indexer","status","result","error","client_ip_hash","attempts","progress","stage","created_at","updated_at"],market_index:["ticker","period","horizon","indexer","result","source_job_id","indexed_at","market_cap","avg_dollar_volume","priority"],market_index_catalog:["ticker","market_cap","avg_dollar_volume","priority","last_indexed_at","last_slow_indexed_at","rapid_attempted_at","rapid_retry_after","rapid_last_error","slow_attempted_at","slow_retry_after","slow_last_error","updated_at"],watchlist_items:["id","user_id","ticker","created_at"]};
+  const allowed={analysis_jobs:["id","ticker","period","horizon","job_type","scan_source","save_to_indexer","status","result","error","client_ip_hash","attempts","progress","stage","created_at","updated_at"],market_index:["ticker","period","horizon","indexer","result","source_job_id","indexed_at","market_cap","avg_dollar_volume","priority"],market_index_catalog:["ticker","market_cap","avg_dollar_volume","priority","last_indexed_at","last_slow_indexed_at","rapid_attempted_at","rapid_retry_after","rapid_last_error","slow_attempted_at","slow_retry_after","slow_last_error","updated_at"],watchlist_items:["id","user_id","ticker","created_at"],users:["id","email","password_hash","password_salt","display_name","created_at","last_sign_in_at"],sessions:["token_hash","user_id","created_at","expires_at"],api_rate_limits:["bucket_key","window_start","attempts"]};
   if(!allowed[table])return json({error:"Unknown table"},404);
   const params=url.searchParams, filters=[];
   for(const [key,value] of params.entries()){
@@ -264,7 +264,7 @@ export default {
   const url=new URL(req.url),path=url.pathname;
   try {
    if(path.startsWith("/api/auth/"))return await authRoutes(req,env,url);
-   if(path==="/api/health")return json({ok:true,service:"stock-analyser-api",database:"d1",time:now()});
+   if(path==="/api/health")return json({ok:true,service:"stock-analyser-api",database:"tidb",time:now()});
    if(path==="/api/watchlist"&&req.method==="POST")return await watchlist(req,env);
    if(path==="/api/request-analysis"&&req.method==="POST")return await requestAnalysis(req,env);
    if(path==="/api/analysis-status"&&req.method==="GET"){
@@ -274,7 +274,7 @@ export default {
    }
    if(path==="/api/market-feed"&&req.method==="GET")return await marketFeed(req,env,url);
    if(path==="/api/stock-market-data"&&req.method==="POST")return await stockMarketData(req,env);
-   if(path.startsWith("/internal/rest/v1/"))return await restApi(req,env,url);
+   if(path.startsWith("/internal/rest/v1/")||path.startsWith("/api/internal/rest/v1/"))return await restApi(req,env,url);
    return json({error:"Not found."},404);
   } catch(e){console.error("API error",e);return json({error:"The request could not be completed."},500);}
  }

@@ -1,4 +1,4 @@
-"""Cleanup expired Cloudflare D1 analysis and market-index cache rows."""
+"""Cleanup expired TiDB analysis and market-index cache rows."""
 import json
 import os
 import urllib.error
@@ -6,9 +6,9 @@ import urllib.request
 
 
 def main():
-    base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
-    key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
-    url = f"{base}/internal/rest/v1/rpc/cleanup_expired_analysis_cache"
+    base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
+    key = os.environ["ADMIN_API_TOKEN"]
+    url = f"{base}/api/internal/rest/v1/rpc/cleanup_expired_analysis_cache"
     request = urllib.request.Request(
         url,
         data=json.dumps({}).encode(),
@@ -24,7 +24,7 @@ def main():
             raw = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:1000]
-        raise RuntimeError(f"Cloudflare cleanup API returned HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"Stock Analyser API returned HTTP {exc.code}: {detail}") from exc
     result = json.loads(raw) if raw else None
     print("Expired cache cleanup:", result)
 

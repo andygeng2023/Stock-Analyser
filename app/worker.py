@@ -1,4 +1,4 @@
-"""Long-lived GitHub Actions worker that drains the Cloudflare D1 queue."""
+"""Long-lived GitHub Actions worker that drains the TiDB-backed analysis queue."""
 import json
 import os
 import sys
@@ -32,10 +32,10 @@ def request_json(url: str, *, method: str = "GET", payload=None, headers=None):
 
 
 def database_request(path: str, *, method: str = "GET", payload=None):
-    base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
-    key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
+    base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
+    key = os.environ["ADMIN_API_TOKEN"]
     return request_json(
-        f"{base}/internal/rest/v1/{path}",
+        f"{base}/api/internal/rest/v1/{path}",
         method=method,
         payload=payload,
         headers={"Authorization": f"Bearer {key}"},

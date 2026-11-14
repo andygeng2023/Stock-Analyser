@@ -5,22 +5,28 @@ A responsive stock research dashboard using Yahoo Finance data and a walk-forwar
 ## Architecture
 
 - **GitHub Pages** hosts the static dashboard.
-- **Cloudflare Workers** provides the public API, authentication and request handling.
-- **Cloudflare D1 (SQLite)** stores analysis jobs, RapidIndex/SlowIndex results, the market catalogue, accounts, sessions and watchlists.
-- **GitHub Actions** runs the Python analysis worker, scheduled market indexing and WatchIndex.
+- **Vercel Functions** hosts the HTTPS API. It keeps the database URL and admin token server-side.
+- **TiDB Cloud PostgreSQL-compatible Starter** stores accounts, sessions, analysis jobs, market indexes, the catalogue, rate limits and watchlists.
+- **GitHub Actions** runs the Python analysis and maintenance workers, connecting to the API and TiDB-backed queue.
 - **Yahoo Finance** supplies quotes, historical data and symbol search.
 
-Supabase is no longer part of the runtime architecture. The Worker uses a D1 binding; Python workers use a narrowly scoped internal API protected by a shared secret. The public frontend never receives that secret.
+Cloudflare D1 is retained only as the temporary source for the one-time migration. It is not used by the new runtime.
 
-## Cloudflare resources
+## Required configuration
 
-The migration branch is configured for:
+1. Create a Vercel project by importing this GitHub repository. Use the repository root and the default Node.js runtime. The API is provided by `api/[...path].js`.
+2. In Vercel Project Settings → Environment Variables, add:
+   - `DATABASE_URL`: the PostgreSQL connection string from TiDB Cloud.
+   - `ADMIN_API_TOKEN`: a new high-entropy secret. Use the same value in GitHub Actions; do not commit it or put it in frontend configuration.
+3. In GitHub repository Settings → Secrets and variables → Actions → Secrets, add:
+   - `DATABASE_URL`: the same TiDB PostgreSQL connection string.
+   - `ADMIN_API_TOKEN`: the same application admin secret configured in Vercel.
+   - Keep `CLOUDFLARE_ADMIN_API_TOKEN` temporarily; it is used only by the one-time D1 export workflow.
+4. In GitHub repository Settings → Secrets and variables → Actions → Variables, add `STOCK_ANALYSER_API_URL` with the production Vercel URL (for example, `https://your-project.vercel.app`, without a trailing slash).
+5. Run the **Migrate existing data to TiDB** workflow from the Actions tab. It is safe to rerun: rows are upserted, not duplicated.
+6. After the API and data migration have been verified, the D1 export secret and old Cloudflare Worker can be retired.
 
-- D1 database: `stock-analyser` (EU jurisdiction).
-- Worker: `stock-analyser-api`.
-- Worker URL: `https://stock-analyser-api.stock-analyser-2026.workers.dev`.
-
-The D1 schema is maintained in `cloudflare/schema.sql`; the deployed API source is `cloudflare/worker.js`.
+The API is deployed automatically when Vercel is connected to this repository. GitHub Pages remains the frontend host. Do not expose `DATABASE_URL` or `ADMIN_API_TOKEN` in the browser.
 
 ## Required configuration
 
