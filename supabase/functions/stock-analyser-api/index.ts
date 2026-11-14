@@ -1,6 +1,102 @@
+import postgres from "npm:postgres@3.4.7";
+
+function parseTidbConnection(raw: string, passwordOverride: string) {
+  let dsn = String(raw || "").trim();
+  if (!dsn) throw new Error("DATABASE_URL is missing.");
+  dsn = dsn.replace(/^\\+psql\s+/i, "");
+  if ((dsn.startsWith("'") && dsn.endsWith("'")) || (dsn.startsWith('"') && dsn.endsWith('"'))) {
+    dsn = dsn.slice(1, -1);
+  }
+  let options: Record<string, string> = {};
+  if (/^postgres(?:ql)?:\/\//i.test(dsn)) {
+    const url = new URL(dsn);
+    options = {
+      host: url.hostname,
+      port: url.port || "4000",
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      dbname: decodeURIComponent(url.pathname.replace(/^\//, "")) || "postgres",
+      sslmode: url.searchParams.get("sslmode") || "verify-full",
+    };
+  } else {
+    for (const match of dsn.matchAll(/([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g)) {
+      options[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
+    }
+  }
+  let database = String(options.dbname || options.database || "postgres").replace(/;$/, "");
+  if (/^<db>$/i.test(database) || /^%3cdb%3e$/i.test(database)) database = "postgres";
+  const sslMode = String(options.sslmode || "verify-full").toLowerCase();
+  if (!options.host || !options.user) throw new Error("TiDB connection details are incomplete.");
+  if (sslMode === "disable" || sslMode === "allow") throw new Error("TiDB connections must use TLS.");
+  const password = passwordOverride || options.password || "";
+  if (!password) throw new Error("TIDB_PASSWORD is missing.");
+  return {
+    host: options.host,
+    port: Number(options.port || "4000"),
+    username: options.user,
+    password,
+    database,
+    ssl: { rejectUnauthorized: true },
+    connect_timeout: 15,
+    idle_timeout: 20,
+    max: 4,
+    prepare: false,
+  };
+}
+
+const databaseUrl = Deno.env.get("DATABASE_URL") || "";
+const tidbPassword = Deno.env.get("TIDB_PASSWORD") || "";
+let sqlClient: ReturnType<typeof postgres> | null = null;
+let connectionConfigError = "";
+if (databaseUrl) {
+  try {
+    sqlClient = postgres(parseTidbConnection(databaseUrl, tidbPassword));
+  } catch (error) {
+    connectionConfigError = error instanceof Error ? error.message : "Invalid TiDB connection configuration.";
+    console.error("TiDB connection configuration error:", connectionConfigError);
+  }
+}
+
+function toPostgres(query: string) {
+  const ignoreConflict = /^\s*INSERT\s+OR\s+IGNORE\s+INTO\b/i.test(query);
+  let index = 0;
+  let translated = query
+    .replace(/\s+COLLATE\s+NOCASE/gi, "")
+    .replace(/^\s*INSERT\s+OR\s+IGNORE\s+INTO\b/i, "INSERT INTO")
+    .replace(/\?/g, () => "$" + (++index));
+  if (ignoreConflict && !/\bON\s+CONFLICT\b/i.test(translated)) translated += " ON CONFLICT DO NOTHING";
+  return translated;
+}
+
+function makeStatement(query: string, values: unknown[] = []) {
+  const translated = toPostgres(query);
+  const execute = async () => {
+    if (!sqlClient) {
+      if (connectionConfigError) throw new Error(connectionConfigError);
+      if (!databaseUrl) throw new Error("DATABASE_URL is missing.");
+      throw new Error("TiDB connection could not be initialised.");
+    }
+    return await sqlClient.unsafe(translated, values as any[]);
+  };
+  return {
+    bind: (...bound: unknown[]) => makeStatement(query, bound),
+    first: async () => {
+      const rows = await execute();
+      return rows[0] ?? null;
+    },
+    all: async () => ({ results: [...await execute()] }),
+    run: async () => {
+      const rows = await execute();
+      return { meta: { changes: Number((rows as any).count ?? rows.length) } };
+    },
+  };
+}
+
+const env = { DB: { prepare: (query: string) => makeStatement(query) } };
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Content-Type": "application/json",
 };
@@ -9,7 +105,7 @@ const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(bod
 });
 const now = () => new Date().toISOString();
 async function allowRate(env, req, bucket, limit, windowMs) {
-  const ip=req.headers.get("CF-Connecting-IP")||"unknown";
+  const ip=(req.headers.get("x-forwarded-for")||req.headers.get("x-real-ip")||"unknown").split(",")[0].trim();
   const key=await sha(bucket+":"+ip), current=Date.now(), cutoff=current-windowMs;
   const row=await env.DB.prepare("INSERT INTO api_rate_limits(bucket_key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET attempts=CASE WHEN window_start<=? THEN 1 ELSE attempts+1 END,window_start=CASE WHEN window_start<=? THEN ? ELSE window_start END RETURNING attempts").bind(key,current,cutoff,cutoff,current).first();
   return Number(row?.attempts||0)<=limit;
@@ -204,78 +300,47 @@ async function stockMarketData(req,env) {
   }));
   return json({items,generated_at:now(),mode});
 }
-async function restApi(req,env,url) {
-  if(!env.ADMIN_API_TOKEN || tokenFrom(req)!==env.ADMIN_API_TOKEN)return json({error:"Unauthorized"},401);
-  const parts=url.pathname.split("/"),table=parts.at(-1),rpc=parts.at(-2)==="rpc"?table:null;
-  if(rpc==="cleanup_expired_analysis_cache"&&req.method==="POST"){
-    const cutoffRapid=new Date(Date.now()-8*3600000).toISOString(),cutoffSlow=new Date(Date.now()-30*86400000).toISOString();
-    const a=await env.DB.prepare("DELETE FROM market_index WHERE (indexer='SlowIndex' AND indexed_at<?) OR (indexer<>'SlowIndex' AND indexed_at<?)").bind(cutoffSlow,cutoffRapid).run();
-    const b=await env.DB.prepare("DELETE FROM analysis_jobs WHERE status='completed' AND ((save_to_indexer='SlowIndex' AND created_at<?) OR (save_to_indexer<>'SlowIndex' AND created_at<?))").bind(cutoffSlow,cutoffRapid).run();
-    await env.DB.prepare("DELETE FROM api_rate_limits WHERE window_start<?").bind(Date.now()-86400000).run();
-    return json({expired_index_rows:a.meta?.changes||0,expired_completed_jobs:b.meta?.changes||0});
-  }
-  if(rpc==="claim_next_analysis_job"&&req.method==="POST"){
-    const stale=new Date(Date.now()-90*60000).toISOString();
-    await env.DB.prepare("UPDATE analysis_jobs SET status='queued',error='Recovered after an interrupted worker.',updated_at=? WHERE status='running' AND updated_at<? AND attempts<3").bind(now(),stale).run();
-    await env.DB.prepare("UPDATE analysis_jobs SET status='failed',error='Worker stopped repeatedly before completing this analysis.',updated_at=? WHERE status='running' AND updated_at<? AND attempts>=3").bind(now(),stale).run();
-    const row=await env.DB.prepare("UPDATE analysis_jobs SET status='running',attempts=attempts+1,error=NULL,updated_at=? WHERE id=(SELECT id FROM analysis_jobs WHERE status='queued' ORDER BY created_at LIMIT 1) RETURNING *").bind(now()).first();
-    if(row&&row.result)row.result=parse(row.result);return json(row?[row]:[]);
-  }
-  const allowed={analysis_jobs:["id","ticker","period","horizon","job_type","scan_source","save_to_indexer","status","result","error","client_ip_hash","attempts","progress","stage","created_at","updated_at"],market_index:["ticker","period","horizon","indexer","result","source_job_id","indexed_at","market_cap","avg_dollar_volume","priority"],market_index_catalog:["ticker","market_cap","avg_dollar_volume","priority","last_indexed_at","last_slow_indexed_at","rapid_attempted_at","rapid_retry_after","rapid_last_error","slow_attempted_at","slow_retry_after","slow_last_error","updated_at"],watchlist_items:["id","user_id","ticker","created_at"],users:["id","email","password_hash","password_salt","display_name","created_at","last_sign_in_at"],sessions:["token_hash","user_id","created_at","expires_at"],api_rate_limits:["bucket_key","window_start","attempts"]};
-  if(!allowed[table])return json({error:"Unknown table"},404);
-  const params=url.searchParams, filters=[];
-  for(const [key,value] of params.entries()){
-    if(["select","order","limit","offset","on_conflict"].includes(key))continue;
-    const m=value.match(/^(eq|gte|gt|lte|lt|neq|is)\.(.*)$/);
-    if(m&&allowed[table].includes(key)){const op={eq:"=",gte:">=",gt:">",lte:"<=",lt:"<",neq:"<>",is:"IS"}[m[1]];filters.push({sql:key+" "+op+" ?",value:m[2]==="null"?null:m[2]});}
-    else if(value.startsWith("in.(")&&allowed[table].includes(key)){const vals=value.slice(4,-1).split(",");filters.push({sql:key+" IN ("+vals.map(()=>"?").join(",")+")",values:vals});}
-    else if(value.startsWith("not.is.null")&&allowed[table].includes(key))filters.push({sql:key+" IS NOT NULL"});
-  }
-  const where=filters.length?" WHERE "+filters.map(x=>x.sql).join(" AND "):"",binds=filters.flatMap(x=>x.values||("value" in x?[x.value]:[]));
-  if(req.method==="GET"){
-    let order="";const ord=params.get("order");if(ord){const [col,dir]=ord.split(".");if(allowed[table].includes(col))order=" ORDER BY "+col+(dir==="desc"?" DESC":" ASC");}
-    const limit=Math.min(10000,Math.max(1,Number(params.get("limit")||1000))),offset=Math.max(0,Number(params.get("offset")||0));
-    const rows=await env.DB.prepare("SELECT * FROM "+table+where+order+" LIMIT ? OFFSET ?").bind(...binds,limit,offset).all();
-    const out=rows.results.map(row=>{if(row.result!=null)row.result=parse(row.result);return row;});return json(out);
-  }
-  if(req.method==="POST"){
-    const body=await req.json(),records=Array.isArray(body)?body:[body],conflict=(params.get("on_conflict")||"").split(",").filter(x=>allowed[table].includes(x));
-    const statements=[],output=[];
-    for(const original of records){const record={...original};if(table==="analysis_jobs"&&!record.id)record.id=crypto.randomUUID();if(table==="watchlist_items"&&!record.id)record.id=crypto.randomUUID();output.push(record);const keys=Object.keys(record).filter(k=>allowed[table].includes(k));if(!keys.length)continue;
-      const vals=keys.map(k=>k==="result"&&record[k]!=null?JSON.stringify(record[k]):record[k]);
-      const update=keys.filter(k=>!conflict.includes(k)&&k!=="id").map(k=>k+"=excluded."+k).join(",");
-      const suffix=conflict.length?" ON CONFLICT("+conflict.join(",")+") "+(update?"DO UPDATE SET "+update:"DO NOTHING"):"";
-      statements.push(env.DB.prepare("INSERT INTO "+table+"("+keys.join(",")+") VALUES("+keys.map(()=>"?").join(",")+")"+suffix).bind(...vals));
-    }
-    if(statements.length)await env.DB.batch(statements);
-    if((req.headers.get("Prefer")||"").includes("return=representation"))return json(output);
-    return json([]);
-  }
-  if(req.method==="PATCH"){
-    const body=await req.json(),keys=Object.keys(body).filter(k=>allowed[table].includes(k));if(!keys.length)return json([]);
-    const vals=keys.map(k=>k==="result"&&body[k]!=null?JSON.stringify(body[k]):body[k]);
-    await env.DB.prepare("UPDATE "+table+" SET "+keys.map(k=>k+"=?").join(",")+where).bind(...vals,...binds).run();return json([]);
-  }
-  return json({error:"Method not allowed"},405);
-}
-export default {
- async fetch(req,env,ctx) {
-  if(req.method==="OPTIONS")return new Response(null,{headers:cors});
-  const url=new URL(req.url),path=url.pathname;
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  const url = new URL(req.url);
+  const prefix = "/functions/v1/stock-analyser-api";
+  const marker = url.pathname.indexOf(prefix);
+  if (marker >= 0) url.pathname = url.pathname.slice(marker + prefix.length) || "/";
   try {
-   if(path.startsWith("/api/auth/"))return await authRoutes(req,env,url);
-   if(path==="/api/health")return json({ok:true,service:"stock-analyser-api",database:"tidb",time:now()});
-   if(path==="/api/watchlist"&&req.method==="POST")return await watchlist(req,env);
-   if(path==="/api/request-analysis"&&req.method==="POST")return await requestAnalysis(req,env);
-   if(path==="/api/analysis-status"&&req.method==="GET"){
-    const id=url.searchParams.get("id")||"";if(!/^[0-9a-f-]{36}$/i.test(id))return json({error:"Invalid analysis ID."},400);
-    const row=await env.DB.prepare("SELECT id,ticker,status,result,error,created_at,updated_at,progress,stage FROM analysis_jobs WHERE id=?").bind(id).first();
-    if(!row)return json({error:"Analysis request not found."},404);row.result=parse(row.result);return json(row);
-   }
-   if(path==="/api/market-feed"&&req.method==="GET")return await marketFeed(req,env,url);
-   if(path==="/api/stock-market-data"&&req.method==="POST")return await stockMarketData(req,env);
-   if(path.startsWith("/internal/rest/v1/")||path.startsWith("/api/internal/rest/v1/"))return await restApi(req,env,url);
-   return json({error:"Not found."},404);
-  } catch(e){console.error("API error",e);return json({error:"The request could not be completed."},500);}
- }
-};
+    const path = url.pathname;
+    if (path.startsWith("/api/auth/")) return await authRoutes(req, env, url);
+    if (path === "/api/health") {
+      const identity = await env.DB.prepare("SELECT current_database() AS database_name, current_schema() AS schema_name").first();
+      const rows = await env.DB.prepare("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_type='BASE TABLE'").all();
+      const actual = new Set(rows.results.map((row) => row.table_name));
+      const required = ["users","sessions","watchlist_items","analysis_jobs","market_index","market_index_catalog","api_rate_limits"];
+      const missing = required.filter((name) => !actual.has(name));
+      await env.DB.prepare("SELECT 1 AS ok").first();
+      return json({
+        ok: missing.length === 0,
+        service: "stock-analyser-api",
+        database: identity.database_name,
+        schema: identity.schema_name,
+        verified_tables: required.length - missing.length,
+        missing_tables: missing,
+        time: now(),
+      }, missing.length ? 503 : 200);
+    }
+    if (path === "/api/watchlist" && req.method === "POST") return await watchlist(req, env);
+    if (path === "/api/request-analysis" && req.method === "POST") return await requestAnalysis(req, env);
+    if (path === "/api/analysis-status" && req.method === "GET") {
+      const id = url.searchParams.get("id") || "";
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "Invalid analysis ID." }, 400);
+      const row = await env.DB.prepare("SELECT id,ticker,status,result,error,created_at,updated_at,progress,stage FROM analysis_jobs WHERE id=?").bind(id).first();
+      if (!row) return json({ error: "Analysis request not found." }, 404);
+      row.result = parse(row.result);
+      return json(row);
+    }
+    if (path === "/api/market-feed" && req.method === "GET") return await marketFeed(req, env, url);
+    if (path === "/api/stock-market-data" && req.method === "POST") return await stockMarketData(req, env);
+    return json({ error: "Not found." }, 404);
+  } catch (error) {
+    console.error("Stock Analyser API error:", error);
+    return json({ error: "The request could not be completed." }, 500);
+  }
+});

@@ -1,6 +1,5 @@
-// Local preview configuration. GitHub Pages deployment generates this file
-// from repository Actions variables; the publishable key is safe for browsers.
+// Public runtime configuration. The publishable key is designed for browser use.
 window.STOCK_ANALYSER_CONFIG = {
-  supabaseUrl: "",
-  supabasePublishableKey: ""
+  apiBaseUrl: "https://dwhhdwdgoamzcsehuhiq.supabase.co/functions/v1/stock-analyser-api",
+  apiKey: "sb_publishable_Y8MYwBrYvfAzVk82hyp_SQ_AMsUKNsp"
 };

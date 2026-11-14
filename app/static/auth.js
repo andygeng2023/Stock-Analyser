@@ -8,7 +8,7 @@
   const emit = event => listeners.forEach(fn => { try { fn(event,session); } catch(e) { console.warn(e); } });
   async function call(path,{method="GET",body}={}) {
     const token=session?.access_token;
-    const response=await fetch(base()+"/api/auth/"+path,{method,headers:{"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})},body:body?JSON.stringify(body):undefined});
+    const response=await fetch(base()+"/api/auth/"+path,{method,headers:{"Content-Type":"application/json",...(window.STOCK_ANALYSER_CONFIG?.apiKey?{apikey:window.STOCK_ANALYSER_CONFIG.apiKey}:{}),...(token?{Authorization:"Bearer "+token}:{})},body:body?JSON.stringify(body):undefined});
     const data=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.error||"Authentication request failed.");
     return data;

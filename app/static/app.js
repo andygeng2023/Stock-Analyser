@@ -8,7 +8,7 @@ const pct = v => v == null || !Number.isFinite(Number(v)) ? "—" : (Number(v) >
 const cash = (v, c) => v == null || !Number.isFinite(Number(v)) ? "—" : new Intl.NumberFormat(undefined, { style: "currency", currency: c || "USD", maximumFractionDigits: 2 }).format(Number(v));
 const esc = s => String(s ?? "—").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const api = name => config.apiBaseUrl.replace(/\/$/, "") + "/api/" + name;
-const headers = () => ({ "Content-Type": "application/json" });
+const headers = () => ({ "Content-Type": "application/json", ...(config.apiKey ? { apikey: config.apiKey } : {}) });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Bound network waits and retry transient failures on safe, read-only requests.
@@ -24,7 +24,9 @@ async function fetchWithRetry(url, options = {}, settings = {}) {
     else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { ...options, cache: options.cache || "default", signal: controller.signal });
+      const requestHeaders = new Headers(options.headers || {});
+      if (config.apiKey && config.apiBaseUrl && url.startsWith(config.apiBaseUrl)) requestHeaders.set("apikey", config.apiKey);
+      const response = await fetch(url, { ...options, headers: requestHeaders, cache: options.cache || "default", signal: controller.signal });
       if (response.ok || (response.status < 500 && response.status !== 429) || attempt === attempts - 1) {
         return response;
       }
@@ -1231,7 +1233,7 @@ function renderMarketFeed(data, options = {}) {
 
 async function loadMarketFeed(force = false) {
   if (!config.apiBaseUrl) {
-    $("home-latest-scan").innerHTML = '<div class="empty-feed">Cloudflare API is not configured. Add CLOUDFLARE_API_URL to the GitHub Pages deployment variables.</div>';
+    $("home-latest-scan").innerHTML = '<div class="empty-feed">The Stock Analyser API is not configured. The API endpoint has not been configured for this deployment.</div>';
     return;
   }
   if (marketFeedLoading) {
@@ -1459,7 +1461,7 @@ async function openStockDetails(ticker, options = {}) {
   updateDetailIndexerSwitch();
   if (!config.apiBaseUrl) {
     switchScreen("detail");
-    $("detail-status").textContent = "Cloudflare API is not configured. Add CLOUDFLARE_API_URL to the GitHub Pages deployment variables.";
+    $("detail-status").textContent = "The Stock Analyser API is not configured. The API endpoint has not been configured for this deployment.";
     return;
   }
 
@@ -1755,7 +1757,7 @@ function renderScan(data) {
 
 async function startScan(hard = false) {
   if (!config.apiBaseUrl) {
-    $("scan-status").textContent = "Cloudflare API is not configured. Add CLOUDFLARE_API_URL to the GitHub Pages deployment variables.";
+    $("scan-status").textContent = "The Stock Analyser API is not configured. The API endpoint has not been configured for this deployment.";
     return;
   }
   $("hard-rescan").disabled = true;

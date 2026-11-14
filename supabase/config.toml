@@ -1,11 +1,2 @@
-[functions.request-analysis]
-verify_jwt = false
-
-[functions.analysis-status]
-verify_jwt = false
-
-[functions.market-feed]
-verify_jwt = false
-
-[functions.stock-market-data]
+[functions.stock-analyser-api]
 verify_jwt = false

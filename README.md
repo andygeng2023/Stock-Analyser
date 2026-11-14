@@ -2,22 +2,41 @@
 
 A responsive stock research dashboard using Yahoo Finance data and a walk-forward-tested ARIMA, SVM, SVR and XGBoost forecasting ensemble.
 
-## Target architecture
+## Production architecture
 
 - **GitHub Pages** serves the static frontend.
+- **Supabase Edge Functions** hosts the protected HTTPS API only. Supabase is not used as an application database.
 - **TiDB Cloud PostgreSQL-compatible Starter** is the sole application database.
-- **GitHub Actions** runs analysis, RapidIndex, SlowIndex, WatchIndex, background scanning and cache maintenance workers. Long-running workers hand off to successor runs before the runner time limit; schedules provide recovery starts.
+- **GitHub Actions** runs analysis, RapidIndex, SlowIndex, WatchIndex, background scanning and cache maintenance workers. Workers connect directly to TiDB and hand off to successor runs before the runner time limit.
 - **Yahoo Finance** supplies quotes, historical data and symbol search.
 
-No old indexed data is migrated. The TiDB schema is created cleanly and indexes are rebuilt from Yahoo Finance.
+The browser calls the Edge Function using a public publishable key. TiDB credentials are stored only as Edge Function secrets and GitHub Actions secrets; they are never included in frontend JavaScript.
 
-## Required repository secret
+No old indexed stock data is migrated. The TiDB schema is created cleanly and indexes are rebuilt from Yahoo Finance.
 
-- \`DATABASE_URL\`: the PostgreSQL connection string from the TiDB Connect panel.
+## One-time API secret configuration
+
+In the Supabase project **Stock-Analyser** (`dwhhdwdgoamzcsehuhiq`), open **Project Settings → Edge Functions → Secrets** and add these two secrets using the same values already configured in GitHub Actions:
+
+- `DATABASE_URL`
+- `TIDB_PASSWORD`
+
+Do not paste either value into the repository or chat. The Edge Function accepts the TiDB PostgreSQL connection string (including the TiDB CLI `psql` format) and uses TLS.
+
+The API health endpoint performs a real TiDB connection and verifies all seven required tables:
+
+`https://dwhhdwdgoamzcsehuhiq.supabase.co/functions/v1/stock-analyser-api/api/health`
+
+## GitHub Actions secrets
+
+The background workers use:
+
+- `DATABASE_URL`
+- `TIDB_PASSWORD`
+
+No Supabase database credentials or Cloudflare credentials are required by the workers.
 
 ## Background workers
-
-The Actions workflows start on a schedule and can also be dispatched manually:
 
 - Analysis queue: every 5 minutes.
 - RapidIndex and SlowIndex: every 6 hours, split across four workers.
@@ -29,12 +48,12 @@ Each long-running worker uses a 5-hour-45-minute runtime and hands off to a succ
 
 ## Local development
 
-\`\`\`bash
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
-\`\`\`
+```
 
 ## Forecasting model
 
