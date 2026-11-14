@@ -1,11 +1,7 @@
 name: Incremental market indexing
 on:
-  schedule:
-    - cron: "0 */5 * * *"
-  push:
-    branches: [main]
-    paths: [".github/workflows/index-market.yml", "app/indexer.py", "app/db.py"]
   workflow_dispatch:
+
 permissions:
   contents: read
   actions: write

@@ -5,7 +5,7 @@ import sys
 import urllib.error
 import urllib.request
 
-import psycopg
+from app.db import connect
 
 SOURCE_API = os.environ.get("D1_EXPORT_API_URL", "https://stock-analyser-api.stock-analyser-2026.workers.dev").rstrip("/")
 SOURCE_TOKEN = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
@@ -82,7 +82,7 @@ def main():
     with open(schema_path, encoding="utf-8") as schema_file:
         statements = [item.strip() for item in schema_file.read().split(";") if item.strip()]
     totals = {}
-    with psycopg.connect(DATABASE_URL) as connection:
+    with connect() as connection:
         with connection.cursor() as cursor:
             for statement in statements:
                 cursor.execute(statement)
