@@ -1,4 +1,7 @@
 """One-shot diagnostics for the market-data bootstrap pipeline."""
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.db import fetch_all, verify_database
 from app.scanner import _load_yfinance_universe, _load_nasdaq_universe, fast_filter
 
