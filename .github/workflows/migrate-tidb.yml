@@ -1,11 +1,17 @@
 name: Migrate existing data to TiDB
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/db.py"
+      - "scripts/migrate_d1_to_tidb.py"
+      - "tidb/schema.sql"
+      - ".github/workflows/migrate-tidb.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   migrate:
@@ -20,9 +26,19 @@ jobs:
           python-version: "3.11"
       - name: Install PostgreSQL driver
         run: python -m pip install "psycopg[binary]>=3.2,<4"
-      - name: Copy D1 records into TiDB
+      - name: Test TiDB connection-string normalization
+        run: |
+          python - <<'PY'
+          from app.db import normalize_dsn
+          value = r"\psql 'host=db.example port=5432 user=app dbname=<DB>; sslmode=verify-full'"
+          result = normalize_dsn(value)
+          assert "dbname=postgres" in result, result
+          assert "<DB>" not in result, result
+          print("TiDB CLI connection string normalized.")
+          PY
+      - name: Copy D1 records into TiDB and verify imported row counts
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CLOUDFLARE_ADMIN_API_TOKEN: ${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
+          DATABASE_URL: \${{ secrets.DATABASE_URL }}
+          CLOUDFLARE_ADMIN_API_TOKEN: \${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
           D1_EXPORT_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
         run: python scripts/migrate_d1_to_tidb.py

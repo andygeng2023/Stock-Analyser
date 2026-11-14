@@ -1,6 +1,7 @@
 """Direct TiDB PostgreSQL access for GitHub Actions workers."""
 import json
 import os
+import re
 import shlex
 from typing import Any, Mapping, Sequence
 
@@ -9,22 +10,54 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 
-def connect():
-    dsn = os.environ.get("DATABASE_URL", "").strip()
+def normalize_dsn(value: str) -> str:
+    """Normalize the command copied from TiDB's PostgreSQL CLI connection panel."""
+    dsn = str(value or "").strip()
     if not dsn:
         raise RuntimeError("DATABASE_URL is missing; configure the TiDB connection string as a GitHub Actions secret.")
-    # TiDB's console may show a shell command such as: psql 'host=... user=...'.
-    # Accept that pasted form as well as a plain PostgreSQL URI/conninfo string.
-    if dsn.startswith("psql "):
-        dsn = dsn[5:].strip()
-        parts = shlex.split(dsn)
-        if len(parts) != 1:
-            raise RuntimeError("DATABASE_URL must contain only the connection string, not additional psql command arguments.")
-        dsn = parts[0]
-    elif len(dsn) >= 2 and dsn[0] == dsn[-1] and dsn[0] in ("'", '"'):
-        dsn = dsn[1:-1]
-    return psycopg.connect(dsn, connect_timeout=15, row_factory=dict_row,
-                           application_name="stock-analyser-actions")
+
+    # Some TiDB console copies include the psql command in front of the conninfo.
+    for prefix in ("\\\\psql ", "\\psql ", "psql "):
+        if dsn.startswith(prefix):
+            dsn = dsn[len(prefix):].strip()
+            break
+
+    # Remove shell quoting when the entire conninfo was copied as one argument.
+    if dsn.startswith(("'", '"')):
+        try:
+            parts = shlex.split(dsn)
+            if len(parts) == 1:
+                dsn = parts[0]
+        except ValueError as exc:
+            raise RuntimeError("DATABASE_URL contains unmatched shell quotes.") from exc
+
+    # The TiDB PostgreSQL CLI template uses dbname=<DB> as a placeholder.
+    # The starter instance's built-in database is named postgres. A semicolon
+    # copied immediately after <DB> is part of the placeholder text, not a
+    # libpq attribute separator, so replace the whole placeholder.
+    dsn = re.sub(
+        r"(?i)(\\bdbname\\s*=\\s*)[\"']?<DB>;?[\"']?",
+        r"\\1postgres",
+        dsn,
+    )
+
+    # Also accept PostgreSQL URIs copied with the database placeholder.
+    dsn = re.sub(
+        r"(?i)(/)<DB>(?=[?;]|$)",
+        r"\\1postgres",
+        dsn,
+    )
+    return dsn
+
+
+def connect():
+    dsn = normalize_dsn(os.environ.get("DATABASE_URL", ""))
+    return psycopg.connect(
+        dsn,
+        connect_timeout=15,
+        row_factory=dict_row,
+        application_name="stock-analyser-actions",
+    )
 
 
 def _val(column, value):
