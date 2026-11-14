@@ -61,7 +61,7 @@ def connect():
     # literal <DB> placeholder. The PostgreSQL-compatible Starter's default
     # database is named "postgres"; replace the placeholder after parsing
     # both URI and keyword/value DSNs so it cannot reach the server unchanged.
-    database_name = str(options.get("dbname") or "").strip().strip("\\"'")
+    database_name = str(options.get("dbname") or "").strip().strip(chr(34) + chr(39))
     if database_name.lower() in {"<db>", "%3cdb%3e"}:
         options["dbname"] = "postgres"
     password_override = os.environ.get("TIDB_PASSWORD", "")
