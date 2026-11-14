@@ -1,4 +1,6 @@
 name: Incremental market indexing
+  schedule:
+    - cron: '13 */6 * * *'
 on:
   workflow_dispatch:
 

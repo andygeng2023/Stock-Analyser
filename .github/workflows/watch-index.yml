@@ -1,4 +1,6 @@
 name: WatchIndex shared watchlist refresh
+  schedule:
+    - cron: '31 */6 * * *'
 on:
   workflow_dispatch:
 

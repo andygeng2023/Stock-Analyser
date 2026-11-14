@@ -1,4 +1,6 @@
 name: Expire shared analysis cache
+  schedule:
+    - cron: '41 */6 * * *'
 on:
   workflow_dispatch:
 

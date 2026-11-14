@@ -1,4 +1,6 @@
 name: Analyse stock queue
+  schedule:
+    - cron: '*/5 * * * *'
 on:
   workflow_dispatch:
 
