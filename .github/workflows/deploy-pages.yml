@@ -1,0 +1,50 @@
+name: Deploy Stock Analyser to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/static/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Build static site and runtime configuration
+        env:
+          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL || 'https://stock-analyser-api.vercel.app' }}
+        run: |
+          mkdir -p site
+          cp app/static/*.html app/static/*.css app/static/*.js site/
+          # Give every deployment a unique asset URL so browsers cannot keep
+          # executing an older cached JavaScript or stylesheet bundle.
+          sed -i "s|./style.css?v=[^\"']*|./style.css?v=${GITHUB_SHA}|g; s|./app.js?v=[^\"']*|./app.js?v=${GITHUB_SHA}|g; s|./config.js?v=[^\"\']*|./config.js?v=${GITHUB_SHA}|g" site/index.html
+          python - <<'PY'
+          import json, os
+          config = {"apiBaseUrl": os.environ.get("STOCK_ANALYSER_API_URL", "").rstrip("/") }
+          with open("site/config.js", "w", encoding="utf-8") as f:
+              f.write("window.STOCK_ANALYSER_CONFIG = " + json.dumps(config) + ";\n")
+          PY
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

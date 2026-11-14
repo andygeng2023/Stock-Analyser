@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1120">
+<title>Privacy Policy · Stock Analyser</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("stock-analyser-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}</script>
+<link rel="stylesheet" href="./standalone.css?v=account-pages-02">
+</head>
+<body>
+<div class="page-shell">
+  <header class="page-top">
+    <a class="brand" href="./index.html?tab=settings"><span class="brand-mark">A</span><span>Stock Analyser</span></a>
+    <a class="back-link" href="./index.html?tab=settings">← Back to Settings</a>
+  </header>
+  <main class="page-content">
+    <small class="eyebrow">LEGAL INFORMATION</small>
+    <h1>Privacy Policy</h1>
+    <p class="lead">How Stock Analyser handles account details, saved watchlists and application data.</p>
+    <p class="updated">Last updated: 1 November 2026</p>
+<div class="prose">
+<h2>1. About this policy</h2>
+<p>Stock Analyser is a stock-research application. This policy describes the information processed when you use the application and the controls available to you.</p>
+<h2>2. Information processed</h2>
+<ul>
+<li><strong>Account information:</strong> when you register, your email address, authentication records and optional display name are handled by Supabase Auth.</li>
+<li><strong>Watchlist information:</strong> tickers you save are stored in Supabase PostgreSQL and associated with your account so that your watchlist can be synchronised across devices.</li>
+<li><strong>Analysis requests:</strong> ticker symbols and analysis settings are sent to the application backend. Analysis jobs are processed through GitHub Actions using market data obtained through Yahoo Finance tools. Completed results may be stored in a shared market-data cache.</li>
+<li><strong>Browser storage:</strong> the application stores your theme preference and active request identifiers locally so the interface can retain those settings after a reload.</li>
+</ul>
+<h2>3. How information is used</h2>
+<p>Information is used to authenticate your account, synchronise your watchlist, process analysis requests, display results, maintain service security and improve application reliability. The application does not use account information to provide personalised financial advice.</p>
+<h2>4. Service providers</h2>
+<p>The application relies on Supabase for authentication and database services, GitHub for source hosting, analysis workers and deployment, and Yahoo Finance data accessed through yfinance. These providers process information under their own terms and privacy policies. Their availability and practices are outside the application's control.</p>
+<h2>5. Access and control</h2>
+<p>You can view and change your account display name and email settings, change or reset your password, sign out sessions, export your watchlist as a CSV file and remove saved watchlist entries from Settings. Row-level security restricts access to account watchlist records. For questions about account-data access or account deletion, contact the project maintainers through the <a href="https://github.com/andygeng2023/Stock-Analyser/issues" target="_blank" rel="noopener noreferrer">GitHub issues page</a>.</p>
+<h2>6. Retention and security</h2>
+<p>Account and watchlist records are retained while the account and corresponding records exist. Analysis results may be retained in shared caches independently of an individual watchlist. The application uses authenticated requests and database row-level security for watchlist access, but no internet service can guarantee absolute security.</p>
+<h2>7. Children and account use</h2>
+<p>Do not submit sensitive personal information in application fields or support requests. Account creation and use are subject to the age and consent requirements applicable in your location and to the settings of the service providers.</p>
+<h2>8. Changes and contact</h2>
+<p>This policy may be updated as the application changes. The date at the top of the page will be revised when material changes are made. For questions, use the project issues page linked above.</p>
+</div>
+  </main>
+  <footer class="page-footer">Stock Analyser · Research and learning tool · <a href="https://github.com/andygeng2023/Stock-Analyser" target="_blank" rel="noopener noreferrer">GitHub repository</a></footer>
+</div>
+</body>
+</html>

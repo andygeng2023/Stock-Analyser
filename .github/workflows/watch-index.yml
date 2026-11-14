@@ -1,0 +1,25 @@
+name: WatchIndex shared watchlist refresh
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/watch-index.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: stock-watch-indexer-v2
+  cancel-in-progress: true
+
+jobs:
+  watch-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Background service paused to protect the D1 daily write allowance
+        run: echo "Background service paused. On-demand analysis remains available."
+

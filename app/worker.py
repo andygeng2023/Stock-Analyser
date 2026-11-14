@@ -1,4 +1,4 @@
-"""Long-lived GitHub Actions worker that drains the TiDB-backed analysis queue."""
+"""Long-lived GitHub Actions worker that drains the Cloudflare D1 queue."""
 import json
 import os
 import sys
