@@ -303,11 +303,13 @@ async function stockMarketData(req,env) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const url = new URL(req.url);
-  const prefix = "/functions/v1/stock-analyser-api";
-  const marker = url.pathname.indexOf(prefix);
-  if (marker >= 0) url.pathname = url.pathname.slice(marker + prefix.length) || "/";
+  // Supabase's gateway path and the URL visible inside an Edge Function are
+  // not guaranteed to have the same prefix. Route from the final /api/ segment
+  // so both /api/market-feed and /functions/v1/<slug>/api/market-feed work.
+  const rawPath = url.pathname;
+  const apiMarker = rawPath.lastIndexOf("/api/");
+  const path = (apiMarker >= 0 ? rawPath.slice(apiMarker) : rawPath).replace(/\\/+$/, "") || "/";
   try {
-    const path = url.pathname;
     if (path.startsWith("/api/auth/")) return await authRoutes(req, env, url);
     if (path === "/api/health") {
       const identity = await env.DB.prepare("SELECT current_database() AS database_name, current_schema() AS schema_name").first();
