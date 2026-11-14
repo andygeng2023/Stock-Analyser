@@ -357,7 +357,7 @@ def _handoff_after_runtime():
 def parse_index_shard(value):
     """Parse shard IDs defensively, including legacy escaped GitHub matrix values."""
     raw = str(value if value is not None else "0").strip()
-    normalized = raw.strip("\\\\").strip()
+    normalized = raw.lstrip(chr(92)).strip()
     if not normalized.isdecimal():
         raise ValueError(f"INDEX_SHARD must be a non-negative integer; received {raw!r}.")
     shard = int(normalized)
