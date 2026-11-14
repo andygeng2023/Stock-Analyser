@@ -24,18 +24,18 @@ function translateSql(source) {
   let sql = String(source).trim();
   let ignoreConflict = false;
 
-  if (/^INSERT\\s+OR\\s+IGNORE\\s+INTO/i.test(sql)) {
-    sql = sql.replace(/^INSERT\\s+OR\\s+IGNORE\\s+INTO/i, "INSERT INTO");
+  if (/^INSERT\s+OR\s+IGNORE\s+INTO/i.test(sql)) {
+    sql = sql.replace(/^INSERT\s+OR\s+IGNORE\s+INTO/i, "INSERT INTO");
     ignoreConflict = true;
   }
 
   // Emails are normalized to lowercase on account creation and login.
-  sql = sql.replace(/\\s+COLLATE\\s+NOCASE/ig, "");
+  sql = sql.replace(/\s+COLLATE\s+NOCASE/ig, "");
 
   let index = 0;
-  sql = sql.replace(/\\?/g, () => "$" + (++index));
+  sql = sql.replace(/\?/g, () => "$" + (++index));
 
-  if (ignoreConflict && !/ON\\s+CONFLICT/i.test(sql)) sql += " ON CONFLICT DO NOTHING";
+  if (ignoreConflict && !/ON\s+CONFLICT/i.test(sql)) sql += " ON CONFLICT DO NOTHING";
   return sql;
 }
 
