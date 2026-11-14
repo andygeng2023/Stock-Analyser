@@ -5,6 +5,11 @@ import sys
 import urllib.error
 import urllib.request
 
+# Running this file as a script puts /scripts, not the repository root, on sys.path.
+REPOSITORY_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPOSITORY_ROOT not in sys.path:
+    sys.path.insert(0, REPOSITORY_ROOT)
+
 from app.db import connect
 
 SOURCE_API = os.environ.get("D1_EXPORT_API_URL", "https://stock-analyser-api.stock-analyser-2026.workers.dev").rstrip("/")
