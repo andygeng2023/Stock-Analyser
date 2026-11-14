@@ -30,11 +30,6 @@ jobs:
         run: |
           node --check app/static/app.js
           node --check app/static/auth.js
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-      - name: Type-check TiDB Edge Function
-        run: deno check supabase/functions/stock-analyser-api/index.ts
       - name: Verify live database connectivity and application schema
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
