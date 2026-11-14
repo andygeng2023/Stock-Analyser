@@ -30,9 +30,15 @@ jobs:
         run: |
           mkdir -p site
           cp app/static/*.html app/static/*.css app/static/*.js site/
-          # Give every deployment a unique asset URL so browsers cannot keep
-          # executing an older cached JavaScript or stylesheet bundle.
-          sed -i "s|./style.css?v=[^"']*|./style.css?v=${GITHUB_SHA}|g; s|./app.js?v=[^"']*|./app.js?v=${GITHUB_SHA}|g; s|./config.js?v=[^"']*|./config.js?v=${GITHUB_SHA}|g" site/index.html
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          path = Path("site/index.html")
+          html = path.read_text(encoding="utf-8")
+          for asset in ("style.css", "app.js", "config.js"):
+              html = html.replace(f"./{asset}?v=202611", f"./{asset}?v={os.environ['GITHUB_SHA']}")
+          path.write_text(html, encoding="utf-8")
+          PY
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
