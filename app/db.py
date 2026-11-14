@@ -57,14 +57,16 @@ def connect():
     # interactively. GitHub Actions cannot answer that prompt, so support a
     # separate masked TIDB_PASSWORD secret without changing DATABASE_URL.
     options = conninfo_to_dict(dsn)
-    if not options.get("password"):
-        password = os.environ.get("TIDB_PASSWORD", "")
-        if not password:
-            raise RuntimeError(
-                "TiDB connection details are valid, but no password was supplied. "
-                "Add the generated TiDB password as the TIDB_PASSWORD Actions secret."
-            )
-        options["password"] = password
+    password_override = os.environ.get("TIDB_PASSWORD", "")
+    if password_override:
+        # Prefer the separately managed secret so a regenerated TiDB password
+        # can be rotated without rewriting the full connection string.
+        options["password"] = password_override
+    elif not options.get("password"):
+        raise RuntimeError(
+            "TiDB connection details are valid, but no password was supplied. "
+            "Add the generated TiDB password as the TIDB_PASSWORD Actions secret."
+        )
     return psycopg.connect(
         **options,
         connect_timeout=15,
