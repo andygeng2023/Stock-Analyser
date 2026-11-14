@@ -1,5 +1,11 @@
 name: Analyse stock queue
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/db.py"
+      - "app/worker.py"
+      - ".github/workflows/analyze-stock.yml"
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:

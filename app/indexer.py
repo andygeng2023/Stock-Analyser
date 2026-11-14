@@ -354,8 +354,20 @@ def _handoff_after_runtime():
         print(f"Could not dispatch successor indexer: {exc}", file=sys.stderr)
 
 
+def parse_index_shard(value):
+    """Parse shard IDs defensively, including legacy escaped GitHub matrix values."""
+    raw = str(value if value is not None else "0").strip()
+    normalized = raw.strip("\\\\").strip()
+    if not normalized.isdecimal():
+        raise ValueError(f"INDEX_SHARD must be a non-negative integer; received {raw!r}.")
+    shard = int(normalized)
+    if shard not in (0, 1):
+        raise ValueError(f"INDEX_SHARD must be 0 or 1; received {shard}.")
+    return shard
+
+
 def main():
-    shard = int(os.environ.get("INDEX_SHARD", "0"))
+    shard = parse_index_shard(os.environ.get("INDEX_SHARD", "0"))
     indexer = os.environ.get("INDEXER_NAME", "rapidIndex")
     # One leader dispatches the next four-worker generation; avoid duplicate hand-offs.
     if indexer == "rapidIndex" and shard == 0:

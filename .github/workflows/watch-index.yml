@@ -1,5 +1,11 @@
 name: WatchIndex shared watchlist refresh
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/db.py"
+      - "app/watch_indexer.py"
+      - ".github/workflows/watch-index.yml"
   schedule:
     - cron: '31 */6 * * *'
   workflow_dispatch:

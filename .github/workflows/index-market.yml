@@ -1,5 +1,12 @@
 name: Incremental market indexing
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/db.py"
+      - "app/indexer.py"
+      - "tests/test_worker_config.py"
+      - ".github/workflows/index-market.yml"
   schedule:
     - cron: '13 */6 * * *'
   workflow_dispatch:
