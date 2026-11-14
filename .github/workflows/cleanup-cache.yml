@@ -20,4 +20,5 @@ jobs:
       - name: Clean TiDB cache
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
         run: python -m app.maintenance

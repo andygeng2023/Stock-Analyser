@@ -26,10 +26,16 @@ jobs:
       - name: Apply clean TiDB schema
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
         run: |
           python - <<'PY'
           from pathlib import Path
-          from app.db import connect
+          import os
+          from psycopg.conninfo import conninfo_to_dict
+          from app.db import connect, normalize_dsn
+          options = conninfo_to_dict(normalize_dsn(os.environ.get("DATABASE_URL", "")))
+          print("DATABASE_URL contains password:", bool(options.get("password")))
+          print("TIDB_PASSWORD secret supplied:", bool(os.environ.get("TIDB_PASSWORD")))
           statements = [s.strip() for s in Path("tidb/schema.sql").read_text().split(";") if s.strip()]
           with connect() as conn, conn.cursor() as cur:
               for statement in statements:

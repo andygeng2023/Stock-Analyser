@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
+from psycopg.conninfo import conninfo_to_dict
 
 
 def normalize_dsn(value: str) -> str:
@@ -52,8 +53,20 @@ def normalize_dsn(value: str) -> str:
 
 def connect():
     dsn = normalize_dsn(os.environ.get("DATABASE_URL", ""))
+    # TiDB's copied psql command can omit the password because the CLI asks
+    # interactively. GitHub Actions cannot answer that prompt, so support a
+    # separate masked TIDB_PASSWORD secret without changing DATABASE_URL.
+    options = conninfo_to_dict(dsn)
+    if not options.get("password"):
+        password = os.environ.get("TIDB_PASSWORD", "")
+        if not password:
+            raise RuntimeError(
+                "TiDB connection details are valid, but no password was supplied. "
+                "Add the generated TiDB password as the TIDB_PASSWORD Actions secret."
+            )
+        options["password"] = password
     return psycopg.connect(
-        dsn,
+        options,
         connect_timeout=15,
         row_factory=dict_row,
         application_name="stock-analyser-actions",

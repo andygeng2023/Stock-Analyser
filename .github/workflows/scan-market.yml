@@ -24,6 +24,7 @@ jobs:
       - name: Run continuous background scanner
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
