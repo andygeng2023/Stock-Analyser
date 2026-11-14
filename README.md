@@ -16,7 +16,7 @@ No old indexed stock data is migrated. The TiDB schema is created cleanly and in
 
 ## One-time API secret configuration
 
-In the Supabase project **Stock-Analyser** (`dwhhdwdgoamzcsehuhiq`), open **Project Settings → Edge Functions → Secrets** and add these two secrets using the same values already configured in GitHub Actions:
+In the Supabase project **Stock-Analyser** (`nlaookgsiqojxejwvdsn`), open **Project Settings → Edge Functions → Secrets** and add these two secrets using the same values already configured in GitHub Actions:
 
 - `DATABASE_URL`
 - `TIDB_PASSWORD`
@@ -25,7 +25,7 @@ Do not paste either value into the repository or chat. The Edge Function accepts
 
 The API health endpoint performs a real TiDB connection and verifies all seven required tables:
 
-`https://dwhhdwdgoamzcsehuhiq.supabase.co/functions/v1/stock-analyser-api/api/health`
+`https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api/health`
 
 ## GitHub Actions secrets
 
