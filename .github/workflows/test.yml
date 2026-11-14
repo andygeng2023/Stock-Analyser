@@ -24,11 +24,13 @@ jobs:
         run: python -m compileall -q app tests
       - name: Run offline input validation tests
         run: python -m unittest discover -s tests -v
-      - name: Check frontend and Worker JavaScript syntax
+      - name: Check frontend and API JavaScript syntax
         run: |
           node --check app/static/app.js
           node --check app/static/auth.js
+          node --check api/core.js
+          node --check "api/[...path].js"
           node --check cloudflare/worker.js
       - name: Smoke-test deployed Cloudflare Worker
         run: |
-          node --input-type=module -e 'const r=await fetch("https://stock-analyser-api.stock-analyser-2026.workers.dev/api/health"); if(!r.ok) throw new Error("Worker health check failed: "+r.status); const d=await r.json(); if(d.ok!==true || d.database!=="d1") throw new Error("Unexpected Worker health response"); console.log("Cloudflare Worker health check passed.");'
+          node --input-type=module -e 'const r=await fetch("https://stock-analyser-api.stock-analyser-2026.workers.dev/api/health"); if(!r.ok) throw new Error("Worker health check failed: "+r.status); const d=await r.json(); if(d.ok!==true || !["d1-migration-source","tidb"].includes(d.database)) throw new Error("Unexpected API health response"); console.log("API health check passed: "+d.database+".");'

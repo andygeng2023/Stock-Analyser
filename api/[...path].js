@@ -1,5 +1,5 @@
 import pg from "pg";
-import worker from "../cloudflare/worker.js";
+import worker from "./core.js";
 
 const { Pool } = pg;
 let pool;

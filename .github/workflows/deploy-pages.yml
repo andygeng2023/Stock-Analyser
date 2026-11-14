@@ -28,7 +28,7 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Build static site and runtime configuration
         env:
-          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL || 'https://stock-analyser-api.vercel.app' }}
+          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL || 'https://stock-analyser-api.stock-analyser-2026.workers.dev' }}
         run: |
           mkdir -p site
           cp app/static/*.html app/static/*.css app/static/*.js site/
