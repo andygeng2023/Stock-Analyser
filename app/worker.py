@@ -35,7 +35,7 @@ def database_request(path: str, *, method: str = "GET", payload=None):
     base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
     key = os.environ["ADMIN_API_TOKEN"]
     return request_json(
-        f"{base}/api/internal/rest/v1/{path}",
+        f"{base}/api/api/internal/rest/v1/{path}",
         method=method,
         payload=payload,
         headers={"Authorization": f"Bearer {key}"},
@@ -61,15 +61,15 @@ def upsert_market_index(job_id: str, ticker: str, period: str, horizon: int, res
         "market_cap": market_cap,
         "priority": float(result.get("market_summary", {}).get("average_dollar_volume", 0) or 0),
     }
-    base = os.environ["CLOUDFLARE_API_URL"].rstrip("/")
-    key = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
+    base = os.environ["STOCK_ANALYSER_API_URL"].rstrip("/")
+    key = os.environ["ADMIN_API_TOKEN"]
     request_json(
-        f"{base}/internal/rest/v1/market_index?on_conflict=ticker,period,horizon,indexer",
+        f"{base}/api/internal/rest/v1/market_index?on_conflict=ticker,period,horizon,indexer",
         method="POST", payload=payload,
         headers={"Authorization": f"Bearer {key}", "Prefer": "resolution=merge-duplicates,return=minimal"},
     )
     request_json(
-        f"{base}/internal/rest/v1/market_index_catalog?on_conflict=ticker",
+        f"{base}/api/internal/rest/v1/market_index_catalog?on_conflict=ticker",
         method="POST",
         payload={
             "ticker": ticker, "market_cap": market_cap,

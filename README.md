@@ -2,6 +2,7 @@
 
 A responsive stock research dashboard using Yahoo Finance data and a walk-forward-tested ARIMA, SVM, SVR and XGBoost forecasting ensemble.
 
+
 ## Architecture
 
 - **GitHub Pages** hosts the static dashboard.
@@ -22,31 +23,11 @@ Cloudflare D1 is retained only as the temporary source for the one-time migratio
    - `DATABASE_URL`: the same TiDB PostgreSQL connection string.
    - `ADMIN_API_TOKEN`: the same application admin secret configured in Vercel.
    - Keep `CLOUDFLARE_ADMIN_API_TOKEN` temporarily; it is used only by the one-time D1 export workflow.
-4. In GitHub repository Settings → Secrets and variables → Actions → Variables, add `STOCK_ANALYSER_API_URL` with the production Vercel URL (for example, `https://your-project.vercel.app`, without a trailing slash).
+4. In GitHub repository Settings → Secrets and variables → Actions → Variables, add `STOCK_ANALYSER_API_URL` with the production Vercel URL (for example, `https://stock-analyser-api.vercel.app`, without a trailing slash).
 5. Run the **Migrate existing data to TiDB** workflow from the Actions tab. It is safe to rerun: rows are upserted, not duplicated.
 6. After the API and data migration have been verified, the D1 export secret and old Cloudflare Worker can be retired.
 
 The API is deployed automatically when Vercel is connected to this repository. GitHub Pages remains the frontend host. Do not expose `DATABASE_URL` or `ADMIN_API_TOKEN` in the browser.
-
-## Required configuration
-
-Set these values before deploying the application:
-
-1. In Cloudflare → Workers & Pages → `stock-analyser-api` → Settings → Variables and Secrets, add a secret named `ADMIN_API_TOKEN`. Use a newly generated, high-entropy random value (at least 32 random bytes).
-2. In GitHub → repository Settings → Secrets and variables → Actions → Secrets, add `CLOUDFLARE_ADMIN_API_TOKEN` with exactly the same value.
-3. Merge the migration branch into `main`. GitHub Pages and the scheduled workflows already contain the public Cloudflare API URL; no URL variable is required.
-
-The `CLOUDFLARE_ADMIN_API_TOKEN` value is an application-to-application shared secret, not a Cloudflare account API token. Do not put it in frontend configuration or commit it to the repository.
-
-## Zero-cost account limitations
-
-The replacement account system stores salted PBKDF2 password hashes and hashed session tokens in D1. Sessions expire after 30 days. Users can sign up, sign in, change their password, update their display name and sign out sessions.
-
-There is no transactional email provider in this zero-cost setup. Consequently, email verification, password-reset emails and email-address changes are unavailable. Users should keep access to their account and change their password while signed in. Do not use a password that is important elsewhere.
-
-## Data migration
-
-The new D1 database is currently initialised with an empty schema. The previous Supabase project was reporting exhausted egress/database connectivity errors, so existing indexed results, user accounts and watchlists have not been transferred. Once Supabase data becomes readable, a separate export/import can recover compatible records. Otherwise RapidIndex and SlowIndex will repopulate through the scheduled indexers, and users will need to recreate accounts and watchlists.
 
 ## Indexing profiles
 

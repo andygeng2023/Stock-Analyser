@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   cleanup:
+    if: ${{ vars.STOCK_ANALYSER_API_URL != '' && secrets.ADMIN_API_TOKEN != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

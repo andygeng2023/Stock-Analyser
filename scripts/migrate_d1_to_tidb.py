@@ -99,7 +99,7 @@ def main():
     for table, _ in TABLES:
         exported[table] = fetch_table(table)
 
-    schema_path = os.path.join(os.path.dirname(__file__), "..", "..", "tidb", "schema.sql")
+    schema_path = os.path.join(os.path.dirname(__file__), "..", "tidb", "schema.sql")
     with open(schema_path, encoding="utf-8") as schema_file:
         schema_statements = [item.strip() for item in schema_file.read().split(";") if item.strip()]
 

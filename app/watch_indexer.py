@@ -43,7 +43,7 @@ def recent_rapid_index(tickers):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=RECENT_HOURS)).isoformat()
     encoded = quote(cutoff, safe="")
     recent = {}
-    # Restrict each query to this watchlist universe so PostgREST row limits
+    # Restrict each query to this watchlist universe so API pagination limits
     # cannot hide recently indexed tickers behind unrelated market symbols.
     for start in range(0, len(tickers), 100):
         batch = tickers[start:start + 100]

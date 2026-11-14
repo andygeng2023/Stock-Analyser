@@ -28,12 +28,8 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Build static site and runtime configuration
         env:
-          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL }}
+          STOCK_ANALYSER_API_URL: ${{ vars.STOCK_ANALYSER_API_URL || 'https://stock-analyser-api.vercel.app' }}
         run: |
-          if [ -z "$STOCK_ANALYSER_API_URL" ]; then
-            echo "Missing Stock Analyser API configuration. Add STOCK_ANALYSER_API_URL as a GitHub Actions variable with your Vercel deployment URL."
-            exit 1
-          fi
           mkdir -p site
           cp app/static/*.html app/static/*.css app/static/*.js site/
           # Give every deployment a unique asset URL so browsers cannot keep
