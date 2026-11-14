@@ -3,8 +3,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/db.py"
-      - "app/watch_indexer.py"
+      - "app/**"
+      - "requirements.txt"
       - ".github/workflows/watch-index.yml"
   schedule:
     - cron: '31 */6 * * *'

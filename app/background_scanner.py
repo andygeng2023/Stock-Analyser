@@ -6,7 +6,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from .db import insert_one
+from .db import insert_one, verify_database
 from .scanner import run_market_scan
 from .worker import request_json
 
@@ -47,6 +47,7 @@ def handoff():
 def main():
     if not os.environ.get("DATABASE_URL") or not os.environ.get("GITHUB_TOKEN"):
         raise RuntimeError("DATABASE_URL and GITHUB_TOKEN are required.")
+    print("Database preflight:", verify_database())
     threading.Thread(target=handoff, daemon=True).start()
     started = time.monotonic()
     while time.monotonic() - started < MAX_RUNTIME_SECONDS:

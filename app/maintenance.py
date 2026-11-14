@@ -1,9 +1,10 @@
 """Remove expired analysis and market-index cache rows directly in TiDB."""
 from datetime import datetime, timedelta, timezone
-from .db import connect
+from .db import connect, verify_database
 
 
 def main():
+    print("Database preflight:", verify_database())
     now = datetime.now(timezone.utc)
     rapid = (now - timedelta(hours=8)).isoformat()
     slow = (now - timedelta(days=30)).isoformat()

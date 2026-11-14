@@ -15,7 +15,7 @@ import yfinance as yf
 
 from .analyzer import analyze_ticker
 from .scanner import load_universe, fast_filter
-from .db import fetch_all, insert_one, upsert_many, upsert_one
+from .db import fetch_all, insert_one, upsert_many, upsert_one, verify_database
 from .worker import request_json
 
 PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "15"))
@@ -367,6 +367,7 @@ def parse_index_shard(value):
 
 
 def main():
+    print("Database preflight:", verify_database())
     shard = parse_index_shard(os.environ.get("INDEX_SHARD", "0"))
     indexer = os.environ.get("INDEXER_NAME", "rapidIndex")
     # One leader dispatches the next four-worker generation; avoid duplicate hand-offs.

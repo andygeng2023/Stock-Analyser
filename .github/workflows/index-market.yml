@@ -3,8 +3,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/db.py"
-      - "app/indexer.py"
+      - "app/**"
+      - "requirements.txt"
       - "tests/test_worker_config.py"
       - ".github/workflows/index-market.yml"
   schedule:

@@ -31,6 +31,9 @@ jobs:
           node --check app/static/app.js
           node --check app/static/auth.js
           node --check cloudflare/worker.js
-      - name: Smoke-test deployed Cloudflare Worker
-        run: |
-          node --input-type=module -e 'const r=await fetch("https://stock-analyser-api.stock-analyser-2026.workers.dev/api/health"); if(!r.ok) throw new Error("Worker health check failed: "+r.status); const d=await r.json(); if(d.ok!==true || !["d1-migration-source","tidb"].includes(d.database)) throw new Error("Unexpected API health response"); console.log("API health check passed: "+d.database+".");'
+      - name: Verify live database connectivity and application schema
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+        run: python -c "from app.db import verify_database; print('Live database verification passed:', verify_database())"

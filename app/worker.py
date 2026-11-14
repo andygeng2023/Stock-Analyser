@@ -7,7 +7,7 @@ import urllib.request
 from datetime import datetime, timezone, timedelta
 
 from .analyzer import analyze_ticker
-from .db import connect, fetch_one, update_one, upsert_one
+from .db import connect, fetch_one, update_one, upsert_one, verify_database
 from .scanner import run_market_scan
 
 POLL_SECONDS = 5
@@ -125,8 +125,9 @@ def process_job(job):
 def main():
     if not os.environ.get("DATABASE_URL"):
         raise RuntimeError("DATABASE_URL is missing.")
+    print("Database preflight:", verify_database())
     started, last_work, completed = time.monotonic(), time.monotonic(), 0
-    print("TiDB analysis queue worker started.")
+    print("Analysis queue worker started against the verified database.")
     while True:
         if time.monotonic() - started >= MAX_RUNTIME_SECONDS:
             if queue_has_pending_jobs():

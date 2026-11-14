@@ -11,6 +11,17 @@ from psycopg.rows import dict_row
 from psycopg.conninfo import conninfo_to_dict
 
 
+REQUIRED_TABLES = frozenset({
+    "users",
+    "sessions",
+    "watchlist_items",
+    "analysis_jobs",
+    "market_index",
+    "market_index_catalog",
+    "api_rate_limits",
+})
+
+
 def normalize_dsn(value: str) -> str:
     """Normalize the command copied from TiDB's PostgreSQL CLI connection panel."""
     dsn = str(value or "").strip()
@@ -32,20 +43,19 @@ def normalize_dsn(value: str) -> str:
         except ValueError as exc:
             raise RuntimeError("DATABASE_URL contains unmatched shell quotes.") from exc
 
-
     # The starter instance's built-in database is named postgres. A semicolon
     # copied immediately after <DB> is part of the placeholder text, not a
     # libpq attribute separator, so replace the whole placeholder.
     dsn = re.sub(
-        r"(?i)(\bdbname\s*=\s*)[\"']?<DB>;?[\"']?",
-        r"\1postgres",
+        r"(?i)(\\bdbname\\s*=\\s*)[\"']?<DB>;?[\"']?",
+        r"\\1postgres",
         dsn,
     )
 
     # Also accept PostgreSQL URIs copied with the database placeholder.
     dsn = re.sub(
         r"(?i)(/)<DB>(?=[?;]|$)",
-        r"\1postgres",
+        r"\\1postgres",
         dsn,
     )
     return dsn
@@ -80,6 +90,40 @@ def connect():
         row_factory=dict_row,
         application_name="stock-analyser-actions",
     )
+
+
+def verify_database():
+    """Fail fast unless the configured connection can read the complete app schema."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT current_database() AS database_name, "
+            "current_schema() AS schema_name"
+        )
+        identity = cur.fetchone() or {}
+        cur.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_type = 'BASE TABLE'
+            """
+        )
+        actual = {row["table_name"] for row in cur.fetchall()}
+        missing = REQUIRED_TABLES - actual
+        if missing:
+            raise RuntimeError(
+                "Connected to the configured database, but its application schema "
+                "is incomplete. Missing tables: " + ", ".join(sorted(missing))
+            )
+        cur.execute("SELECT 1 AS ok")
+        result = cur.fetchone()
+        if not result or result.get("ok") != 1:
+            raise RuntimeError("TiDB database preflight query did not return the expected result.")
+    return {
+        "database": identity.get("database_name"),
+        "schema": identity.get("schema_name"),
+        "verified_tables": len(REQUIRED_TABLES),
+    }
 
 
 def _val(column, value):

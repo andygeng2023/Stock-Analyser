@@ -3,8 +3,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/db.py"
-      - "app/background_scanner.py"
+      - "app/**"
+      - "requirements.txt"
       - ".github/workflows/scan-market.yml"
   schedule:
     - cron: '23 */6 * * *'

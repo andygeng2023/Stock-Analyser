@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from .analyzer import analyze_ticker
-from .db import fetch_all, insert_one
+from .db import fetch_all, insert_one, verify_database
 from .worker import request_json, upsert_market_index
 
 PERIOD, HORIZON = "5y", 30
@@ -81,6 +81,7 @@ def dispatch_successor():
 def main():
     if not os.environ.get("DATABASE_URL") or not os.environ.get("GITHUB_TOKEN"):
         raise RuntimeError("DATABASE_URL and GITHUB_TOKEN are required.")
+    print("Database preflight:", verify_database())
     started, failed_until = time.monotonic(), {}
     print("WatchIndex worker started against TiDB.")
     while time.monotonic() - started < MAX_RUNTIME_SECONDS:
