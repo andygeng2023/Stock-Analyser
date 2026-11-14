@@ -31,7 +31,7 @@ def normalize_dsn(value: str) -> str:
         except ValueError as exc:
             raise RuntimeError("DATABASE_URL contains unmatched shell quotes.") from exc
 
-        r"(?i)(\bdbname\s*=\s*)[\"']?<DB>;?[\"']?",
+
     # The starter instance's built-in database is named postgres. A semicolon
     # copied immediately after <DB> is part of the placeholder text, not a
     # libpq attribute separator, so replace the whole placeholder.
