@@ -1,6 +1,7 @@
 """Direct TiDB PostgreSQL access for GitHub Actions workers."""
 import json
 import os
+import shlex
 from typing import Any, Mapping, Sequence
 
 import psycopg
@@ -12,6 +13,16 @@ def connect():
     dsn = os.environ.get("DATABASE_URL", "").strip()
     if not dsn:
         raise RuntimeError("DATABASE_URL is missing; configure the TiDB connection string as a GitHub Actions secret.")
+    # TiDB's console may show a shell command such as: psql 'host=... user=...'.
+    # Accept that pasted form as well as a plain PostgreSQL URI/conninfo string.
+    if dsn.startswith("psql "):
+        dsn = dsn[5:].strip()
+        parts = shlex.split(dsn)
+        if len(parts) != 1:
+            raise RuntimeError("DATABASE_URL must contain only the connection string, not additional psql command arguments.")
+        dsn = parts[0]
+    elif len(dsn) >= 2 and dsn[0] == dsn[-1] and dsn[0] in ("'", '"'):
+        dsn = dsn[1:-1]
     return psycopg.connect(dsn, connect_timeout=15, row_factory=dict_row,
                            application_name="stock-analyser-actions")
 
