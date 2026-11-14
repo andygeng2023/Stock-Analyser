@@ -40,5 +40,4 @@ jobs:
         env:
           DATABASE_URL: \${{ secrets.DATABASE_URL }}
           CLOUDFLARE_ADMIN_API_TOKEN: \${{ secrets.CLOUDFLARE_ADMIN_API_TOKEN }}
-          D1_EXPORT_API_URL: https://stock-analyser-api.stock-analyser-2026.workers.dev
         run: python scripts/migrate_d1_to_tidb.py

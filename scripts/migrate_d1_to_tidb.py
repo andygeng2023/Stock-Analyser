@@ -12,8 +12,9 @@ if REPOSITORY_ROOT not in sys.path:
 
 from app.db import connect
 
-SOURCE_API = os.environ.get("D1_EXPORT_API_URL", "https://stock-analyser-api.stock-analyser-2026.workers.dev").rstrip("/")
-SOURCE_TOKEN = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "879830237b7834af526b02239c9b6c09")
+D1_DATABASE_ID = os.environ.get("D1_DATABASE_ID", "e96950a3-37aa-4962-99f2-cee0bb6a7394")
+CLOUDFLARE_API_TOKEN = os.environ["CLOUDFLARE_ADMIN_API_TOKEN"]
 DATABASE_URL = os.environ["DATABASE_URL"]
 PAGE_SIZE = 250
 
@@ -28,18 +29,40 @@ TABLES = [
 ]
 
 def fetch_page(table, offset):
-    url = f"{SOURCE_API}/internal/rest/v1/{table}?limit={PAGE_SIZE}&offset={offset}"
-    request = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {SOURCE_TOKEN}",
-        "Accept": "application/json",
-        "User-Agent": "StockAnalyser-TiDB-Migration/1.0",
-    })
+    # Export directly through Cloudflare's authenticated D1 API. The Worker
+    # export route uses a separate secret and is not the GitHub API token.
+    if table not in {name for name, _ in TABLES}:
+        raise ValueError(f"Unsupported migration table: {table}")
+    query = f"SELECT * FROM {table} LIMIT {PAGE_SIZE} OFFSET {int(offset)}"
+    url = (
+        f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}"
+        f"/d1/database/{D1_DATABASE_ID}/query"
+    )
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"sql": query}).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "StockAnalyser-TiDB-Migration/1.0",
+        },
+        method="POST",
+    )
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:1000]
-        raise RuntimeError(f"D1 export failed for {table}: HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"Cloudflare D1 API export failed for {table}: HTTP {exc.code}: {detail}") from exc
+
+    if not payload.get("success"):
+        errors = payload.get("errors") or []
+        raise RuntimeError(f"Cloudflare D1 query failed for {table}: {errors}")
+    results = payload.get("result") or []
+    if not results or not results[0].get("success", False):
+        raise RuntimeError(f"Cloudflare D1 returned no successful result for {table}.")
+    return results[0].get("results") or []
 
 def fetch_table(table):
     rows, offset = [], 0
@@ -80,7 +103,7 @@ def import_table(cursor, table, conflict_columns, rows):
     return len(rows)
 
 def main():
-    if not SOURCE_TOKEN:
+    if not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("CLOUDFLARE_ADMIN_API_TOKEN is missing.")
     exported = {table: fetch_table(table) for table, _ in TABLES}
     schema_path = os.path.join(os.path.dirname(__file__), "..", "tidb", "schema.sql")
