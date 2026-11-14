@@ -43,4 +43,4 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           INDEXER_NAME: ${{ matrix.indexer }}
           INDEX_SHARD: ${{ matrix.shard }}
-        run: python -m app.indexer
+        run: python -u -m app.indexer
