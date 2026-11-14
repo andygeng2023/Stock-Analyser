@@ -308,7 +308,9 @@ Deno.serve(async (req) => {
   // so both /api/market-feed and /functions/v1/<slug>/api/market-feed work.
   const rawPath = url.pathname;
   const apiMarker = rawPath.lastIndexOf("/api/");
-  const path = (apiMarker >= 0 ? rawPath.slice(apiMarker) : rawPath).replace(/\\/+$/, "") || "/";
+  let path = apiMarker >= 0 ? rawPath.slice(apiMarker) : rawPath;
+  while (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+  if (!path) path = "/";
   try {
     if (path.startsWith("/api/auth/")) return await authRoutes(req, env, url);
     if (path === "/api/health") {
