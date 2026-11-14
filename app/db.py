@@ -57,6 +57,13 @@ def connect():
     # interactively. GitHub Actions cannot answer that prompt, so support a
     # separate masked TIDB_PASSWORD secret without changing DATABASE_URL.
     options = conninfo_to_dict(dsn)
+    # TiDB's PostgreSQL CLI connection panel leaves the database as the
+    # literal <DB> placeholder. The PostgreSQL-compatible Starter's default
+    # database is named "postgres"; replace the placeholder after parsing
+    # both URI and keyword/value DSNs so it cannot reach the server unchanged.
+    database_name = str(options.get("dbname") or "").strip().strip("\\"'")
+    if database_name.lower() in {"<db>", "%3cdb%3e"}:
+        options["dbname"] = "postgres"
     password_override = os.environ.get("TIDB_PASSWORD", "")
     if password_override:
         # Prefer the separately managed secret so a regenerated TiDB password
