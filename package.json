@@ -1,7 +1,0 @@
-{
-  "name": "stock-analyser-api",
-  "private": true,
-  "type": "module",
-  "engines": { "node": ">=20" },
-  "dependencies": { "pg": "^8.16.3" }
-}
