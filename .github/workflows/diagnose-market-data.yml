@@ -1,0 +1,26 @@
+name: Diagnose market data pipeline
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/diagnose_market_data.py"
+      - ".github/workflows/diagnose-market-data.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Inspect TiDB state and market data providers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+        run: python -u scripts/diagnose_market_data.py
