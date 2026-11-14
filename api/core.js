@@ -264,7 +264,7 @@ export default {
   const url=new URL(req.url),path=url.pathname;
   try {
    if(path.startsWith("/api/auth/"))return await authRoutes(req,env,url);
-   if(path==="/api/health")return json({ok:true,service:"stock-analyser-api",database:"tidb",time:now()});
+   if(path==="/api/health"&&req.method==="GET"){const probe=await env.DB.prepare("SELECT 1 AS ok").first();return json({ok:Number(probe?.ok)===1,service:"stock-analyser-api",database:"tidb",database_connected:true,time:now()});}
    if(path==="/api/watchlist"&&req.method==="POST")return await watchlist(req,env);
    if(path==="/api/request-analysis"&&req.method==="POST")return await requestAnalysis(req,env);
    if(path==="/api/analysis-status"&&req.method==="GET"){
