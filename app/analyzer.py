@@ -12,7 +12,7 @@ from sklearn.svm import SVC, SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score
 from xgboost import XGBRegressor
 from .errors import AnalysisError
-from .ensemble import build_regressors, score_ensemble, combine_forecasts
+from .ensemble import build_regressors, build_hybrid_predictions, score_ensemble, combine_forecasts
 
 ORDERS = [(1,0,0),(0,0,1),(1,0,1),(2,0,1),(2,0,2)]
 
@@ -201,6 +201,11 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             except Exception as model_error:
                 model_fit_errors[model_name]=str(model_error)[:180]
 
+        # FullIndex uses 15 original estimators, ten first-order hybrids,
+        # and three hybrids-of-hybrids. The adaptive primary hybrid scores all
+        # available candidates on the same chronological holdout.
+        hybrid_predictions = build_hybrid_predictions(candidate_predictions) if model_profile == "full" else {}
+        candidate_predictions.update(hybrid_predictions)
         ensemble_predictions,ensemble_weights,model_assessment,baseline_rmse=score_ensemble(
             candidate_predictions,actual_returns,prior_state=learning_state
         )
@@ -278,12 +283,10 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
         full_columns=full_features.columns.tolist()
         full_models={}
         full_fit_errors={}
-        for model_name in ensemble_weights:
-            if model_name=="arima":
-                continue
-            factory=model_factories.get(model_name)
-            if factory is None:
-                continue
+        # Refit every base estimator, not only those individually selected
+        # by the primary hybrid: first- and second-layer hybrids need their
+        # constituent forecasts at every future step.
+        for model_name,factory in model_factories.items():
             try:
                 full_models[model_name]=factory().fit(full_data[full_columns],full_data["target_return"])
             except Exception as model_error:
@@ -332,6 +335,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                         candidate_returns[model_name]=value
                 except Exception:
                     continue
+            if model_profile == "full":
+                candidate_returns.update(build_hybrid_predictions(candidate_returns))
 
             available_weights={name:ensemble_weights[name] for name in candidate_returns if name in ensemble_weights}
             if not available_weights:
@@ -390,7 +395,14 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             errors.append(correction)
 
         ensemble_report={
-            "method":"adaptive reliability-weighted robust hybrid",
+            "method":"adaptive reliability-weighted robust primary hybrid",
+            "architecture":{
+                "original_models":len(model_factories) if model_profile == "full" else len(model_factories),
+                "first_order_hybrids":10 if model_profile == "full" else 0,
+                "hybrids_of_hybrids":3 if model_profile == "full" else 0,
+                "primary_hybrid":1,
+                "primary_hybrid_candidates":len(model_assessment),
+            },
             "candidate_count":len(model_assessment),
             "active_models":list(ensemble_weights),
             "weights":{name:round(float(weight),5) for name,weight in ensemble_weights.items()},
