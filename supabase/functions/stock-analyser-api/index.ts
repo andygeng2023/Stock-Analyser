@@ -295,8 +295,15 @@ async function marketFeed(req,env,url) {
     const rows=await env.DB.prepare("SELECT ticker,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' LIMIT 1500").all();
     return json({suggestions:rows.results.map(r=>{const x=parse(r.result)||{};return {ticker:r.ticker,company:x.company||r.ticker,exchange:x.exchange||null,type:"Indexed stock"};}).filter(x=>x.ticker.toLowerCase().includes(q.toLowerCase())||x.company.toLowerCase().includes(q.toLowerCase())).slice(0,9)});
   }
-  const response=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' ORDER BY indexed_at DESC LIMIT 1500").all();
-  const stocks=response.results.map(row=>{const r=parse(row.result)||{},s=r.market_summary||{},f=r.fundamentals||{},m=r.model?.metrics?.backtest||{},num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d,optional=v=>v==null?null:num(v,null);
+  // Read the large JSON index in small independent queries. A single 1,500-row
+  // result can exceed TiDB Starter transaction memory and make the entire feed fail.
+  const indexedRows=[];
+  for(let offset=0;offset<1500;offset+=75){
+    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' ORDER BY indexed_at DESC LIMIT 75 OFFSET ?").bind(offset).all();
+    indexedRows.push(...batch.results);
+    if(batch.results.length<75)break;
+  }
+  const stocks=indexedRows.map(row=>{const r=parse(row.result)||{},s=r.market_summary||{},f=r.fundamentals||{},m=r.model?.metrics?.backtest||{},num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d,optional=v=>v==null?null:num(v,null);
     const market_cap=num(row.market_cap||f.market_cap),avg_dollar_volume=num(row.avg_dollar_volume||s.average_dollar_volume),return_1m=num(s.return_1m),return_1y=num(s.return_1y),vol=num(s.annualized_volatility,100),draw=num(s.max_drawdown,-100),profit=num(f.profit_margin,-1),roe=num(f.return_on_equity,-1),accuracy=optional(m.test_accuracy??m.ensemble?.directional_accuracy??r.model?.metrics?.hybrid?.directional_accuracy);
     const quality=Math.max(0,Math.min(1,(return_1m+10)/40))*25+Math.max(0,Math.min(1,(roe+.1)/.5))*20+Math.max(0,Math.min(1,(profit+.05)/.25))*15+Math.max(0,Math.min(1,(70-vol)/50))*20+Math.max(0,Math.min(1,(draw+70)/70))*20;
     return {ticker:row.ticker,company:r.company||row.ticker,exchange:r.exchange||null,currency:r.currency||"USD",price:optional(r.price),change_percent:optional(r.change_percent),market_cap:market_cap||null,avg_dollar_volume:avg_dollar_volume||null,return_1m,return_1y,annualized_volatility:vol,max_drawdown:draw,profit_margin:profit,return_on_equity:roe,expected_change_percent:optional(r.forecast?.expected_change_percent),directional_accuracy:accuracy,sector:f.sector||null,industry:f.industry||null,indexed_at:row.indexed_at,quality_score:Math.round(quality*100)/100,history_preview:(r.history?.close||[]).filter((_,i,a)=>i%Math.max(1,Math.ceil(a.length/72))===0).slice(0,72),forecast_preview:r.forecast?.hybrid||[]};});
