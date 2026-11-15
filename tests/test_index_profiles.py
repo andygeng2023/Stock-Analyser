@@ -1,7 +1,7 @@
 import unittest
 
 from app.ensemble import build_regressors
-from app.indexer import INDEXER_SETTINGS
+from app.indexer import INDEXER_SETTINGS, _retry_is_available
 from app.training import _merge_prior, _update_global_profile
 
 
@@ -15,6 +15,18 @@ class IndexProfileTests(unittest.TestCase):
             INDEXER_SETTINGS["FullIndex"]["batch_limit"],
             INDEXER_SETTINGS["previewIndex"]["batch_limit"],
         )
+
+    def test_retry_cooldowns_are_profile_specific(self):
+        self.assertTrue(_retry_is_available({}, "previewIndex"))
+        self.assertTrue(_retry_is_available({}, "FullIndex"))
+        self.assertFalse(_retry_is_available(
+            {"preview_retry_after": "2099-01-01T00:00:00+00:00"},
+            "previewIndex",
+        ))
+        self.assertFalse(_retry_is_available(
+            {"full_retry_after": "2099-01-01T00:00:00+00:00"},
+            "FullIndex",
+        ))
 
     def test_full_profile_has_more_model_families(self):
         preview = build_regressors("preview")
