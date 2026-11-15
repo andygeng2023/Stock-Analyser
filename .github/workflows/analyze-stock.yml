@@ -1,21 +1,20 @@
 name: Analyse stock queue
 on:
-  push:
-    branches: [main]
-    paths:
-      - "app/**"
-      - "requirements.txt"
-      - ".github/workflows/analyze-stock.yml"
   schedule:
-    - cron: '*/5 * * * *'
+    # Start a replacement every six hours, leaving a buffer after the
+    # 350-minute hosted-runner limit.
+    - cron: '43 */6 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
   actions: write
+
 concurrency:
   group: stock-analysis-queue
-  cancel-in-progress: true
+  # Never cancel a healthy worker just because another trigger arrives.
+  cancel-in-progress: false
+
 jobs:
   analyse:
     runs-on: ubuntu-latest
@@ -34,4 +33,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
-        run: python -m app.worker
+        run: python -u -m app.worker
