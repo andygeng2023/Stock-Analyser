@@ -134,12 +134,16 @@ def build_hybrid_predictions(predictions):
             ], axis=0) if predictions else None
         ),
         "hybrid_family_balance": lambda: blend(
-            ["hybrid_tree_consensus", "hybrid_linear_consensus", "hybrid_kernel_consensus"],
-            [0.4, 0.35, 0.25],
+            ["random_forest", "extra_trees", "gradient_boosting",
+             "hist_gradient_boosting", "xgboost", "ridge", "elastic_net",
+             "bayesian_ridge", "huber", "svr_linear", "svr_rbf", "knn"],
+            [0.08, 0.08, 0.08, 0.08, 0.08, 0.07, 0.07, 0.07, 0.07,
+             0.075, 0.075, 0.075],
         ),
         "hybrid_diversified": lambda: blend(
-            ["arima", "hybrid_tree_consensus", "hybrid_linear_consensus",
-             "hybrid_kernel_consensus"], [0.25, 0.3, 0.25, 0.2]
+            ["arima", "random_forest", "ridge", "svr_rbf", "xgboost",
+             "knn", "ada_boost", "linear_regression"],
+            [0.20, 0.12, 0.12, 0.12, 0.12, 0.10, 0.10, 0.12],
         ),
     }
     for name, factory in definitions.items():
