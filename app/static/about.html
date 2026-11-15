@@ -14,13 +14,13 @@
     <h2>PreviewIndex</h2>
     <p>PreviewIndex is the faster shared index. It uses up to five years of daily history, a 10-model adaptive ensemble, 30 trading-day forecasts and a six-hour refresh cycle.</p>
     <h2>FullIndex</h2>
-    <p>FullIndex is the higher-capacity shared index. It uses up to ten years of daily history, an expanded 16-model ensemble, 30 trading-day forecasts and a separate 18-hour refresh cycle. It runs independently with smaller batches to account for the additional fitting time.</p>
+    <p>FullIndex is the higher-capacity shared index. It uses up to ten years of daily history, an expanded 16-model ensemble, 30 trading-day forecasts and a separate 18-hour refresh cycle. Its shared cache is retained for 24 hours. It runs independently with smaller batches to account for the additional fitting time.</p>
     <h2>Shared adaptive learning</h2>
     <p>Both indexes maintain separate deployment-wide model-performance memories. New chronological holdout results update those memories, and later analyses use the shared performance history as a modest model-weighting prior. The memory contains aggregate model metrics, not account activity or personal information. Each stock also retains its own model-performance history.</p>
     <h2>Accuracy measurement</h2>
     <p>The 70% directional-accuracy figure is a development target, not a promised result. The site reports the measured chronological holdout accuracy for each analysis. Actual performance varies by stock, period, market regime and forecast horizon.</p>
     <h2>Data and storage</h2>
-    <p>Indexed analysis output is stored once in the market index rather than duplicated in the completed job queue. Historical chart points are sampled before storage; model fitting still uses the complete downloaded history. Cached index results expire after eight hours, while compact global learning memories persist between runs.</p>
+    <p>Indexed analysis output is stored once in the market index rather than duplicated in the completed job queue. Historical chart points are sampled before storage; model fitting still uses the complete downloaded history. PreviewIndex cache results expire after eight hours and FullIndex cache results after 24 hours, while compact global learning memories persist between runs.</p>
     <p>For research and education only. Not investment advice.</p>
   </main>
 </body>
