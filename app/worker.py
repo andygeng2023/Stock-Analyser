@@ -40,13 +40,13 @@ def _finite_number(value):
     return number if math.isfinite(number) else None
 
 
-def upsert_market_index(job_id, ticker, period, horizon, result, indexer):
+def upsert_market_index(job_id, ticker, period, horizon, result):
     fundamentals = result.get("fundamentals") or {}
     summary = result.get("market_summary") or {}
     existing_index = fetch_one(
         """SELECT market_cap,avg_dollar_volume,priority FROM market_index
-           WHERE ticker=%s AND period=%s AND horizon=%s AND indexer=%s""",
-        (ticker, period, horizon, indexer),
+           WHERE ticker=%s AND period=%s AND horizon=%s AND indexer='rapidIndex'""",
+        (ticker, period, horizon),
     ) or {}
     existing_catalog = fetch_one(
         "SELECT market_cap,avg_dollar_volume,priority FROM market_index_catalog WHERE ticker=%s",
@@ -75,14 +75,14 @@ def upsert_market_index(job_id, ticker, period, horizon, result, indexer):
 
     indexed_at = datetime.now(timezone.utc).isoformat()
     upsert_one("market_index", {
-        "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
+        "ticker": ticker, "period": period, "horizon": horizon, "indexer": "rapidIndex",
         "result": result, "source_job_id": job_id, "indexed_at": indexed_at,
         "market_cap": cap, "avg_dollar_volume": dollar_volume, "priority": priority,
     }, ("ticker", "period", "horizon", "indexer"))
     upsert_one("market_index_catalog", {
         "ticker": ticker, "market_cap": cap,
         "avg_dollar_volume": dollar_volume, "priority": priority,
-        ("last_slow_indexed_at" if indexer == "SlowIndex" else "last_indexed_at"): indexed_at,
+        "last_indexed_at": indexed_at,
         "updated_at": indexed_at,
     }, ("ticker",))
 
@@ -138,9 +138,8 @@ def process_job(job):
         else:
             result = analyze_and_learn(ticker, job["period"], int(job["horizon"]),
                                     progress_callback=progress)
-        if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") != "none":
-            upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]),
-                                result, job.get("save_to_indexer") or "rapidIndex")
+        if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") == "rapidIndex":
+            upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]), result)
         update_job(job_id, {"status": "completed", "result": result, "error": None,
                             "progress": 100, "stage": "Complete"})
     except Exception as exc:
