@@ -261,7 +261,7 @@ async function requestAnalysis(req,env) {
   if(!["1y","2y","5y","10y","max"].includes(period)||!Number.isInteger(horizon)||horizon<1||horizon>504)return json({error:"Invalid analysis period or forecast horizon."},400);
   if(!["yfinance","nasdaq","both"].includes(scanSource)||!["rapidIndex","SlowIndex","none"].includes(save))return json({error:"Invalid analysis options."},400);
   if(body.latest_only===true) {
-    const row=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type='scan' AND ticker='SCAN' AND period='5y' AND horizon=30 AND scan_source=? AND status='completed' AND result IS NOT NULL AND result LIKE '%adaptive-ensemble-v2%' ORDER BY created_at DESC LIMIT 1").bind(scanSource).first();
+    const row=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type='scan' AND ticker='SCAN' AND period='5y' AND horizon=30 AND scan_source=? AND status='completed' AND result IS NOT NULL AND result LIKE '%adaptive-ensemble-v3%' ORDER BY created_at DESC LIMIT 1").bind(scanSource).first();
     return row?json({id:row.id,status:"completed",ticker:"SCAN",mode,cached:true,cache_created_at:row.created_at}):json({found:false,mode,source:scanSource});
   }
   if(!body.hard_rescan && mode==="analysis" && save!=="none") {
@@ -271,7 +271,8 @@ async function requestAnalysis(req,env) {
   }
   if(!body.hard_rescan && (mode==="scan"||save!=="none")) {
     const age=save==="SlowIndex"?30*86400000:8*3600000, cutoff=new Date(Date.now()-age).toISOString();
-    const cached=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type=? AND scan_source=? AND ticker=? AND period=? AND horizon=? AND save_to_indexer=? AND status='completed' AND result IS NOT NULL AND result LIKE '%adaptive-ensemble-v2%' AND created_at>=? ORDER BY created_at DESC LIMIT 1").bind(mode,scanSource,ticker,period,horizon,save,cutoff).first();
+    const requiredVersion=mode==="scan"?"adaptive-ensemble-v3":"adaptive-ensemble-v2";
+    const cached=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type=? AND scan_source=? AND ticker=? AND period=? AND horizon=? AND save_to_indexer=? AND status='completed' AND result IS NOT NULL AND result LIKE ? AND created_at>=? ORDER BY created_at DESC LIMIT 1").bind(mode,scanSource,ticker,period,horizon,save,"%"+requiredVersion+"%",cutoff).first();
     if(cached)return json({id:cached.id,status:"completed",ticker,mode,cached:true,cache_created_at:cached.created_at});
   }
   const active=await env.DB.prepare("SELECT id,status FROM analysis_jobs WHERE job_type=? AND scan_source=? AND ticker=? AND period=? AND horizon=? AND save_to_indexer=? AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1").bind(mode,scanSource,ticker,period,horizon,save).first();
