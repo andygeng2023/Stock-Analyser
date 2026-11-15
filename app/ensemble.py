@@ -86,6 +86,97 @@ def build_regressors(profile="preview"):
     return models
 
 
+
+def build_hybrid_predictions(predictions):
+    """Build ten first-order hybrids and three hybrids-of-hybrids.
+
+    Inputs may be aligned NumPy arrays (validation) or scalar forecasts (live
+    forecast). Missing base learners are tolerated, but each family blend
+    requires at least one available member.
+    """
+    if not predictions:
+        return {}
+
+    def values(names):
+        return [predictions[name] for name in names if name in predictions]
+
+    def mean(names):
+        items = values(names)
+        return np.mean(np.stack(items, axis=0), axis=0) if items else None
+
+    def median(names):
+        items = values(names)
+        return np.median(np.stack(items, axis=0), axis=0) if items else None
+
+    def blend(parts, weights):
+        available = [(predictions[name], weight) for name, weight in zip(parts, weights)
+                     if name in predictions]
+        if not available:
+            return None
+        total = sum(weight for _, weight in available)
+        return sum(value * weight for value, weight in available) / total
+
+    hybrids = {}
+    definitions = {
+        "hybrid_arima_svr": lambda: blend(["arima", "svr_rbf"], [0.5, 0.5]),
+        "hybrid_arima_xgb": lambda: blend(["arima", "xgboost"], [0.5, 0.5]),
+        "hybrid_tree_consensus": lambda: mean([
+            "random_forest", "extra_trees", "gradient_boosting",
+            "hist_gradient_boosting", "xgboost", "random_forest_deep",
+        ]),
+        "hybrid_linear_consensus": lambda: mean([
+            "ridge", "elastic_net", "bayesian_ridge", "huber",
+            "svr_linear", "linear_regression",
+        ]),
+        "hybrid_kernel_consensus": lambda: mean(["svr_rbf", "svr_linear", "knn"]),
+        "hybrid_statistical_consensus": lambda: blend(
+            ["arima", "ridge", "bayesian_ridge", "svr_linear"], [0.4, 0.2, 0.2, 0.2]
+        ),
+        "hybrid_robust_median": lambda: median(list(predictions)),
+        "hybrid_trimmed_mean": lambda: (
+            np.mean(np.sort(np.stack(list(predictions.values()), axis=0), axis=0)[
+                1:-1 if len(predictions) > 2 else None
+            ], axis=0) if predictions else None
+        ),
+        "hybrid_family_balance": lambda: blend(
+            ["hybrid_tree_consensus", "hybrid_linear_consensus", "hybrid_kernel_consensus"],
+            [0.4, 0.35, 0.25],
+        ),
+        "hybrid_diversified": lambda: blend(
+            ["arima", "hybrid_tree_consensus", "hybrid_linear_consensus",
+             "hybrid_kernel_consensus"], [0.25, 0.3, 0.25, 0.2]
+        ),
+    }
+    for name, factory in definitions.items():
+        try:
+            value = factory()
+            if value is not None and np.isfinite(np.asarray(value, dtype=float)).all():
+                hybrids[name] = value
+        except (ValueError, TypeError, FloatingPointError):
+            continue
+
+    # The next layer deliberately combines first-layer hybrids only.
+    first = dict(hybrids)
+    first_names = list(first)
+    if first:
+        stack_values = np.stack(list(first.values()), axis=0)
+        hybrids_of_hybrids = {
+            "meta_hybrid_median": np.median(stack_values, axis=0),
+            "meta_hybrid_trimmed": (
+                np.mean(np.sort(stack_values, axis=0)[1:-1], axis=0)
+                if len(first) >= 3 else np.mean(stack_values, axis=0)
+            ),
+            "meta_hybrid_family_blend": (
+                0.4 * first.get("hybrid_family_balance", first[first_names[0]])
+                + 0.35 * first.get("hybrid_diversified", first[first_names[0]])
+                + 0.25 * first.get("hybrid_robust_median", first[first_names[0]])
+            ),
+        }
+        for name, value in hybrids_of_hybrids.items():
+            if np.isfinite(np.asarray(value, dtype=float)).all():
+                hybrids[name] = value
+    return hybrids
+
 def _metric_values(actual, predicted):
     actual = np.asarray(actual, dtype=float)
     predicted = np.asarray(predicted, dtype=float)
