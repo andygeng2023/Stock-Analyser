@@ -53,3 +53,24 @@ jobs:
           PY
           fi
           test "$status" = "200"
+
+      - name: Verify stock detail analysis request
+        env:
+          API_URL: https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api/request-analysis
+          API_KEY: sb_publishable_-Ty9nayZpJSDo9YwKVzEdw_dG5bD6Kz
+        run: |
+          status=$(curl --silent --show-error --max-time 30 -o analysis-request.json -w '%{http_code}' \
+            -X POST -H "apikey: $API_KEY" -H "Content-Type: application/json" \
+            --data '{"ticker":"AAPL","period":"5y","horizon":30,"save_to_indexer":"rapidIndex"}' "$API_URL" || true)
+          echo "Analysis request: HTTP $status"
+          cat analysis-request.json
+          echo
+          python - <<'PY'
+          import json
+          with open("analysis-request.json") as f:
+              data = json.load(f)
+          assert data.get("id"), f"Missing analysis job id: {data}"
+          assert data.get("status") in ("queued", "running", "completed"), data
+          print("Analysis job accepted:", data["id"], "status:", data["status"])
+          PY
+          test "$status" = "200" -o "$status" = "202"
