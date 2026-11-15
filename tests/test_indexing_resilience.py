@@ -87,14 +87,10 @@ class IndexerCooldownTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
 
-    def test_retry_fields_are_independent_for_each_indexer(self):
+    def test_uses_the_single_rapid_index_retry_fields(self):
         self.assertEqual(
-            indexer._retry_fields("rapidIndex"),
+            indexer._retry_fields(),
             ("rapid_attempted_at", "rapid_retry_after", "rapid_last_error"),
-        )
-        self.assertEqual(
-            indexer._retry_fields("SlowIndex"),
-            ("slow_attempted_at", "slow_retry_after", "slow_last_error"),
         )
 
     def test_insufficient_history_gets_seven_day_cooldown(self):
@@ -113,11 +109,10 @@ class IndexerCooldownTests(unittest.TestCase):
 
     def test_ticker_is_skipped_until_retry_time(self):
         row = {"rapid_retry_after": (self.now + timedelta(hours=2)).isoformat()}
-        self.assertFalse(indexer._retry_is_available(row, "rapidIndex", self.now))
+        self.assertFalse(indexer._retry_is_available(row, self.now))
         self.assertTrue(
             indexer._retry_is_available(
                 row,
-                "rapidIndex",
                 self.now + timedelta(hours=2),
             )
         )
@@ -126,7 +121,6 @@ class IndexerCooldownTests(unittest.TestCase):
         self.assertTrue(
             indexer._retry_is_available(
                 {"rapid_retry_after": "not-a-date"},
-                "rapidIndex",
                 self.now,
             )
         )
