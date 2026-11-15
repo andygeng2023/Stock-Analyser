@@ -366,7 +366,7 @@ Deno.serve(async (req) => {
     if (path === "/api/request-analysis" && req.method === "POST") return await requestAnalysis(req, env);
     if (path === "/api/analysis-status" && req.method === "GET") {
       const id = url.searchParams.get("id") || "";
-      if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "Invalid analysis ID." }, 400);
+      if (!/^(?:[0-9a-f]{32}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/i.test(id)) return json({ error: "Invalid analysis ID." }, 400);
       const row = await env.DB.prepare("SELECT id,ticker,status,result,error,created_at,updated_at,progress,stage FROM analysis_jobs WHERE id=?").bind(id).first();
       if (!row) return json({ error: "Analysis request not found." }, 404);
       row.result = parse(row.result);
