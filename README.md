@@ -7,7 +7,7 @@ A responsive stock research dashboard using Yahoo Finance data and a walk-forwar
 - **GitHub Pages** serves the static frontend.
 - **Supabase Edge Functions** hosts the protected HTTPS API only. Supabase is not used as an application database.
 - **TiDB Cloud PostgreSQL-compatible Starter** is the sole application database.
-- **GitHub Actions** runs analysis, the shared market index, WatchIndex, background scanning and cache maintenance workers. Workers connect directly to TiDB and hand off to successor runs before the runner time limit.
+- **GitHub Actions** runs the analysis queue, PreviewIndex, FullIndex, WatchIndex, background scanning and cache maintenance workers. Workers connect directly to TiDB and hand off to successor runs before the runner time limit.
 - **Yahoo Finance** supplies quotes, historical data and symbol search.
 
 The browser calls the Edge Function using a public publishable key. TiDB credentials are stored only as Edge Function secrets and GitHub Actions secrets; they are never included in frontend JavaScript.
@@ -39,7 +39,8 @@ No Supabase database credentials or Cloudflare credentials are required by the w
 ## Background workers
 
 - Analysis queue: every 5 minutes.
-- Shared market index: every 6 hours, split across two workers.
+- PreviewIndex: every 6 hours, split across two workers; up to five years of daily history and a 10-model adaptive ensemble.
+- FullIndex: every 6 hours on a staggered schedule, split across two workers; up to ten years of daily history and a 16-model adaptive ensemble.
 - Background market scanning: every 6 hours.
 - WatchIndex: every 6 hours.
 - Cache cleanup: every 6 hours.
@@ -55,10 +56,10 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-## Forecasting model
+## Forecasting and adaptive learning
 
-The forecasting system combines ARIMA, SVC, SVR and XGBoost. The primary continuous-return ensemble is a fixed 50/50 blend of the ARIMA+SVR estimate and XGBoost estimate. SVC supplies a separate directional classification.
+PreviewIndex fits an adaptive ensemble of 10 regression models alongside ARIMA and a separate SVC directional classifier. FullIndex adds six complementary regression models and uses up to ten years of daily history. Both indexes score candidate models on a chronological holdout, reject weak or anomalous members, and adapt model weights using current holdout results plus a modest prior from deployment-wide shared model-performance memory.
 
-Validation uses chronological out-of-sample testing. Forecasts are estimates, not guarantees of future performance.
+The shared learning memory is global to the deployment and contains aggregate model metrics only; it does not contain account activity or personal information. Analyses update the relevant index profile as well as ticker-specific memory. The 70% directional-accuracy figure is a target, not a guarantee. Only measured out-of-sample results are reported. Forecasts are estimates, not guarantees of future performance.
 
 For research and education only. Not investment advice.
