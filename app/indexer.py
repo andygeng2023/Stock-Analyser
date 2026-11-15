@@ -74,10 +74,10 @@ def _retry_after_for_failure(error, attempted_at=None):
     return attempted_at + delay
 
 
-def _retry_is_available(row, now=None):
+def _retry_is_available(row, indexer, now=None):
     """A failed symbol becomes eligible again when its persisted cooldown expires."""
     now = now or datetime.now(timezone.utc)
-    _, retry_field, _ = _retry_fields()
+    _, retry_field, _ = _retry_fields(indexer)
     value = row.get(retry_field)
     if not value:
         return True
@@ -231,7 +231,7 @@ def run(shard, indexer="previewIndex"):
     # entries at six hours, leaving a two-hour margin before the cache expires.
     retry_ready = [
         item for item in ranked
-        if _retry_is_available(catalog.get(item["ticker"], {}), now_dt)
+        if _retry_is_available(catalog.get(item["ticker"], {}), indexer, now_dt)
     ]
     cooling_down = len(ranked) - len(retry_ready)
     elite = sorted(retry_ready, key=lambda x: x["_quality"], reverse=True)[:priority_count]
