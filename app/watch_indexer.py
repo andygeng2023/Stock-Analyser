@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from .analyzer import analyze_ticker
+from .training import analyze_and_learn
 from .db import fetch_all, insert_one, verify_database
 from .worker import request_json, upsert_market_index
 
@@ -58,7 +58,7 @@ def run_once(failed_until):
     for i, ticker in enumerate(pending, 1):
         print(f"[{i}/{len(pending)}] WatchIndex analysing {ticker}.")
         try:
-            save_analysis(ticker, analyze_ticker(ticker, period=PERIOD, horizon=HORIZON))
+            save_analysis(ticker, analyze_and_learn(ticker, period=PERIOD, horizon=HORIZON))
             recent[ticker] = datetime.now(timezone.utc).isoformat()
             failed_until.pop(ticker, None)
             completed += 1
