@@ -1576,6 +1576,11 @@ $("detail-hard-rerun").addEventListener("click", () => {
 hardRerunMenu.addEventListener("click", event => {
   if (event.target.closest("[data-rerun-custom]")) $("hard-rerun-custom").hidden = false;
 });
+$("rerun-save").addEventListener("change", () => {
+  if ($("rerun-save").value === "FullIndex" && $("rerun-history").value === "5y") {
+    $("rerun-history").value = "10y";
+  }
+});
 $("hard-rerun-custom").addEventListener("submit", event => {
   event.preventDefault();
   const period = $("rerun-history").value;
