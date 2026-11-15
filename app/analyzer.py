@@ -235,7 +235,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 np.where(actual_returns>=0,1,-1),predicted_direction
             )*100),2),
             "backtest":{
-                "method":"chronological holdout with train-only fitting",
+                "method":"chronological one-step-ahead holdout with train-only fitting",
+                "prediction_target":"next_trading_day_direction",
+                "forecast_horizon_days":int(horizon),
                 "observations":int(len(actual_returns)),
                 "start":str(validation_dates[0].date()),
                 "end":str(validation_dates[-1].date()),
