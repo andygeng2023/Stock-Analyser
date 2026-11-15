@@ -18,7 +18,7 @@ from .scanner import load_universe, fast_filter
 from .db import fetch_all, insert_one, upsert_many, upsert_one, verify_database
 from .worker import request_json
 
-PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "15"))
+PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "100"))
 SLOW_PER_SHARD_LIMIT = int(os.environ.get("SLOW_INDEX_BATCH_SIZE_PER_SHARD", "2"))
 MARKET_CAP_LOOKUPS = 40
 MARKET_CAP_LOOKUP_WORKERS = 5
