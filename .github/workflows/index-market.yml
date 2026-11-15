@@ -15,7 +15,25 @@ permissions:
   contents: read
   actions: write
 jobs:
+  # Retire jobs created by the former two-indexer matrix. Their concurrency
+  # groups match the old worker names, so GitHub cancels those runs before
+  # the single-index workers below are allowed to start.
+  retire-legacy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        indexer: [rapidIndex, SlowIndex]
+        shard: [0, 1]
+    concurrency:
+      group: stock-market-indexer-tidb-v2-${{ matrix.indexer }}-${{ matrix.shard }}
+      cancel-in-progress: true
+    steps:
+      - name: Retire previous indexer generation
+        run: echo "Previous indexer generation retired."
+
   index:
+    needs: retire-legacy
     runs-on: ubuntu-latest
     timeout-minutes: 350
     concurrency:
