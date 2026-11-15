@@ -8,7 +8,17 @@ const pct = v => v == null || !Number.isFinite(Number(v)) ? "—" : (Number(v) >
 const cash = (v, c) => v == null || !Number.isFinite(Number(v)) ? "—" : new Intl.NumberFormat(undefined, { style: "currency", currency: c || "USD", maximumFractionDigits: 2 }).format(Number(v));
 const esc = s => String(s ?? "—").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const api = name => config.apiBaseUrl.replace(/\/$/, "") + "/api/" + name;
-const headers = () => ({ "Content-Type": "application/json", ...(config.apiKey ? { apikey: config.apiKey } : {}) });
+const headers = () => {
+  let accessToken = null;
+  try {
+    accessToken = JSON.parse(localStorage.getItem("stock-analyser-session-v1") || "null")?.access_token || null;
+  } catch {}
+  return {
+    "Content-Type": "application/json",
+    ...(config.apiKey ? { apikey: config.apiKey } : {}),
+    ...(accessToken ? { Authorization: "Bearer " + accessToken } : {})
+  };
+};
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Bound network waits and retry transient failures on safe, read-only requests.
@@ -1603,7 +1613,16 @@ function render(data) {
     arima: "ARIMA",
     svr_residual: "SVR residual correction",
     svr: "SVR",
+    svr_rbf: "RBF SVR",
+    svr_linear: "Linear SVR",
+    ridge: "Ridge",
+    elastic_net: "Elastic Net",
+    random_forest: "Random Forest",
+    extra_trees: "Extra Trees",
+    gradient_boosting: "Gradient Boosting",
+    hist_gradient_boosting: "Histogram Gradient Boosting",
     xgboost: "XGBoost",
+    knn: "K-nearest neighbours",
     arima_svr: "ARIMA + SVR",
     arima_xgboost: "ARIMA + XGBoost",
     svr_xgboost: "SVR + XGBoost",
@@ -1695,20 +1714,6 @@ function render(data) {
   const lower = forecast.lower || [];
 
   const components = forecast.components || {};
-  const weights = model.ensemble?.weights || {};
-  const modelLabels = {
-    arima: "ARIMA",
-    svr_rbf: "RBF SVR",
-    svr_linear: "Linear SVR",
-    ridge: "Ridge",
-    elastic_net: "Elastic Net",
-    random_forest: "Random Forest",
-    extra_trees: "Extra Trees",
-    gradient_boosting: "Gradient Boosting",
-    hist_gradient_boosting: "Histogram Gradient Boosting",
-    xgboost: "XGBoost",
-    knn: "K-nearest neighbours"
-  };
 
   Plotly.react("history", [{
     x: history.dates, y: history.close, type: "scatter", mode: "lines",
@@ -1724,7 +1729,7 @@ function render(data) {
   // Draw the actual members selected by the adaptive ensemble. Null values
   // are per-step anomaly kick-outs and are intentionally not connected.
   Object.entries(components).forEach(([name, values], index) => {
-    if (!Array.isArray(values) || !values.some(value => Number.isFinite(Number(value)))) return;
+    if (!Array.isArray(values) || !values.some(value => value != null && Number.isFinite(Number(value)))) return;
     const weight = Number(weights[name] || 0);
     const label = modelLabels[name] || name.replaceAll("_", " ");
     forecastTraces.push({
