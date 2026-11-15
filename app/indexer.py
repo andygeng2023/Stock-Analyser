@@ -172,7 +172,6 @@ def run(shard, indexer="previewIndex"):
             "market_cap": item.get("market_cap") or old.get("market_cap"),
             "avg_dollar_volume": item.get("dollar_volume"),
             "priority": float(item.get("fast_score") or 0),
-            "last_indexed_at": old.get("last_indexed_at"),
             cursor_field: old.get(cursor_field),
             "updated_at": now,
         })
