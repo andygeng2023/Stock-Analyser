@@ -128,54 +128,6 @@ let watchlistLoading = false;
 let watchlistRefreshTimer = null;
 const rapidIndexQueuePending = new Set();
 
-// Reuse existing shared-index results for scan cards; keep this cache in memory
-// only so repeated Home/Discover renders do not create extra database requests.
-const indexedScanCache = new Map();
-const INDEXED_SCAN_CACHE_TTL_MS = 10 * 60 * 1000;
-async function mergeIndexedScanData(results) {
-  const items = Array.isArray(results) ? results : [];
-  if (!items.length || !config.apiBaseUrl) return items;
-  const now = Date.now();
-  const tickers = [...new Set(items.map(item => String(item.ticker || "").toUpperCase()).filter(Boolean))];
-  const missing = tickers.filter(ticker => {
-    const cached = indexedScanCache.get(ticker);
-    return !cached || now - cached.savedAt >= INDEXED_SCAN_CACHE_TTL_MS;
-  });
-  if (missing.length) {
-    try {
-      const response = await fetchWithRetry(api("stock-market-data"), {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ tickers: missing.slice(0, 60), mode: "indexed" })
-      }, { timeoutMs: 10000, attempts: 2 });
-      if (response.ok) {
-        const payload = await response.json();
-        for (const indexed of payload.items || []) {
-          indexedScanCache.set(indexed.ticker, { data: indexed, savedAt: now });
-        }
-      }
-    } catch (error) {
-      console.warn("Indexed scan-card enrichment was unavailable:", error);
-    }
-  }
-  return items.map(item => {
-    const indexed = indexedScanCache.get(String(item.ticker || "").toUpperCase())?.data;
-    if (!indexed?.has_indexed_chart) return item;
-    return {
-      ...indexed,
-      ...item,
-      company: indexed.company || item.company || item.ticker,
-      currency: indexed.currency || item.currency || "USD",
-      price: indexed.price ?? item.price ?? null,
-      change_percent: indexed.change_percent ?? item.change_percent ?? null,
-      history_preview: indexed.history_preview?.length ? indexed.history_preview : (item.history_preview || []),
-      forecast_preview: indexed.forecast_preview?.length ? indexed.forecast_preview : (item.forecast_preview || []),
-      return_1m: indexed.return_1m ?? item.return_1m ?? null,
-      test_accuracy: indexed.test_accuracy ?? item.test_accuracy ?? item.directional_accuracy ?? null,
-      expected_change_percent: item.expected_change_percent ?? indexed.expected_change_percent ?? null
-    };
-  });
-}
 async function watchlistRequest(action, ticker) {
   if (!authClient) throw new Error("Authentication is unavailable. Reload the app and try again.");
   const { data, error: sessionError } = await authClient.auth.getSession();
@@ -854,7 +806,7 @@ function stockCard(stock) {
   ).join("");
 
   return `
-    <button type="button" class="stock-card" data-ticker="${esc(stock.ticker)}" aria-label="Open analysis for ${esc(stock.ticker)}">
+    <button type="button" class="stock-card" data-ticker="${esc(stock.ticker)}" data-scan-ranked="${stock.risk_score != null || stock.risk_level ? "true" : "false"}" data-scan-expected="${stock.expected_change_percent == null ? "" : esc(stock.expected_change_percent)}" aria-label="Open analysis for ${esc(stock.ticker)}">
       <span class="stock-card-heading">
         <span class="stock-card-left">
           <strong class="stock-ticker">${esc(stock.ticker)}</strong>
@@ -1078,7 +1030,10 @@ const indexedCardDataCache = new Map();
 const indexedCardDataCacheAt = new Map();
 const fallbackHistoryCache = new Map();
 const fallbackHistoryCacheAt = new Map();
+const quoteCache = new Map();
+const quoteCacheAt = new Map();
 const CARD_INDEX_CACHE_TTL = 5 * 60 * 1000;
+const CARD_QUOTE_CACHE_TTL = 45 * 1000;
 
 function applyCardQuote(ticker, quote, cardsByTicker) {
   for (const card of cardsByTicker.get(ticker) || []) {
@@ -1100,8 +1055,12 @@ function applyCardChart(ticker, data, cardsByTicker) {
     const history = Array.isArray(data.history_preview) ? data.history_preview : [];
     if (!history.length) continue;
 
+    const scanExpected = card.dataset.scanRanked === "true" && card.dataset.scanExpected !== ""
+      ? Number(card.dataset.scanExpected) : null;
+    const expected = Number.isFinite(scanExpected) ? scanExpected : data.expected_change_percent;
+    const chartData = expected === data.expected_change_percent ? data : { ...data, expected_change_percent: expected };
     const chartNode = card.querySelector(".stock-sparkline, .stock-chart-placeholder");
-    if (chartNode) chartNode.outerHTML = stockSparkline(data);
+    if (chartNode) chartNode.outerHTML = stockSparkline(chartData);
 
     const priceNode = card.querySelector(".stock-price, .watchlist-v2-price");
     if (priceNode && priceNode.textContent.trim() === "—" && data.price != null) {
@@ -1116,9 +1075,9 @@ function applyCardChart(ticker, data, cardsByTicker) {
 
     const metaNode = card.querySelector(".stock-card-chart .stock-analysis-meta");
     if (metaNode) {
-      const predicted = data.expected_change_percent == null ? "" :
-        '<span class="stock-predicted ' + (Number(data.expected_change_percent) < 0 ? "negative" : "positive") +
-        '"><strong>' + esc(pct(data.expected_change_percent)) + '</strong><small>30D</small></span>';
+      const predicted = expected == null ? "" :
+        '<span class="stock-predicted ' + (Number(expected) < 0 ? "negative" : "positive") +
+        '"><strong>' + esc(pct(expected)) + '</strong><small>30D</small></span>';
       const stats = [];
       if (data.return_1m != null) stats.push({ label: "1M", value: pct(data.return_1m) });
       const testAccuracy = data.test_accuracy ?? data.directional_accuracy;
@@ -1182,6 +1141,7 @@ async function refreshVisibleMarketCards(force = false) {
   try {
     const now = Date.now();
     const indexRefresh = [];
+    const quoteRefresh = [];
     for (const ticker of tickers) {
       const cachedAt = indexedCardDataCacheAt.get(ticker) || 0;
       const cached = indexedCardDataCache.get(ticker);
@@ -1189,6 +1149,13 @@ async function refreshVisibleMarketCards(force = false) {
         applyCardChart(ticker, cached, cardsByTicker);
       } else {
         indexRefresh.push(ticker);
+      }
+      const cachedQuoteAt = quoteCacheAt.get(ticker) || 0;
+      const cachedQuote = quoteCache.get(ticker);
+      if (cachedQuote && now - cachedQuoteAt < CARD_QUOTE_CACHE_TTL) {
+        applyCardQuote(ticker, cachedQuote, cardsByTicker);
+      } else {
+        quoteRefresh.push(ticker);
       }
     }
 
@@ -1229,7 +1196,9 @@ async function refreshVisibleMarketCards(force = false) {
         applyCardChart(ticker, item, cardsByTicker);
       }
     });
-    const quotesPromise = requestCardMarketMode("quotes", tickers, (ticker, item) => {
+    const quotesPromise = requestCardMarketMode("quotes", quoteRefresh, (ticker, item) => {
+      quoteCache.set(ticker, item);
+      quoteCacheAt.set(ticker, Date.now());
       applyCardQuote(ticker, item, cardsByTicker);
     });
     await Promise.all([fallbackPromise, quotesPromise]);
@@ -1299,9 +1268,6 @@ function renderMarketFeed(data, options = {}) {
     bindStockButtons(latestRoot);
   };
   renderLatestScan(latest);
-  if (latest.length) {
-    mergeIndexedScanData(latest).then(renderLatestScan).catch(error => console.warn("Could not enrich Home scan cards:", error));
-  }
 
   fillStockGrid("home-recommended", data.recommended, "Research shortlist");
   fillStockGrid("home-trending", data.trending, "Trending");
@@ -1314,7 +1280,7 @@ function renderMarketFeed(data, options = {}) {
   fillStockGrid("discover-smaller", data.smaller_companies, "Smaller company");
   fillStockGrid("discover-opportunities", data.opportunities, "Quality screen");
   fillStockGrid("discover-trending", data.trending, "Momentum");
-  refreshVisibleMarketCards();
+  refreshVisibleMarketCards(options.fromCache !== true);
 
   $("discover-stats").innerHTML = `
     <div><strong>${fmt(data.indexed_count, 0)}</strong><span>Indexed stocks</span></div>
@@ -1868,9 +1834,6 @@ function renderScan(data) {
     refreshVisibleMarketCards(true);
   };
   renderCards(results);
-  if (results.length) {
-    mergeIndexedScanData(results).then(renderCards).catch(error => console.warn("Could not enrich scan cards:", error));
-  }
   if (!results.length) $("scan-status").textContent = "The scan completed but could not produce valid refinements. Try again later.";
 }
 
