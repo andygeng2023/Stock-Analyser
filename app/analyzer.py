@@ -329,6 +329,10 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                     continue
 
             available_weights={name:ensemble_weights[name] for name in candidate_returns if name in ensemble_weights}
+            if not available_weights:
+                # Last-resort continuity path if all selected ML estimators fail at forecast time.
+                available_weights={"arima":1.0}
+                candidate_returns["arima"]=arima_return
             next_return,active_members,rejected_members=combine_forecasts(
                 candidate_returns,
                 available_weights,
@@ -381,8 +385,11 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             "rejected_models":{
                 name:record["rejection_reason"]
                 for name,record in model_assessment.items()
-                if not record["eligible"] or record.get("fallback")
+                if not record["eligible"]
             },
+            "fallback_models":[
+                name for name,record in model_assessment.items() if record.get("fallback")
+            ],
             "validation_baseline_rmse":round(float(baseline_rmse),7),
             "forecast_dynamic_rejections":forecast_rejection_counts,
             "average_active_models_per_step":round(float(np.mean(forecast_member_counts)),2) if forecast_member_counts else 0,
