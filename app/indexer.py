@@ -19,21 +19,16 @@ from .db import fetch_all, insert_one, upsert_many, upsert_one, verify_database
 from .worker import request_json
 
 PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "100"))
-SLOW_PER_SHARD_LIMIT = int(os.environ.get("SLOW_INDEX_BATCH_SIZE_PER_SHARD", "2"))
 MARKET_CAP_LOOKUPS = 40
 MARKET_CAP_LOOKUP_WORKERS = 5
 PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"))
 REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
-SLOW_REFRESH_AFTER_HOURS = float(os.environ.get("SLOW_INDEX_REFRESH_AFTER_HOURS", "168"))
 ATTEMPT_LEASE_MINUTES = int(os.environ.get("INDEX_ATTEMPT_LEASE_MINUTES", "45"))
 RAPID_PERIOD, RAPID_HORIZON = "5y", 30
-SLOW_PERIOD, SLOW_HORIZON = "max", 252
 _UNIVERSE_SNAPSHOT = None
 
 
-def _retry_fields(indexer):
-    if indexer == "SlowIndex":
-        return "slow_attempted_at", "slow_retry_after", "slow_last_error"
+def _retry_fields():
     return "rapid_attempted_at", "rapid_retry_after", "rapid_last_error"
 
 
@@ -65,10 +60,10 @@ def _retry_after_for_failure(error, attempted_at=None):
     return attempted_at + delay
 
 
-def _retry_is_available(row, indexer, now=None):
+def _retry_is_available(row, now=None):
     """A failed symbol becomes eligible again when its persisted cooldown expires."""
     now = now or datetime.now(timezone.utc)
-    _, retry_field, _ = _retry_fields(indexer)
+    _, retry_field, _ = _retry_fields()
     value = row.get(retry_field)
     if not value:
         return True
@@ -101,28 +96,24 @@ def _get_universe_snapshot():
     return _UNIVERSE_SNAPSHOT
 
 
-def run(shard, indexer="rapidIndex"):
-    indexer = str(indexer or "rapidIndex")
-    if indexer not in ("rapidIndex", "SlowIndex"):
-        raise ValueError("Unknown market indexer.")
+def run(shard):
     shard_count = 2
     if shard < 0 or shard >= shard_count:
         raise ValueError("Invalid indexer shard.")
-    is_slow = indexer == "SlowIndex"
-    period, horizon = (SLOW_PERIOD, SLOW_HORIZON) if is_slow else (RAPID_PERIOD, RAPID_HORIZON)
-    cursor_field = "last_slow_indexed_at" if is_slow else "last_indexed_at"
-    attempt_field, retry_field, error_field = _retry_fields(indexer)
-    refresh_after_hours = SLOW_REFRESH_AFTER_HOURS if is_slow else REFRESH_AFTER_HOURS
-    batch_limit = SLOW_PER_SHARD_LIMIT if is_slow else PER_SHARD_LIMIT
-    print(f"{indexer} shard {shard + 1}/{shard_count} preparing candidates ({period}, {horizon} trading days).")
+    period, horizon = RAPID_PERIOD, RAPID_HORIZON
+    cursor_field = "last_indexed_at"
+    attempt_field, retry_field, error_field = _retry_fields()
+    refresh_after_hours = REFRESH_AFTER_HOURS
+    batch_limit = PER_SHARD_LIMIT
+    print(f"rapidIndex shard {shard + 1}/{shard_count} preparing candidates ({period}, {horizon} trading days).")
     ranked, universe_size, eligible = _get_universe_snapshot()
     if not ranked:
         print("No eligible stocks found; nothing to index.")
         return 0
 
-    catalog_rows = fetch_all("""SELECT ticker,last_indexed_at,last_slow_indexed_at,
-        rapid_attempted_at,rapid_retry_after,rapid_last_error,slow_attempted_at,
-        slow_retry_after,slow_last_error,market_cap FROM market_index_catalog""")
+    catalog_rows = fetch_all("""SELECT ticker,last_indexed_at,
+        rapid_attempted_at,rapid_retry_after,rapid_last_error,market_cap
+        FROM market_index_catalog""")
     catalog = {row["ticker"]: row for row in catalog_rows or []}
 
     # Enrich only a small subset in parallel. Yahoo fast_info calls are
@@ -220,7 +211,7 @@ def run(shard, indexer="rapidIndex"):
     # entries at six hours, leaving a two-hour margin before the cache expires.
     retry_ready = [
         item for item in ranked
-        if _retry_is_available(catalog.get(item["ticker"], {}), indexer, now_dt)
+        if _retry_is_available(catalog.get(item["ticker"], {}), now_dt)
     ]
     cooling_down = len(ranked) - len(retry_ready)
     elite = sorted(retry_ready, key=lambda x: x["_quality"], reverse=True)[:PRIORITY_REFRESH_COUNT]
@@ -280,10 +271,10 @@ def run(shard, indexer="rapidIndex"):
             job = insert_one("analysis_jobs", {
                 "id": __import__("uuid").uuid4().hex,
                 "ticker": ticker, "period": period, "horizon": horizon,
-                "job_type": "analysis", "scan_source": "both", "save_to_indexer": indexer,
+                "job_type": "analysis", "scan_source": "both", "save_to_indexer": "rapidIndex",
                 "status": "completed", "result": result, "error": None,
                 "client_ip_hash": "market-indexer", "attempts": 1,
-                "progress": 100, "stage": f"Completed by {indexer}",
+                "progress": 100, "stage": "Completed by rapidIndex",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
@@ -291,7 +282,7 @@ def run(shard, indexer="rapidIndex"):
             cap = item.get("market_cap")
             indexed_at = datetime.now(timezone.utc).isoformat()
             index_row = {
-                "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
+                "ticker": ticker, "period": period, "horizon": horizon, "indexer": "rapidIndex",
                 "result": result, "source_job_id": job_id,
                 "indexed_at": indexed_at,
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
@@ -325,7 +316,7 @@ def run(shard, indexer="rapidIndex"):
                 f"{str(exc)[:250]}",
                 file=sys.stderr,
             )
-    print(f"{indexer} shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
+    print(f"rapidIndex shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
     return 0
 
 
@@ -369,14 +360,13 @@ def parse_index_shard(value):
 def main():
     print("Database preflight:", verify_database())
     shard = parse_index_shard(os.environ.get("INDEX_SHARD", "0"))
-    indexer = os.environ.get("INDEXER_NAME", "rapidIndex")
-    # One leader dispatches the next four-worker generation; avoid duplicate hand-offs.
-    if indexer == "rapidIndex" and shard == 0:
+    # One leader dispatches the next generation; avoid duplicate hand-offs.
+    if shard == 0:
         threading.Thread(target=_handoff_after_runtime, daemon=True).start()
     started = time.monotonic()
     while time.monotonic() - started < 345 * 60:
         try:
-            run(shard, indexer)
+            run(shard)
         except Exception as exc:
             print(f"Indexing cycle failed: {str(exc)[:300]}", file=sys.stderr)
         if time.monotonic() - started < 345 * 60:
