@@ -233,15 +233,27 @@ def ensure_indexer_schema():
         "full_retry_after": "VARCHAR(40) NULL",
         "full_last_error": "VARCHAR(250) NULL",
     }
-    with connect() as conn, conn.cursor() as cur:
-        for name, column_type in columns.items():
+    # TiDB's transaction memory limit can be exceeded by the legacy
+    # bulk UPDATE previously performed here against the potentially large
+    # analysis_jobs table. No rewrite is necessary: the worker normalises
+    # legacy rapidIndex jobs to PreviewIndex when it claims them.
+    #
+    # Run schema DDL in autocommit mode and only for missing columns. This
+    # avoids accumulating DDL work in one long transaction and makes the
+    # migration cheap on every scheduled worker start.
+    with connect() as conn:
+        conn.autocommit = True
+        with conn.cursor() as cur:
             cur.execute(
-                f"ALTER TABLE market_index_catalog "
-                f"ADD COLUMN IF NOT EXISTS {name} {column_type}"
+                """SELECT column_name FROM information_schema.columns
+                   WHERE table_schema=current_schema()
+                     AND table_name='market_index_catalog'"""
             )
-        # Preserve existing cache rows while switching future writes to the
-        # public PreviewIndex name. Colliding legacy rows are left untouched.
-        cur.execute(
-            """UPDATE analysis_jobs SET save_to_indexer='previewIndex'
-               WHERE save_to_indexer='rapidIndex'"""
-        )
+            existing = {row["column_name"] for row in cur.fetchall()}
+            for name, column_type in columns.items():
+                if name in existing:
+                    continue
+                cur.execute(
+                    f"ALTER TABLE market_index_catalog "
+                    f"ADD COLUMN {name} {column_type}"
+                )
