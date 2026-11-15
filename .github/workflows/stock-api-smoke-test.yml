@@ -1,0 +1,34 @@
+name: Stock Analyser API smoke test
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/stock-analyser-api/index.ts"
+      - ".github/workflows/stock-api-smoke-test.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify API database connection and required tables
+        env:
+          API_URL: https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api/health
+          API_KEY: sb_publishable_-Ty9nayZpJSDo9YwKVzEdw_dG5bD6Kz
+        run: |
+          for attempt in $(seq 1 18); do
+            status=$(curl --silent --show-error --max-time 20 -o response.json -w '%{http_code}' \
+              -H "apikey: $API_KEY" -H "Accept: application/json" "$API_URL" || true)
+            echo "Health check attempt $attempt: HTTP $status"
+            cat response.json 2>/dev/null || true
+            echo
+            if [ "$status" = "200" ] && grep -q '"ok":true' response.json; then
+              echo "TiDB connection and required schema verified."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "API health check did not pass."
+          exit 1
