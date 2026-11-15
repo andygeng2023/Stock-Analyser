@@ -15,8 +15,8 @@ def main():
                           OR (indexer<>'rapidIndex' AND indexed_at<%s)""", (rapid, legacy_cutoff))
         index_rows = cur.rowcount
         cur.execute("""DELETE FROM analysis_jobs WHERE status='completed'
-                       AND ((save_to_indexer='rapidIndex' AND created_at<%s)
-                         OR (save_to_indexer<>'rapidIndex' AND created_at<%s))""",
+                       AND ((save_to_indexer IN ('rapidIndex','none') AND created_at<%s)
+                         OR (save_to_indexer NOT IN ('rapidIndex','none') AND created_at<%s))""",
                     (rapid, legacy_cutoff))
         job_rows = cur.rowcount
         cur.execute("DELETE FROM api_rate_limits WHERE window_start<%s", (rate_limit_cutoff,))
