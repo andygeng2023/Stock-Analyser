@@ -109,8 +109,11 @@ def build_hybrid_predictions(predictions):
         return np.median(np.stack(items, axis=0), axis=0) if items else None
 
     def blend(parts, weights):
-        available = [(predictions[name], weight) for name, weight in zip(parts, weights)
-                     if name in predictions]
+        available = [
+            (hybrids[name] if name in hybrids else predictions[name], weight)
+            for name, weight in zip(parts, weights)
+            if name in hybrids or name in predictions
+        ]
         if not available:
             return None
         total = sum(weight for _, weight in available)
