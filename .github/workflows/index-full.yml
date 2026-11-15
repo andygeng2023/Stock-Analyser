@@ -1,0 +1,71 @@
+name: FullIndex market indexing
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - "tests/test_worker_config.py"
+      - ".github/workflows/index-market.yml"
+  schedule:
+    - cron: '43 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+jobs:
+  retire-previous:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "index-market.yml",
+              status: "in_progress",
+              per_page: 100
+            });
+            for (const run of runs) {
+              if (run.id === context.runId) continue;
+              core.info(`Cancelling superseded market-index run ${run.id}`);
+              await github.rest.actions.cancelWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+            }
+
+  index:
+    needs: retire-previous
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    concurrency:
+      group: stock-market-full-indexer-tidb-v2-${{ matrix.shard }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Run FullIndex shard ${{ matrix.shard }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          INDEX_WORKFLOW_FILE: index-full.yml
+          INDEX_SHARD: ${{ matrix.shard }}
+        run: python -u -m app.full_indexer
