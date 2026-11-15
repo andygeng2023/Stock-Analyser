@@ -177,79 +177,92 @@ def _update_global_profile(indexer, result, previous_global):
 
 
 
-def _claim_ticker_observation(key, indexer, signature, model_state, as_of):
-    """Atomically de-duplicate one ticker/profile/history observation."""
+
+
+def _persist_learning_observation(ticker, indexer, signature, model_state, result):
+    """Atomically claim ticker evidence and update its shared global prior."""
     now = datetime.now(timezone.utc).isoformat()
+    global_key = GLOBAL_KEYS[indexer]
     empty = json.dumps({"version": 2, "profiles": {}}, separators=(",", ":"))
+
     with connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO model_learning_state(ticker,state,updated_at)
-               VALUES(%s,%s,%s) ON CONFLICT(ticker) DO NOTHING""",
-            (key, empty, now),
-        )
+        # Create both rows before locking them. Every worker takes locks in the
+        # same order: ticker first, then profile-wide global state.
+        for key in (ticker, global_key):
+            cur.execute(
+                """INSERT INTO model_learning_state(ticker,state,updated_at)
+                   VALUES(%s,%s,%s) ON CONFLICT(ticker) DO NOTHING""",
+                (key, empty, now),
+            )
+
         cur.execute(
             "SELECT state FROM model_learning_state WHERE ticker=%s FOR UPDATE",
-            (key,),
+            (ticker,),
         )
-        row = cur.fetchone() or {}
-        root = _decode_state(row.get("state"))
-        profiles = root.get("profiles") if isinstance(root.get("profiles"), dict) else {}
-        if not profiles and root and key not in GLOBAL_KEYS.values():
-            profiles["previewIndex"] = root
-        previous = profiles.get(indexer) if isinstance(profiles.get(indexer), dict) else {}
-        is_new = previous.get("last_training_signature") != signature
+        ticker_row = cur.fetchone() or {}
+        ticker_root = _decode_state(ticker_row.get("state"))
+        ticker_profiles = (
+            dict(ticker_root.get("profiles"))
+            if isinstance(ticker_root.get("profiles"), dict) else {}
+        )
+        if not ticker_profiles and ticker_root and ticker not in GLOBAL_KEYS.values():
+            ticker_profiles["previewIndex"] = ticker_root
+        previous_ticker = ticker_profiles.get(indexer)
+        if not isinstance(previous_ticker, dict):
+            previous_ticker = {}
+        is_new = previous_ticker.get("last_training_signature") != signature
 
-        updated = dict(model_state or {})
-        updated["analyses_seen"] = int(previous.get("analyses_seen", 0) or 0) + (1 if is_new else 0)
-        updated["last_trained_at"] = now
-        updated["last_data_date"] = as_of
-        updated["last_training_signature"] = signature
-        profiles[indexer] = updated
-        payload = json.dumps(
-            {"version": 2, "profiles": profiles},
+        updated_ticker = dict(model_state or {})
+        updated_ticker["analyses_seen"] = (
+            int(previous_ticker.get("analyses_seen", 0) or 0) + (1 if is_new else 0)
+        )
+        updated_ticker["last_trained_at"] = now
+        updated_ticker["last_data_date"] = result.get("as_of")
+        updated_ticker["last_training_signature"] = signature
+        ticker_profiles[indexer] = updated_ticker
+        ticker_payload = json.dumps(
+            {"version": 2, "profiles": ticker_profiles},
             ensure_ascii=False,
             separators=(",", ":"),
         )
         cur.execute(
             "UPDATE model_learning_state SET state=%s,updated_at=%s WHERE ticker=%s",
-            (payload, now, key),
+            (ticker_payload, now, ticker),
         )
-    return is_new, updated
 
-
-def _record_global_observation(indexer, result):
-    """Update the deployment-wide model prior under a serialised row lock."""
-    key = GLOBAL_KEYS[indexer]
-    now = datetime.now(timezone.utc).isoformat()
-    empty = json.dumps({"version": 2, "profiles": {}}, separators=(",", ":"))
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO model_learning_state(ticker,state,updated_at)
-               VALUES(%s,%s,%s) ON CONFLICT(ticker) DO NOTHING""",
-            (key, empty, now),
-        )
         cur.execute(
             "SELECT state FROM model_learning_state WHERE ticker=%s FOR UPDATE",
-            (key,),
+            (global_key,),
         )
-        row = cur.fetchone() or {}
-        root = _decode_state(row.get("state"))
-        profiles = root.get("profiles") if isinstance(root.get("profiles"), dict) else {}
-        if not profiles and root and indexer == "previewIndex":
-            profiles["previewIndex"] = root
-        previous = profiles.get(indexer) if isinstance(profiles.get(indexer), dict) else {}
-        updated = _update_global_profile(indexer, result, previous)
-        profiles[indexer] = updated
-        payload = json.dumps(
-            {"version": 2, "profiles": profiles},
-            ensure_ascii=False,
-            separators=(",", ":"),
+        global_row = cur.fetchone() or {}
+        global_root = _decode_state(global_row.get("state"))
+        global_profiles = (
+            dict(global_root.get("profiles"))
+            if isinstance(global_root.get("profiles"), dict) else {}
         )
-        cur.execute(
-            "UPDATE model_learning_state SET state=%s,updated_at=%s WHERE ticker=%s",
-            (payload, now, key),
+        if not global_profiles and global_root and indexer == "previewIndex":
+            global_profiles["previewIndex"] = global_root
+        previous_global = global_profiles.get(indexer)
+        if not isinstance(previous_global, dict):
+            previous_global = {}
+
+        updated_global = (
+            _update_global_profile(indexer, result, previous_global)
+            if is_new else previous_global
         )
-    return updated
+        if is_new:
+            global_profiles[indexer] = updated_global
+            global_payload = json.dumps(
+                {"version": 2, "profiles": global_profiles},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            cur.execute(
+                "UPDATE model_learning_state SET state=%s,updated_at=%s WHERE ticker=%s",
+                (global_payload, now, global_key),
+            )
+
+    return is_new, updated_ticker, updated_global
 
 def analyze_and_learn(
     ticker,
@@ -280,9 +293,10 @@ def analyze_and_learn(
     now = datetime.now(timezone.utc).isoformat()
     state = (result.get("model") or {}).get("learning_state")
 
-    # One unique ticker/profile/period/horizon/data-date is one shared
-    # validation observation. The ticker row lock prevents duplicate jobs from
-    # teaching the global model twice about identical source data.
+    # One unique ticker/profile/period/horizon/data-date is one validation
+    # observation. Ticker de-duplication and the global EWMA update commit in
+    # the same transaction, so concurrent workers cannot lose or double-count
+    # an observation.
     model_meta = result.get("model") or {}
     signature = "|".join((
         str(model_meta.get("model_version") or indexer),
@@ -292,28 +306,19 @@ def analyze_and_learn(
     ))
     is_new_observation = False
     saved_state = state
+    updated_global = global_state
     if isinstance(state, dict):
         try:
-            is_new_observation, saved_state = _claim_ticker_observation(
-                symbol, indexer, signature, state, result.get("as_of")
+            is_new_observation, saved_state, updated_global = _persist_learning_observation(
+                symbol, indexer, signature, state, result
             )
         except Exception as exc:
-            print(f"Could not persist ticker learning memory for {symbol}: {str(exc)[:160]}")
-            # Do not add global evidence when the duplicate guard could not be
-            # committed; that avoids inflating the shared training sample count.
-
-    updated_global = global_state
-    if is_new_observation:
-        try:
-            # Re-read and update the global EWMA while holding its row lock.
-            updated_global = _record_global_observation(indexer, result)
-        except Exception as exc:
-            print(f"Could not persist global learning memory for {indexer}: {str(exc)[:160]}")
-    else:
-        try:
-            updated_global = _load_profile(global_key, indexer) or global_state
-        except Exception:
-            updated_global = global_state
+            print(f"Could not persist adaptive learning state for {symbol}: {str(exc)[:160]}")
+            # No global evidence is added unless the atomic ticker claim succeeds.
+            try:
+                updated_global = _load_profile(global_key, indexer) or global_state
+            except Exception:
+                updated_global = global_state
 
     model = result.setdefault("model", {})
     model["learning"] = {
