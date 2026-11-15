@@ -40,7 +40,7 @@ No Supabase database credentials or Cloudflare credentials are required by the w
 
 - Analysis queue: every 5 minutes.
 - PreviewIndex: every 6 hours, split across two workers; up to five years of daily history and a 10-model adaptive ensemble.
-- FullIndex: every 6 hours on a staggered schedule, split across two workers; up to ten years of daily history and a 16-model adaptive ensemble.
+- FullIndex: every 6 hours on a staggered schedule, split across two workers; up to ten years of daily history with 15 original estimators, 10 first-order hybrids, three hybrids-of-hybrids and one adaptive primary hybrid.
 - Background market scanning: every 6 hours.
 - WatchIndex: every 6 hours.
 - Cache cleanup: every 6 hours.
@@ -58,7 +58,7 @@ uvicorn app.main:app --reload
 
 ## Forecasting and adaptive learning
 
-PreviewIndex fits an adaptive ensemble of 10 regression models alongside ARIMA and a separate SVC directional classifier. FullIndex adds six complementary regression models and uses up to ten years of daily history. Both indexes score candidate models on a chronological holdout, reject weak or anomalous members, and adapt model weights using current holdout results plus a modest prior from deployment-wide shared model-performance memory.
+PreviewIndex fits an adaptive ensemble of 10 regression models alongside ARIMA and a separate SVC directional classifier. FullIndex trains 15 original regression models, constructs ten first-order hybrids and three hybrids-of-hybrids, then combines eligible candidates in one adaptive primary hybrid. It uses up to ten years of daily history. Both indexes score candidate models on a chronological holdout, reject weak or anomalous members, and adapt model weights using current holdout results plus a modest prior from deployment-wide shared model-performance memory.
 
 The shared learning memory is global to the deployment and contains aggregate model metrics only; it does not contain account activity or personal information. Analyses update the relevant index profile as well as ticker-specific memory. The 70% directional-accuracy figure is a target, not a guarantee. Only measured out-of-sample results are reported. Forecasts are estimates, not guarantees of future performance.
 
