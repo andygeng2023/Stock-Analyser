@@ -1694,74 +1694,73 @@ function render(data) {
   const upper = forecast.upper || [];
   const lower = forecast.lower || [];
 
-  const arimaSvr = forecast.arima_svr || [];
-  const svr = forecast.svr || [];
-  const xgboost = forecast.xgboost || [];
-  const arimaXgboost = forecast.arima_xgboost || [];
-  const svrXgboost = forecast.svr_xgboost || [];
-  const allModelHybrid = forecast.all_model_hybrid || [];
+  const components = forecast.components || {};
+  const weights = model.ensemble?.weights || {};
+  const modelLabels = {
+    arima: "ARIMA",
+    svr_rbf: "RBF SVR",
+    svr_linear: "Linear SVR",
+    ridge: "Ridge",
+    elastic_net: "Elastic Net",
+    random_forest: "Random Forest",
+    extra_trees: "Extra Trees",
+    gradient_boosting: "Gradient Boosting",
+    hist_gradient_boosting: "Histogram Gradient Boosting",
+    xgboost: "XGBoost",
+    knn: "K-nearest neighbours"
+  };
 
   Plotly.react("history", [{
-    x: history.dates,
-    y: history.close,
-    type: "scatter",
-    mode: "lines",
-    line: { color: "#8aa5ff", width: 2 },
-    name: "Adjusted close"
+    x: history.dates, y: history.close, type: "scatter", mode: "lines",
+    line: { color: "#8aa5ff", width: 2 }, name: "Historical adjusted close"
   }], layout, { responsive: true, displayModeBar: false });
 
-  Plotly.react("forecast", [
-    {
-      x: history.dates.slice(-100),
-      y: history.close.slice(-100),
-      name: "History",
-      type: "scatter",
-      mode: "lines",
-      line: { color: "#8aa5ff" }
-    },
-    {
-      x: dates, y: arima, name: "ARIMA",
-      type: "scatter", mode: "lines",
-      line: { color: "#e9b86b", width: 1.8 }
-    },
-    {
-      x: dates, y: xgboost, name: "XGBoost",
-      type: "scatter", mode: "lines",
-      line: { dash: "dash", width: 1.8 }
-    },
-    {
-      x: dates, y: svr, name: "SVR",
-      type: "scatter", mode: "lines",
-      line: { dash: "dashdot", width: 1.8 }
-    },
-    {
-      x: dates, y: arimaSvr, name: "ARIMA + SVR",
-      type: "scatter", mode: "lines", line: { dash: "dot", width: 2 }
-    },
-    {
-      x: dates, y: arimaXgboost, name: "ARIMA + XGBoost",
-      type: "scatter", mode: "lines", line: { width: 1.8 }
-    },
-    {
-      x: dates, y: svrXgboost, name: "SVR + XGBoost",
-      type: "scatter", mode: "lines", line: { width: 1.8 }
-    },
-    {
-      x: dates, y: allModelHybrid, name: "All-model hybrid (ARIMA + SVR + XGBoost)",
-      type: "scatter", mode: "lines", line: { width: 2.2 }
-    },
-    {
-      x: dates, y: hybrid, name: "Primary hybrid (ARIMA + SVR + XGBoost)",
-      type: "scatter", mode: "lines",
-      line: { color: "#39c99a", width: 3 }
-    },
-    { x: dates, y: upper, type: "scatter", mode: "lines", line: { width: 0 }, showlegend: false },
-    {
-      x: dates, y: lower, type: "scatter", mode: "lines",
-      line: { width: 0 }, fill: "tonexty",
-      fillcolor: "rgba(57,201,154,.12)", showlegend: false
-    }
-  ], layout, { responsive: true, displayModeBar: false });
+  const forecastTraces = [{
+    x: history.dates.slice(-100), y: history.close.slice(-100),
+    name: "Historical price", type: "scatter", mode: "lines",
+    line: { color: "#8aa5ff", width: 2 }
+  }];
+
+  // Draw the actual members selected by the adaptive ensemble. Null values
+  // are per-step anomaly kick-outs and are intentionally not connected.
+  Object.entries(components).forEach(([name, values], index) => {
+    if (!Array.isArray(values) || !values.some(value => Number.isFinite(Number(value)))) return;
+    const weight = Number(weights[name] || 0);
+    const label = modelLabels[name] || name.replaceAll("_", " ");
+    forecastTraces.push({
+      x: dates, y: values,
+      name: label + (weight > 0 ? " · " + (weight * 100).toFixed(1) + "% weight" : ""),
+      type: "scatter", mode: "lines", connectgaps: false,
+      line: { width: 1.7, dash: index % 2 ? "dash" : "solid" }
+    });
+  });
+
+  // Keep older saved analyses readable while they are replaced by v2 results.
+  if (!Object.keys(components).length) {
+    [
+      ["ARIMA", forecast.arima], ["SVR", forecast.svr], ["XGBoost", forecast.xgboost],
+      ["ARIMA + SVR", forecast.arima_svr], ["ARIMA + XGBoost", forecast.arima_xgboost],
+      ["SVR + XGBoost", forecast.svr_xgboost],
+      ["Unweighted all-model reference", forecast.all_model_hybrid]
+    ].forEach(([name, values]) => {
+      if (Array.isArray(values) && values.length) {
+        forecastTraces.push({ x: dates, y: values, name, type: "scatter", mode: "lines", line: { width: 1.5, dash: "dash" } });
+      }
+    });
+  }
+
+  forecastTraces.push({
+    x: dates, y: forecast.hybrid || [], name: "Adaptive hybrid forecast",
+    type: "scatter", mode: "lines", line: { color: "#39c99a", width: 3 }
+  });
+  if (Array.isArray(forecast.upper) && forecast.upper.length &&
+      Array.isArray(forecast.lower) && forecast.lower.length) {
+    forecastTraces.push(
+      { x: dates, y: forecast.upper, type: "scatter", mode: "lines", line: { width: 0 }, showlegend: false, hoverinfo: "skip" },
+      { x: dates, y: forecast.lower, type: "scatter", mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(57,201,154,.12)", name: "Forecast interval", hoverinfo: "skip" }
+    );
+  }
+  Plotly.react("forecast", forecastTraces, layout, { responsive: true, displayModeBar: false });
 }
 
 function renderScan(data) {
