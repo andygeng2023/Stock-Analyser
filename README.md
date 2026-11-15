@@ -7,7 +7,7 @@ A responsive stock research dashboard using Yahoo Finance data and a walk-forwar
 - **GitHub Pages** serves the static frontend.
 - **Supabase Edge Functions** hosts the protected HTTPS API only. Supabase is not used as an application database.
 - **TiDB Cloud PostgreSQL-compatible Starter** is the sole application database.
-- **GitHub Actions** runs analysis, RapidIndex, SlowIndex, WatchIndex, background scanning and cache maintenance workers. Workers connect directly to TiDB and hand off to successor runs before the runner time limit.
+- **GitHub Actions** runs analysis, the shared market index, WatchIndex, background scanning and cache maintenance workers. Workers connect directly to TiDB and hand off to successor runs before the runner time limit.
 - **Yahoo Finance** supplies quotes, historical data and symbol search.
 
 The browser calls the Edge Function using a public publishable key. TiDB credentials are stored only as Edge Function secrets and GitHub Actions secrets; they are never included in frontend JavaScript.
@@ -39,7 +39,7 @@ No Supabase database credentials or Cloudflare credentials are required by the w
 ## Background workers
 
 - Analysis queue: every 5 minutes.
-- RapidIndex and SlowIndex: every 6 hours, split across four workers.
+- Shared market index: every 6 hours, split across two workers.
 - Background market scanning: every 6 hours.
 - WatchIndex: every 6 hours.
 - Cache cleanup: every 6 hours.
