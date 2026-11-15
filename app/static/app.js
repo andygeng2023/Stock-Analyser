@@ -127,6 +127,55 @@ let watchlistLoaded = false;
 let watchlistLoading = false;
 let watchlistRefreshTimer = null;
 const rapidIndexQueuePending = new Set();
+
+// Reuse existing shared-index results for scan cards; keep this cache in memory
+// only so repeated Home/Discover renders do not create extra database requests.
+const indexedScanCache = new Map();
+const INDEXED_SCAN_CACHE_TTL_MS = 10 * 60 * 1000;
+async function mergeIndexedScanData(results) {
+  const items = Array.isArray(results) ? results : [];
+  if (!items.length || !config.apiBaseUrl) return items;
+  const now = Date.now();
+  const tickers = [...new Set(items.map(item => String(item.ticker || "").toUpperCase()).filter(Boolean))];
+  const missing = tickers.filter(ticker => {
+    const cached = indexedScanCache.get(ticker);
+    return !cached || now - cached.savedAt >= INDEXED_SCAN_CACHE_TTL_MS;
+  });
+  if (missing.length) {
+    try {
+      const response = await fetchWithRetry(api("stock-market-data"), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ tickers: missing.slice(0, 60), mode: "indexed" })
+      }, { timeoutMs: 10000, attempts: 2 });
+      if (response.ok) {
+        const payload = await response.json();
+        for (const indexed of payload.items || []) {
+          indexedScanCache.set(indexed.ticker, { data: indexed, savedAt: now });
+        }
+      }
+    } catch (error) {
+      console.warn("Indexed scan-card enrichment was unavailable:", error);
+    }
+  }
+  return items.map(item => {
+    const indexed = indexedScanCache.get(String(item.ticker || "").toUpperCase())?.data;
+    if (!indexed?.has_indexed_chart) return item;
+    return {
+      ...indexed,
+      ...item,
+      company: indexed.company || item.company || item.ticker,
+      currency: indexed.currency || item.currency || "USD",
+      price: indexed.price ?? item.price ?? null,
+      change_percent: indexed.change_percent ?? item.change_percent ?? null,
+      history_preview: indexed.history_preview?.length ? indexed.history_preview : (item.history_preview || []),
+      forecast_preview: indexed.forecast_preview?.length ? indexed.forecast_preview : (item.forecast_preview || []),
+      return_1m: indexed.return_1m ?? item.return_1m ?? null,
+      test_accuracy: indexed.test_accuracy ?? item.test_accuracy ?? item.directional_accuracy ?? null,
+      expected_change_percent: item.expected_change_percent ?? indexed.expected_change_percent ?? null
+    };
+  });
+}
 async function watchlistRequest(action, ticker) {
   if (!authClient) throw new Error("Authentication is unavailable. Reload the app and try again.");
   const { data, error: sessionError } = await authClient.auth.getSession();
@@ -762,23 +811,12 @@ function stockSparkline(stock) {
     '</svg>';
 }
 
-function marketScanCard(stock, index = 0) {
-  const expected = Number(stock.expected_change_percent);
-  const risk = Number(stock.risk_score);
-  const riskLevel = stock.risk_level || (Number.isFinite(risk) ? (risk < 30 ? "Lower" : risk < 60 ? "Moderate" : "Higher") : "Unrated");
-  const riskTone = riskLevel === "Lower" ? "scan-risk-low" : riskLevel === "Moderate" ? "scan-risk-medium" : "scan-risk-high";
-  const stats = [];
-  if (stock.annualized_volatility != null) stats.push(["Volatility", pct(stock.annualized_volatility)]);
-  if (stock.max_drawdown != null) stats.push(["Max drawdown", pct(stock.max_drawdown)]);
-  if (stock.directional_accuracy != null) stats.push(["Test accuracy", fmt(stock.directional_accuracy, 0) + "%"]);
-  return '<button type="button" class="scan-rank-card" data-ticker="' + esc(stock.ticker) + '" aria-label="Open analysis for ' + esc(stock.ticker) + '">' +
-    '<span class="scan-rank-top"><span class="scan-rank-number">#' + (index + 1) + '</span><span class="scan-risk ' + riskTone + '">' + esc(riskLevel) + ' risk</span></span>' +
-    '<span class="scan-rank-identity"><strong>' + esc(stock.ticker) + '</strong><small>' + esc(stock.company || stock.ticker) + '</small></span>' +
-    '<span class="scan-rank-return ' + (Number.isFinite(expected) && expected < 0 ? "negative" : "positive") + '">' +
-      (Number.isFinite(expected) ? esc(pct(expected)) : "—") + '<small>Expected 30D return</small></span>' +
-    '<span class="scan-rank-riskline"><span>Risk score</span><strong>' + (Number.isFinite(risk) ? esc(fmt(risk, 0)) + ' / 100' : "Unrated") + '</strong></span>' +
-    '<span class="scan-rank-stats">' + stats.map(([label, value]) => '<span><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></span>').join("") + '</span>' +
-  '</button>';
+function riskLabelMarkup(stock) {
+  if (stock.risk_score == null && !stock.risk_level) return "";
+  const score = Number(stock.risk_score);
+  const level = stock.risk_level || (Number.isFinite(score) ? (score < 30 ? "Lower" : score < 60 ? "Moderate" : "Higher") : "Unrated");
+  const tone = level === "Lower" ? "lower" : level === "Moderate" ? "moderate" : "higher";
+  return '<span class="stock-risk-label risk-' + tone + '">' + esc(level) + ' risk</span>';
 }
 
 function sortMarketScanResults(results) {
@@ -822,7 +860,10 @@ function stockCard(stock) {
           <strong class="stock-ticker">${esc(stock.ticker)}</strong>
           <span class="stock-company">${esc(company)}</span>
         </span>
-        <span class="stock-open-arrow" aria-hidden="true">↗</span>
+        <span class="stock-card-heading-right">
+          ${riskLabelMarkup(stock)}
+          <span class="stock-open-arrow" aria-hidden="true">↗</span>
+        </span>
       </span>
       <span class="stock-card-price-row">
         <strong class="stock-price">${esc(cash(stock.price, stock.currency))}</strong>
@@ -1246,11 +1287,21 @@ function renderMarketFeed(data, options = {}) {
     ? (marketFeedFromCache ? "Saved snapshot · " : "Updated ") + updated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : (marketFeedFromCache ? "Saved snapshot" : "");
 
-  const latest = sortMarketScanResults(data.latest_scan?.results || []);
-  $("home-latest-scan").innerHTML = latest.length
-    ? latest.slice(0, 6).map(marketScanCard).join("")
-    : '<div class="empty-feed">No completed background scan is available yet. The section will populate after the next shared scan finishes.</div>';
-  bindStockButtons($("home-latest-scan"));
+  const latest = sortMarketScanResults(data.latest_scan?.results || []).slice(0, 6);
+  const latestRoot = $("home-latest-scan");
+  const latestRenderToken = String((Number(latestRoot.dataset.renderToken) || 0) + 1);
+  latestRoot.dataset.renderToken = latestRenderToken;
+  const renderLatestScan = stocks => {
+    if (latestRoot.dataset.renderToken !== latestRenderToken) return;
+    latestRoot.innerHTML = stocks.length
+      ? stocks.map(stockCard).join("")
+      : '<div class="empty-feed">No completed background scan is available yet. The section will populate after the next shared scan finishes.</div>';
+    bindStockButtons(latestRoot);
+  };
+  renderLatestScan(latest);
+  if (latest.length) {
+    mergeIndexedScanData(latest).then(renderLatestScan).catch(error => console.warn("Could not enrich Home scan cards:", error));
+  }
 
   fillStockGrid("home-recommended", data.recommended, "Research shortlist");
   fillStockGrid("home-trending", data.trending, "Trending");
@@ -1806,20 +1857,20 @@ function renderScan(data) {
     " passed the fast filter · " + fmt(data.arima_svr_refined, 0) +
     " refined · ranked by expected 30D return, then lower estimated risk";
 
-  const indexedStocks = [
-    ...(marketFeed?.recommended || []),
-    ...(marketFeed?.trending || []),
-    ...(marketFeed?.popular || []),
-    ...(marketFeed?.opportunities || []),
-    ...(marketFeed?.smaller_companies || []),
-  ];
-  const indexedByTicker = new Map(indexedStocks.map(stock => [stock.ticker, stock]));
-  $("scan-list").innerHTML = results.map((item, index) =>
-    marketScanCard({ ...(indexedByTicker.get(item.ticker) || {}), ...item }, index)
-  ).join("");
-  $("scan-results").hidden = results.length === 0;
-  bindStockButtons($("scan-list"));
-  refreshVisibleMarketCards(true);
+  const root = $("scan-list");
+  const renderToken = String((Number(root.dataset.indexedRenderToken) || 0) + 1);
+  root.dataset.indexedRenderToken = renderToken;
+  const renderCards = stocks => {
+    if (root.dataset.indexedRenderToken !== renderToken) return;
+    root.innerHTML = stocks.map(stockCard).join("");
+    $("scan-results").hidden = stocks.length === 0;
+    bindStockButtons(root);
+    refreshVisibleMarketCards(true);
+  };
+  renderCards(results);
+  if (results.length) {
+    mergeIndexedScanData(results).then(renderCards).catch(error => console.warn("Could not enrich scan cards:", error));
+  }
   if (!results.length) $("scan-status").textContent = "The scan completed but could not produce valid refinements. Try again later.";
 }
 
