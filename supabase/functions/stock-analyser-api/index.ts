@@ -297,10 +297,10 @@ async function marketFeed(req,env,url) {
   }
   // Read compact catalogue rows first. Sorting the large JSON index table and
   // returning its result blobs in one query exceeds TiDB Starter's memory cap.
-  const catalogue=await env.DB.prepare("SELECT ticker,market_cap,avg_dollar_volume,priority,last_indexed_at FROM market_index_catalog WHERE last_indexed_at IS NOT NULL ORDER BY last_indexed_at DESC LIMIT 300").all();
+  const catalogue=await env.DB.prepare("SELECT ticker,market_cap,avg_dollar_volume,priority,last_indexed_at FROM market_index_catalog WHERE last_indexed_at IS NOT NULL ORDER BY last_indexed_at DESC LIMIT 120").all();
   const indexedRows=[];
-  for(let offset=0;offset<catalogue.results.length;offset+=10){
-    const tickers=catalogue.results.slice(offset,offset+10).map(row=>row.ticker);
+  for(let offset=0;offset<catalogue.results.length;offset+=20){
+    const tickers=catalogue.results.slice(offset,offset+20).map(row=>row.ticker);
     if(!tickers.length)continue;
     const placeholders=tickers.map(()=>"?").join(",");
     const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' AND ticker IN ("+placeholders+")").bind(...tickers).all();
