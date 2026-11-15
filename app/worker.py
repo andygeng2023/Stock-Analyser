@@ -145,10 +145,13 @@ def process_job(job):
                 progress_callback=progress, indexer=indexer,
             )
             keep_job_result = save_to_indexer == "none"
-            if save_to_indexer in {"previewIndex", "FullIndex"}:
+            # Use the normalised indexer value for the write as well as the
+            # analysis call. This keeps queued legacy rapidIndex jobs working
+            # after the public index was renamed to PreviewIndex.
+            if indexer in {"previewIndex", "FullIndex"}:
                 upsert_market_index(
                     job_id, ticker, job["period"], int(job["horizon"]), result,
-                    indexer=save_to_indexer,
+                    indexer=indexer,
                 )
         update_job(job_id, {"status": "completed", "result": result if keep_job_result else None,
                             "error": None, "progress": 100, "stage": "Complete"})
