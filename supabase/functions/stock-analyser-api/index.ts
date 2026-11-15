@@ -298,10 +298,10 @@ async function marketFeed(req,env,url) {
   // Read the large JSON index in small independent queries. A single 1,500-row
   // result can exceed TiDB Starter transaction memory and make the entire feed fail.
   const indexedRows=[];
-  for(let offset=0;offset<1500;offset+=75){
-    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' ORDER BY indexed_at DESC LIMIT 75 OFFSET ?").bind(offset).all();
+  for(let offset=0;offset<1500;offset+=250){
+    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' undefined").bind(offset).all();
     indexedRows.push(...batch.results);
-    if(batch.results.length<75)break;
+    if(batch.results.length<250)break;
   }
   const stocks=indexedRows.map(row=>{const r=parse(row.result)||{},s=r.market_summary||{},f=r.fundamentals||{},m=r.model?.metrics?.backtest||{},num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d,optional=v=>v==null?null:num(v,null);
     const market_cap=num(row.market_cap||f.market_cap),avg_dollar_volume=num(row.avg_dollar_volume||s.average_dollar_volume),return_1m=num(s.return_1m),return_1y=num(s.return_1y),vol=num(s.annualized_volatility,100),draw=num(s.max_drawdown,-100),profit=num(f.profit_margin,-1),roe=num(f.return_on_equity,-1),accuracy=optional(m.test_accuracy??m.ensemble?.directional_accuracy??r.model?.metrics?.hybrid?.directional_accuracy);
