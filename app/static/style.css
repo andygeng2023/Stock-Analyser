@@ -516,8 +516,8 @@ html[data-theme="light"] .watch-card-company,html[data-theme="light"] .watch-car
 html[data-theme="light"] .watch-card-stats,html[data-theme="light"] .watch-card-chart{border-color:#e5eaf1}
 html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] .quick-search,html[data-theme="light"] form,html[data-theme="light"] .source-control select{background:#fff;color:#172235;border-color:#d4dce7}
 html[data-theme="light"] .quick-search input{background:transparent}
-html[data-theme="light"] .secondary-button,html[data-theme="light"] .nav-tab,html[data-theme="light"] .indexer-switch{background:#edf1f7;color:#35445b;border-color:#d2dbe7}
-html[data-theme="light"] .nav-tab.active,html[data-theme="light"] .indexer-option.active{background:#dce7f8;color:#1c3557;border-color:#b8cbe7}
+html[data-theme="light"] .secondary-button,html[data-theme="light"] .nav-tab{background:#edf1f7;color:#35445b;border-color:#d2dbe7}
+html[data-theme="light"] .nav-tab.active{background:#dce7f8;color:#1c3557;border-color:#b8cbe7}
 html[data-theme="light"] .bottom-nav{background:#ffffffed;border-color:#dce3ed}
 html[data-theme="light"] .settings-disclosure>summary::after{color:#65738a}
 html[data-theme="light"] .row,html[data-theme="light"] td,html[data-theme="light"] th{border-color:#e5eaf1}
