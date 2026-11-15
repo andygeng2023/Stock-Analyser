@@ -7,7 +7,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
-from .analyzer import analyze_ticker
+from .training import analyze_and_learn
 from .db import connect, fetch_one, update_one, upsert_one, verify_database
 from .scanner import run_market_scan
 
@@ -136,7 +136,7 @@ def process_job(job):
         if job.get("job_type") == "scan":
             result = run_market_scan(job.get("scan_source") or "both", progress_callback=progress)
         else:
-            result = analyze_ticker(ticker, job["period"], int(job["horizon"]),
+            result = analyze_and_learn(ticker, job["period"], int(job["horizon"]),
                                     progress_callback=progress)
         if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") != "none":
             upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]),
