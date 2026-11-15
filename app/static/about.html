@@ -14,7 +14,7 @@
     <h2>PreviewIndex</h2>
     <p>PreviewIndex is the faster shared index. It uses up to five years of daily history, a 10-model adaptive ensemble, 30 trading-day forecasts and a six-hour refresh cycle.</p>
     <h2>FullIndex</h2>
-    <p>FullIndex is the higher-capacity shared index. It uses up to ten years of daily history, an expanded 16-model ensemble, 30 trading-day forecasts and a separate 18-hour refresh cycle. Its shared cache is retained for 24 hours. It runs independently with smaller batches to account for the additional fitting time.</p>
+    <p>FullIndex is the higher-capacity shared index. It uses up to ten years of daily history, 15 original models, 10 hybrids, 3 hybrids of hybrids and one primary hybrid, 30 trading-day forecasts and a separate 18-hour refresh cycle. Its shared cache is retained for 24 hours. It runs independently with smaller batches to account for the additional fitting time.</p>
     <h2>Shared adaptive learning</h2>
     <p>Both indexes maintain separate deployment-wide model-performance memories. New chronological holdout results update those memories, and later analyses use the shared performance history as a modest model-weighting prior. The memory contains aggregate model metrics, not account activity or personal information. Each stock also retains its own model-performance history.</p>
     <h2>Accuracy measurement</h2>
