@@ -1622,6 +1622,38 @@ function render(data) {
     metricRows.push('<tr><td>SVC direction classifier</td><td>—</td><td>—</td><td>' +
       fmt(metrics.svm_directional_accuracy, 2) + '%</td></tr>');
   }
+  const ensemble = model.ensemble || {};
+  const assessment = metrics.model_assessment || {};
+  const weights = ensemble.weights || {};
+  const activeCount = Object.keys(weights).length;
+  const dynamicKickouts = Object.values(ensemble.forecast_dynamic_rejections || {})
+    .reduce((total, count) => total + Math.max(0, Number(count) || 0), 0);
+  const learning = model.learning_state || {};
+  const candidateRows = Object.entries(assessment).map(([name, item]) => {
+    const isActive = Object.prototype.hasOwnProperty.call(weights, name);
+    const status = item.fallback ? "Fallback" : (isActive ? "Active" : "Rejected");
+    const reason = item.fallback
+      ? "Best available fallback"
+      : (item.rejection_reason || (isActive ? "Included in hybrid" : "Not selected"));
+    return '<tr><td>' + esc(modelLabels[name] || name.replaceAll("_", " ")) + '</td><td>' +
+      fmt(item.directional_accuracy, 2) + '%</td><td>' + fmt(item.rmse, 6) + '</td><td>' +
+      fmt(Number(item.anomaly_rate) * 100, 1) + '%</td><td>' +
+      (isActive ? fmt(Number(weights[name]) * 100, 1) + '%' : '—') +
+      '</td><td>' + esc(status) + '</td><td>' + esc(reason) + '</td></tr>';
+  });
+  const ensembleSummary = ensemble.method
+    ? '<div class="backtest-summary">' +
+      '<div><small>Ensemble method</small><strong>' + esc(ensemble.method) + '</strong></div>' +
+      '<div><small>Candidate models</small><strong>' + fmt(ensemble.candidate_count, 0) + '</strong></div>' +
+      '<div><small>Active blend members</small><strong>' + fmt(activeCount, 0) + '</strong></div>' +
+      '<div><small>Forecast anomaly kick-outs</small><strong>' + fmt(dynamicKickouts, 0) + '</strong></div>' +
+      '<div><small>Average active per step</small><strong>' + fmt(ensemble.average_active_models_per_step, 1) + '</strong></div>' +
+      '<div><small>Analyses in learning memory</small><strong>' + fmt(learning.analyses_seen, 0) + '</strong></div>' +
+      '</div>' +
+      '<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Direction accuracy</th><th>RMSE</th><th>Anomaly rate</th><th>Blend weight</th><th>Status</th><th>Decision</th></tr></thead><tbody>' +
+      (candidateRows.length ? candidateRows.join("") : '<tr><td colspan="7">No candidate diagnostics available.</td></tr>') +
+      '</tbody></table></div>'
+    : '<p class="muted">Adaptive ensemble diagnostics will appear after a new analysis.</p>';
   const backtestSummary = backtest.observations
     ? '<div class="backtest-summary">' +
       '<div><small>Validation method</small><strong>' + esc(backtest.method || "Chronological holdout") + '</strong></div>' +
@@ -1634,12 +1666,14 @@ function render(data) {
     : '<p class="muted">Chronological backtest details are not available in this saved result. Re-run the analysis to generate them.</p>';
   $("metrics").innerHTML =
     backtestSummary +
-    '<div class="table-wrap"><table><thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>Test directional accuracy</th></tr></thead><tbody>' +
+    ensembleSummary +
+    '<h4>Model comparison</h4><div class="table-wrap"><table><thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>Test directional accuracy</th></tr></thead><tbody>' +
     metricRows.join("") + '</tbody></table></div>';
 
   $("model-note").textContent =
-    "All reported model scores use the same chronological held-out test window. ARIMA order: " +
-    (Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—") +
+    (model.model_family || "Forecast ensemble") +
+    " · All model scores use the chronological held-out window. Models are retrained on the latest available history for every fresh analysis. " +
+    "ARIMA order: " + (Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—") +
     " · ADF p-value: " + fmt(model.adf_p_value, 6) +
     " · total observations: " + fmt(model.observations, 0);
 
