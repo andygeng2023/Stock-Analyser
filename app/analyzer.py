@@ -453,6 +453,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 "sector":info.get("sector"),"industry":info.get("industry"),
             },
             "model":{
+                "model_version":"adaptive-ensemble-v1",
                 "model_family":"ARIMA + 10-model adaptive ML ensemble",
                 "ensemble":ensemble_report,
                 "learning_state":learning_state_out,
