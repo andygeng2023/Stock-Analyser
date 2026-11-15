@@ -783,8 +783,11 @@ function marketScanCard(stock, index = 0) {
 
 function sortMarketScanResults(results) {
   return [...(Array.isArray(results) ? results : [])].sort((a, b) => {
-    const returnDiff = Number(b.expected_change_percent ?? -Infinity) - Number(a.expected_change_percent ?? -Infinity);
-    if (Number.isFinite(returnDiff) && returnDiff !== 0) return returnDiff;
+    const returnA = Number(a.expected_change_percent);
+    const returnB = Number(b.expected_change_percent);
+    const hasA = Number.isFinite(returnA), hasB = Number.isFinite(returnB);
+    if (hasA && hasB && returnA !== returnB) return returnB - returnA;
+    if (hasA !== hasB) return hasA ? -1 : 1;
     return Number(a.risk_score ?? 100) - Number(b.risk_score ?? 100);
   });
 }
