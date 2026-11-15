@@ -240,12 +240,12 @@ async function watchlist(req,env) {
   const tickers=items.results.map(x=>x.ticker);
   if(!tickers.length) return json({items:[]});
   const placeholders=tickers.map(()=>"?").join(",");
-  const indexed=await env.DB.prepare("SELECT ticker,result,indexed_at FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' AND ticker IN ("+placeholders+")").bind(...tickers).all();
+  const indexed=await env.DB.prepare("SELECT ticker,result,indexed_at FROM market_index WHERE period='5y' AND horizon=30 AND indexer='previewIndex' AND ticker IN ("+placeholders+")").bind(...tickers).all();
   const map=new Map(indexed.results.map(row=>[row.ticker,row]));
   const cutoff=Date.now()-6*3600000;
   const stale=tickers.filter(t=>{const r=map.get(t);return !r?.indexed_at||Date.parse(r.indexed_at)<cutoff;});
   // WatchIndex is scheduled by GitHub Actions; no outbound GitHub credential is needed here.
-  const compact=(raw,at)=>{const r=parse(raw);if(!r)return null;const sample=(v,n)=>{if(!Array.isArray(v))return[];const a=v.map(Number).filter(Number.isFinite);return a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);};return {company:r.company||r.ticker,currency:r.currency||"USD",price:r.price??null,change_percent:r.change_percent??null,as_of:r.as_of??null,indexed_at:at,history_preview:sample(r.history?.close,72),forecast_preview:r.model?.model_version==="adaptive-ensemble-v2"?sample(r.forecast?.hybrid,30):[],market_summary:r.market_summary||{},fundamentals:{market_cap:r.fundamentals?.market_cap??null,sector:r.fundamentals?.sector??null,industry:r.fundamentals?.industry??null,profit_margin:r.fundamentals?.profit_margin??null,return_on_equity:r.fundamentals?.return_on_equity??null},model:{metrics:{hybrid:r.model?.metrics?.hybrid||{}}},forecast:{horizon:r.forecast?.horizon||30,expected_change_percent:r.forecast?.expected_change_percent??null}};};
+  const compact=(raw,at)=>{const r=parse(raw);if(!r)return null;const sample=(v,n)=>{if(!Array.isArray(v))return[];const a=v.map(Number).filter(Number.isFinite);return a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);};return {company:r.company||r.ticker,currency:r.currency||"USD",price:r.price??null,change_percent:r.change_percent??null,as_of:r.as_of??null,indexed_at:at,history_preview:sample(r.history?.close,72),forecast_preview:["adaptive-ensemble-v2","adaptive-full-ensemble-v1"].includes(r.model?.model_version)?sample(r.forecast?.hybrid,30):[],market_summary:r.market_summary||{},fundamentals:{market_cap:r.fundamentals?.market_cap??null,sector:r.fundamentals?.sector??null,industry:r.fundamentals?.industry??null,profit_margin:r.fundamentals?.profit_margin??null,return_on_equity:r.fundamentals?.return_on_equity??null},model:{metrics:{hybrid:r.model?.metrics?.hybrid||{}}},forecast:{horizon:r.forecast?.horizon||30,expected_change_percent:r.forecast?.expected_change_percent??null}};};
   return json({items:items.results.map(item=>{const row=map.get(item.ticker);return {ticker:item.ticker,added_at:item.created_at,analysis:compact(row?.result,row?.indexed_at||null),indexed_at:row?.indexed_at||null,index_fresh:Boolean(row?.indexed_at&&Date.parse(row.indexed_at)>=cutoff),awaiting_watchindex:stale.includes(item.ticker)};}),refreshing:stale.length>0});
 }
 async function dispatchWorkflow(env,workflow) {
@@ -256,22 +256,23 @@ async function requestAnalysis(req,env) {
   const body=await req.json(), mode=body.mode==="scan"?"scan":"analysis", ticker=mode==="scan"?"SCAN":String(body.ticker||"").trim().toUpperCase();
   const period=mode==="scan"?"5y":String(body.period||"5y"), horizon=mode==="scan"?30:Number(body.horizon||30);
   const scanSource=mode==="scan"?String(body.source||"both").toLowerCase():"both";
-  const save=mode==="scan"?"none":String(body.save_to_indexer||"rapidIndex");
+  const save=mode==="scan"?"none":String(body.save_to_indexer||"previewIndex");
   if(mode==="analysis"&&!validTicker(ticker))return json({error:"Enter a valid stock ticker."},400);
   if(!["1y","2y","5y","10y","max"].includes(period)||!Number.isInteger(horizon)||horizon<1||horizon>504)return json({error:"Invalid analysis period or forecast horizon."},400);
-  if(!["yfinance","nasdaq","both"].includes(scanSource)||!["rapidIndex","none"].includes(save))return json({error:"Invalid analysis options."},400);
+  if(!["yfinance","nasdaq","both"].includes(scanSource)||!["previewIndex","FullIndex","none"].includes(save))return json({error:"Invalid analysis options."},400);
   if(body.latest_only===true) {
     const row=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type='scan' AND ticker='SCAN' AND period='5y' AND horizon=30 AND scan_source=? AND status='completed' AND result IS NOT NULL AND result LIKE '%adaptive-ensemble-v3%' ORDER BY created_at DESC LIMIT 1").bind(scanSource).first();
     return row?json({id:row.id,status:"completed",ticker:"SCAN",mode,cached:true,cache_created_at:row.created_at}):json({found:false,mode,source:scanSource});
   }
   if(!body.hard_rescan && mode==="analysis" && save!=="none") {
     const cutoff=new Date(Date.now()-8*3600000).toISOString();
-    const cached=await env.DB.prepare("SELECT source_job_id,indexed_at FROM market_index WHERE ticker=? AND period=? AND horizon=? AND indexer=? AND indexed_at>=? AND source_job_id IS NOT NULL AND result LIKE '%adaptive-ensemble-v2%' LIMIT 1").bind(ticker,period,horizon,save,cutoff).first();
+    const requiredVersion=save==="FullIndex"?"adaptive-full-ensemble-v1":"adaptive-ensemble-v2";
+    const cached=await env.DB.prepare("SELECT source_job_id,indexed_at FROM market_index WHERE ticker=? AND period=? AND horizon=? AND indexer=? AND indexed_at>=? AND source_job_id IS NOT NULL AND result LIKE ? LIMIT 1").bind(ticker,period,horizon,save,cutoff,"%"+requiredVersion+"%").first();
     if(cached?.source_job_id)return json({id:cached.source_job_id,status:"completed",ticker,mode,cached:true,cache_source:"market_index",cache_created_at:cached.indexed_at});
   }
   if(!body.hard_rescan && (mode==="scan"||save!=="none")) {
     const cutoff=new Date(Date.now()-8*3600000).toISOString();
-    const requiredVersion=mode==="scan"?"adaptive-ensemble-v3":"adaptive-ensemble-v2";
+    const requiredVersion=mode==="scan"?"adaptive-ensemble-v3":save==="FullIndex"?"adaptive-full-ensemble-v1":"adaptive-ensemble-v2";
     const cached=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type=? AND scan_source=? AND ticker=? AND period=? AND horizon=? AND save_to_indexer=? AND status='completed' AND result IS NOT NULL AND result LIKE ? AND created_at>=? ORDER BY created_at DESC LIMIT 1").bind(mode,scanSource,ticker,period,horizon,save,"%"+requiredVersion+"%",cutoff).first();
     if(cached)return json({id:cached.id,status:"completed",ticker,mode,cached:true,cache_created_at:cached.created_at});
   }
@@ -298,8 +299,12 @@ async function marketFeed(req,env,url) {
       const res=await fetch(yahoo,{headers:{"User-Agent":"Mozilla/5.0 StockAnalyser/1.0"}});
       if(res.ok){const data=await res.json(), suggestions=(data.quotes||[]).filter(x=>x.quoteType==="EQUITY"&&x.symbol).slice(0,9).map(x=>({ticker:x.symbol,company:x.longname||x.shortname||x.symbol,exchange:x.exchDisp||x.exchange||null,type:"Stock"}));if(suggestions.length)return json({suggestions},200,{"Cache-Control":"public, max-age=60"});}
     } catch(e){console.warn("Yahoo symbol search failed",e);}
-    const rows=await env.DB.prepare("SELECT ticker,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' LIMIT 1500").all();
-    return json({suggestions:rows.results.map(r=>{const x=parse(r.result)||{};return {ticker:r.ticker,company:x.company||r.ticker,exchange:x.exchange||null,type:"Indexed stock"};}).filter(x=>x.ticker.toLowerCase().includes(q.toLowerCase())||x.company.toLowerCase().includes(q.toLowerCase())).slice(0,9)});
+    const fullRows=await env.DB.prepare("SELECT ticker,result FROM market_index WHERE period='10y' AND horizon=30 AND indexer='FullIndex' LIMIT 750").all();
+    const previewRows=await env.DB.prepare("SELECT ticker,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='previewIndex' LIMIT 750").all();
+    const byTicker=new Map();
+    for(const row of previewRows.results)byTicker.set(row.ticker,row);
+    for(const row of fullRows.results)byTicker.set(row.ticker,row);
+    return json({suggestions:[...byTicker.values()].map(r=>{const x=parse(r.result)||{};return {ticker:r.ticker,company:x.company||r.ticker,exchange:x.exchange||null,type:"Indexed stock"};}).filter(x=>x.ticker.toLowerCase().includes(q.toLowerCase())||x.company.toLowerCase().includes(q.toLowerCase())).slice(0,9)});
   }
   // Avoid wide scans, sorts, joins and IN-list hash joins on TiDB Starter.
   // Fetch a small ticker list, then use primary-key lookups for one JSON record
@@ -308,14 +313,17 @@ async function marketFeed(req,env,url) {
   const indexedRows=[];
   for(let offset=0;offset<tickerRows.results.length;offset+=10){
     const tickers=tickerRows.results.slice(offset,offset+10).map(row=>row.ticker);
-    const batch=await Promise.all(tickers.map(ticker=>env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,result FROM market_index WHERE ticker=? AND period='5y' AND horizon=30 AND indexer='rapidIndex'").bind(ticker).first()));
-    indexedRows.push(...batch.filter(Boolean));
+    const fullBatch=await Promise.all(tickers.map(ticker=>env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,result,indexer FROM market_index WHERE ticker=? AND period='10y' AND horizon=30 AND indexer='FullIndex'").bind(ticker).first()));
+    const fullByTicker=new Map(fullBatch.filter(Boolean).map(row=>[row.ticker,row]));
+    const missing=tickers.filter(ticker=>!fullByTicker.has(ticker));
+    const previewBatch=await Promise.all(missing.map(ticker=>env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,result,indexer FROM market_index WHERE ticker=? AND period='5y' AND horizon=30 AND indexer='previewIndex'").bind(ticker).first()));
+    indexedRows.push(...fullByTicker.values(),...previewBatch.filter(Boolean));
   }
   indexedRows.sort((a,b)=>String(b.indexed_at||"").localeCompare(String(a.indexed_at||"")));
   const stocks=indexedRows.map(row=>{const r=parse(row.result)||{},s=r.market_summary||{},f=r.fundamentals||{},m=r.model?.metrics?.backtest||{},num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d,optional=v=>v==null?null:num(v,null);
     const market_cap=num(row.market_cap||f.market_cap),avg_dollar_volume=num(row.avg_dollar_volume||s.average_dollar_volume),return_1m=num(s.return_1m),return_1y=num(s.return_1y),vol=num(s.annualized_volatility,100),draw=num(s.max_drawdown,-100),profit=num(f.profit_margin,-1),roe=num(f.return_on_equity,-1),accuracy=optional(m.test_accuracy??m.ensemble?.directional_accuracy??r.model?.metrics?.hybrid?.directional_accuracy);
     const quality=Math.max(0,Math.min(1,(return_1m+10)/40))*25+Math.max(0,Math.min(1,(roe+.1)/.5))*20+Math.max(0,Math.min(1,(profit+.05)/.25))*15+Math.max(0,Math.min(1,(70-vol)/50))*20+Math.max(0,Math.min(1,(draw+70)/70))*20;
-    return {ticker:row.ticker,company:r.company||row.ticker,exchange:r.exchange||null,currency:r.currency||"USD",price:optional(r.price),change_percent:optional(r.change_percent),market_cap:market_cap||null,avg_dollar_volume:avg_dollar_volume||null,return_1m,return_1y,annualized_volatility:vol,max_drawdown:draw,profit_margin:profit,return_on_equity:roe,expected_change_percent:optional(r.forecast?.expected_change_percent),directional_accuracy:accuracy,sector:f.sector||null,industry:f.industry||null,indexed_at:row.indexed_at,quality_score:Math.round(quality*100)/100,history_preview:(r.history?.close||[]).filter((_,i,a)=>i%Math.max(1,Math.ceil(a.length/72))===0).slice(0,72),forecast_preview:r.model?.model_version==="adaptive-ensemble-v2"?(r.forecast?.hybrid||[]):[]};});
+    return {ticker:row.ticker,company:r.company||row.ticker,exchange:r.exchange||null,currency:r.currency||"USD",indexer:row.indexer||"previewIndex",price:optional(r.price),change_percent:optional(r.change_percent),market_cap:market_cap||null,avg_dollar_volume:avg_dollar_volume||null,return_1m,return_1y,annualized_volatility:vol,max_drawdown:draw,profit_margin:profit,return_on_equity:roe,expected_change_percent:optional(r.forecast?.expected_change_percent),directional_accuracy:accuracy,sector:f.sector||null,industry:f.industry||null,indexed_at:row.indexed_at,quality_score:Math.round(quality*100)/100,history_preview:(r.history?.close||[]).filter((_,i,a)=>i%Math.max(1,Math.ceil(a.length/72))===0).slice(0,72),forecast_preview:r.model?.model_version==="adaptive-ensemble-v2"?(r.forecast?.hybrid||[]):[]};});
   const unique=[...new Map(stocks.map(x=>[x.ticker,x])).values()], liquid=unique.filter(s=>s.avg_dollar_volume>=2e6&&s.market_cap>=1e8), smaller=liquid.filter(s=>s.market_cap<2e9), healthy=smaller.filter(s=>s.return_1m>0&&s.profit_margin>0&&s.return_on_equity>0&&s.annualized_volatility<=70&&s.max_drawdown>=-75);
   const recommended=unique.filter(s=>s.avg_dollar_volume>=2e6&&s.market_cap>=1e8&&s.return_1m>0&&s.profit_margin>0&&s.return_on_equity>0&&s.annualized_volatility<=65&&s.max_drawdown>=-70&&s.directional_accuracy>=50).sort((a,b)=>b.quality_score-a.quality_score).slice(0,8);
   const trending=unique.filter(s=>s.return_1m>0&&s.avg_dollar_volume>=2e6).sort((a,b)=>b.return_1m-a.return_1m).slice(0,8);
@@ -349,13 +357,18 @@ async function stockMarketData(req,env) {
   };
   if(mode==="quotes"||mode==="history")return json({items:await Promise.all(tickers.map(async ticker=>{try{return {ticker,...(mode==="quotes"?await quote(ticker):await history(ticker))};}catch{return {ticker,price:null,history_preview:[],change_percent:null,currency:null,source:"unavailable"};}})),generated_at:now(),mode});
   const placeholders=tickers.map(()=>"?").join(",");
-  const rows=tickers.length?await env.DB.prepare("SELECT ticker,result,indexed_at FROM market_index WHERE ticker IN ("+placeholders+") AND period='5y' AND horizon=30 AND indexer='rapidIndex'").bind(...tickers).all():{results:[]};
-  const map=new Map(rows.results.map(x=>[x.ticker,x]));
+  const fullRows=tickers.length?await env.DB.prepare("SELECT ticker,result,indexed_at,indexer FROM market_index WHERE ticker IN ("+placeholders+") AND period='10y' AND horizon=30 AND indexer='FullIndex'").bind(...tickers).all():{results:[]};
+  const fullMap=new Map(fullRows.results.map(x=>[x.ticker,x]));
+  const missing=tickers.filter(ticker=>!fullMap.has(ticker));
+  const missingPlaceholders=missing.map(()=>"?").join(",");
+  const previewRows=missing.length?await env.DB.prepare("SELECT ticker,result,indexed_at,indexer FROM market_index WHERE ticker IN ("+missingPlaceholders+") AND period='5y' AND horizon=30 AND indexer='previewIndex'").bind(...missing).all():{results:[]};
+  const map=new Map(previewRows.results.map(x=>[x.ticker,x]));
+  for(const row of fullRows.results)map.set(row.ticker,row);
   const items=await Promise.all(tickers.map(async ticker=>{
     const row=map.get(ticker),r=parse(row?.result)||{},h=(r.history?.close||[]).filter(v=>v!=null),f=r.forecast||{};
-    const item={ticker,company:r.company||ticker,currency:r.currency||"USD",price:r.price??null,change_percent:r.change_percent??null,as_of:r.as_of??null,history_preview:h.length>240?h.filter((_,i)=>i%Math.ceil(h.length/240)===0):h,forecast_preview:r.model?.model_version==="adaptive-ensemble-v2"?(f.hybrid||[]):[],expected_change_percent:f.expected_change_percent??null,return_1m:r.market_summary?.return_1m??null,test_accuracy:r.model?.metrics?.backtest?.test_accuracy??r.model?.metrics?.backtest?.ensemble?.directional_accuracy??r.model?.metrics?.hybrid?.directional_accuracy??null,directional_accuracy:r.model?.metrics?.backtest?.test_accuracy??r.model?.metrics?.hybrid?.directional_accuracy??null,indexed_at:row?.indexed_at??null,has_indexed_chart:h.length>0,source:row?"RapidIndex shared cache":"not indexed"};
+    const item={ticker,company:r.company||ticker,currency:r.currency||"USD",price:r.price??null,change_percent:r.change_percent??null,as_of:r.as_of??null,history_preview:h.length>240?h.filter((_,i)=>i%Math.ceil(h.length/240)===0):h,forecast_preview:r.model?.model_version==="adaptive-ensemble-v2"?(f.hybrid||[]):[],expected_change_percent:f.expected_change_percent??null,return_1m:r.market_summary?.return_1m??null,test_accuracy:r.model?.metrics?.backtest?.test_accuracy??r.model?.metrics?.backtest?.ensemble?.directional_accuracy??r.model?.metrics?.hybrid?.directional_accuracy??null,directional_accuracy:r.model?.metrics?.backtest?.test_accuracy??r.model?.metrics?.hybrid?.directional_accuracy??null,indexed_at:row?.indexed_at??null,has_indexed_chart:h.length>0,source:row?(row.indexer==="FullIndex"?"FullIndex shared cache":"PreviewIndex shared cache"):"not indexed"};
     if(mode==="indexed")return item;
-    if(item.has_indexed_chart){try{return {...item,...await quote(ticker),source:"RapidIndex shared cache + live quote"};}catch{return item;}}
+    if(item.has_indexed_chart){try{return {...item,...await quote(ticker),source:(row?.indexer==="FullIndex"?"FullIndex":"PreviewIndex")+" shared cache + live quote"};}catch{return item;}}
     try{return {...item,...await history(ticker),forecast_preview:[],source:"Yahoo Finance historical fallback"};}catch{return item;}
   }));
   return json({items,generated_at:now(),mode});
@@ -377,7 +390,7 @@ Deno.serve(async (req) => {
       const identity = await env.DB.prepare("SELECT current_database() AS database_name, current_schema() AS schema_name").first();
       const rows = await env.DB.prepare("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_type='BASE TABLE'").all();
       const actual = new Set(rows.results.map((row) => row.table_name));
-      const required = ["users","sessions","watchlist_items","analysis_jobs","market_index","market_index_catalog","api_rate_limits"];
+      const required = ["users","sessions","watchlist_items","analysis_jobs","market_index","market_index_catalog","api_rate_limits","model_learning_state"];
       const missing = required.filter((name) => !actual.has(name));
       await env.DB.prepare("SELECT 1 AS ok").first();
       return json({
@@ -398,6 +411,10 @@ Deno.serve(async (req) => {
       const row = await env.DB.prepare("SELECT id,ticker,status,result,error,created_at,updated_at,progress,stage FROM analysis_jobs WHERE id=?").bind(id).first();
       if (!row) return json({ error: "Analysis request not found." }, 404);
       row.result = parse(row.result);
+      if(!row.result && row.status==="completed") {
+        const indexed=await env.DB.prepare("SELECT result FROM market_index WHERE source_job_id=? LIMIT 1").bind(id).first();
+        row.result=parse(indexed?.result);
+      }
       return json(row);
     }
     if (path === "/api/market-feed" && req.method === "GET") return await marketFeed(req, env, url);
