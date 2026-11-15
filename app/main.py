@@ -2,7 +2,7 @@ from pathlib import Path
 from fastapi import FastAPI,HTTPException,Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from .analyzer import analyze_ticker
+from .training import analyze_and_learn
 from .errors import AnalysisError
 
 BASE=Path(__file__).resolve().parent
@@ -20,7 +20,7 @@ def health():
 @app.get("/api/analyze/{ticker}")
 def analyze(ticker:str,period:str=Query("5y",pattern="^(1y|2y|5y|10y|max)$"),horizon:int=Query(30,ge=1,le=504)):
     try:
-        return analyze_ticker(ticker,period,horizon)
+        return analyze_and_learn(ticker,period,horizon)
     except AnalysisError as error:
         raise HTTPException(422,str(error)) from error
     except Exception as error:
