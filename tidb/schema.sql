@@ -83,3 +83,9 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
   attempts INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS api_rate_limits_window_idx ON api_rate_limits(window_start);
+
+CREATE TABLE IF NOT EXISTS model_learning_state (
+  ticker TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
