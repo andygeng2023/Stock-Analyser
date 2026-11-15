@@ -286,6 +286,7 @@ def run_market_scan(source="both", progress_callback=None):
     refined.sort(key=lambda item: item["score"], reverse=True)
     if progress_callback: progress_callback(100, "Ranking complete", f"Ranked {min(len(refined), FINAL_RESULTS)} results from {len(refined)} successful refinements.")
     return {
+        "model_version": "adaptive-ensemble-v1",
         "scan_type": "two_stage_arima_svr",
         "source": source,
         "universe_size": len(symbols),
