@@ -1,32 +1,59 @@
 import postgres from "npm:postgres@3.4.7";
 
 function parseTidbConnection(raw: string, passwordOverride: string) {
-  let dsn = String(raw || "").trim();
+  let dsn = String(raw || "").trim().replace(/^\uFEFF/, "");
   if (!dsn) throw new Error("DATABASE_URL is missing.");
-  // TiDB CLI connection details may be copied as: psql 'postgresql://...'.
-  // Remove the command wrapper before parsing the underlying connection URL.
-  dsn = dsn.replace(/^(?:\\)?psql\s+/i, "");
-  if ((dsn.startsWith("'") && dsn.endsWith("'")) || (dsn.startsWith('"') && dsn.endsWith('"'))) {
-    dsn = dsn.slice(1, -1);
-  }
+
+  // Accept a bare URL or a URL copied from a TiDB CLI command/config value.
+  const schemeAt = dsn.search(/postgres(?:ql)?:\/\//i);
+  if (schemeAt >= 0) dsn = dsn.slice(schemeAt).trim();
+  dsn = dsn.replace(/^['"]+|['"]+$/g, "").trim();
+
   let options: Record<string, string> = {};
-  if (/^postgres(?:ql)?:\/\//i.test(dsn)) {
-    const url = new URL(dsn);
+  const urlMatch = dsn.match(/^postgres(?:ql)?:\/\/([^/?#\s]+)(?:\/([^?#\s]*))?(?:\?([^#\s]*))?/i);
+  if (urlMatch) {
+    const authority = urlMatch[1];
+    const at = authority.lastIndexOf("@");
+    if (at < 0) throw new Error("TiDB URL must include a username and host.");
+    const credentials = authority.slice(0, at);
+    const hostPort = authority.slice(at + 1);
+    const separator = credentials.indexOf(":");
+    const rawUser = separator < 0 ? credentials : credentials.slice(0, separator);
+    const rawPassword = separator < 0 ? "" : credentials.slice(separator + 1);
+    const decoded = (value: string) => {
+      try { return decodeURIComponent(value); } catch { return value; }
+    };
+    let host = "";
+    let port = "4000";
+    if (hostPort.startsWith("[")) {
+      const close = hostPort.indexOf("]");
+      if (close < 0) throw new Error("Invalid TiDB URL host.");
+      host = hostPort.slice(1, close);
+      if (hostPort.slice(close + 1).startsWith(":")) port = hostPort.slice(close + 2);
+    } else {
+      const colon = hostPort.lastIndexOf(":");
+      if (colon > -1 && /^\d+$/.test(hostPort.slice(colon + 1))) {
+        host = hostPort.slice(0, colon);
+        port = hostPort.slice(colon + 1);
+      } else host = hostPort;
+    }
+    const params = new URLSearchParams(urlMatch[3] || "");
     options = {
-      host: url.hostname,
-      port: url.port || "4000",
-      user: decodeURIComponent(url.username),
-      password: decodeURIComponent(url.password),
-      dbname: decodeURIComponent(url.pathname.replace(/^\//, "")) || "postgres",
-      sslmode: url.searchParams.get("sslmode") || "verify-full",
+      host,
+      port,
+      user: decoded(rawUser),
+      password: decoded(rawPassword),
+      dbname: decoded(urlMatch[2] || "") || "postgres",
+      sslmode: params.get("sslmode") || "verify-full",
     };
   } else {
+    // Also accept libpq-style key=value connection strings.
     for (const match of dsn.matchAll(/([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g)) {
       options[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
     }
   }
+
   let database = String(options.dbname || options.database || "postgres").replace(/;$/, "");
-  if (/^<db>$/i.test(database) || /^%3cdb%3e$/i.test(database)) database = "postgres";
   const sslMode = String(options.sslmode || "verify-full").toLowerCase();
   if (!options.host || !options.user) throw new Error("TiDB connection details are incomplete.");
   if (sslMode === "disable" || sslMode === "allow") throw new Error("TiDB connections must use TLS.");
