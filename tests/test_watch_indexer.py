@@ -11,12 +11,12 @@ class WatchIndexerTests(unittest.TestCase):
         self.assertIn("SELECT DISTINCT ticker FROM watchlist_items", fetch_all.call_args.args[0])
 
     @patch("app.watch_indexer.fetch_all")
-    def test_recent_index_only_uses_rapidindex(self, fetch_all):
+    def test_recent_index_only_uses_preview_index(self, fetch_all):
         fetch_all.return_value = [{"ticker": "AAPL", "indexed_at": "2026-11-01T00:00:00+00:00"}]
-        result = watch_indexer.recent_rapid_index(["AAPL"])
+        result = watch_indexer.recent_preview_index(["AAPL"])
         query, params = fetch_all.call_args.args
         self.assertIn("indexer=%s", query)
-        self.assertEqual(params[1:4], ("5y", 30, "rapidIndex"))
+        self.assertEqual(params[1:4], ("5y", 30, "previewIndex"))
         self.assertEqual(set(result), {"AAPL"})
 
 
