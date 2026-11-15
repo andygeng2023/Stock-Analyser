@@ -19,13 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     concurrency:
-      group: stock-market-indexer-tidb-v2-${{ matrix.indexer }}-${{ matrix.shard }}
+      group: stock-market-indexer-tidb-v2-${{ matrix.shard }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        indexer: [rapidIndex, SlowIndex]
         shard: [0, 1]
     steps:
       - uses: actions/checkout@v4
@@ -34,13 +33,12 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - name: Run ${{ matrix.indexer }} shard ${{ matrix.shard }}
+      - name: Run rapidIndex shard ${{ matrix.shard }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
-          INDEXER_NAME: ${{ matrix.indexer }}
           INDEX_SHARD: ${{ matrix.shard }}
         run: python -u -m app.indexer
