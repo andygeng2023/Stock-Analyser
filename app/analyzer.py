@@ -234,6 +234,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             "all_model_hybrid":_metrics(actual_returns,all_model_hybrid),
             "ensemble":ensemble_metrics,
             "hybrid":ensemble_metrics,
+            "primary_hybrid":ensemble_metrics,
             "models":individual_metrics,
             "model_assessment":model_assessment,
             "svm_directional_accuracy":round(float(accuracy_score(
