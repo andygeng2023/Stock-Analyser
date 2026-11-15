@@ -54,6 +54,9 @@ function parseTidbConnection(raw: string, passwordOverride: string) {
   }
 
   let database = String(options.dbname || options.database || "postgres").replace(/;$/, "");
+  // TiDB Cloud displays <DB> as a placeholder in its PostgreSQL connection template.
+  // The Starter cluster default database is postgres; never send the literal placeholder.
+  if (/^<db>$/i.test(database) || /^%3cdb%3e$/i.test(database)) database = "postgres";
   const sslMode = String(options.sslmode || "verify-full").toLowerCase();
   if (!options.host || !options.user) throw new Error("TiDB connection details are incomplete.");
   if (sslMode === "disable" || sslMode === "allow") throw new Error("TiDB connections must use TLS.");
