@@ -21,11 +21,8 @@
     <div class="prose">
 <h2>What it does</h2>
 <p>Stock Analyser combines a shared market-data index with an experimental ARIMA–SVR analysis model. Search and market screens let you explore indexed companies, while detailed views present historical prices, model forecasts, technical indicators, fundamentals and model diagnostics.</p>
-<h2>Indexers</h2>
-<h3>RapidIndex</h3>
-<p>RapidIndex uses five years of price history and a 30-trading-day forecast horizon. It powers the shared market cache and the WatchIndex refresh process.</p>
-<h3>SlowIndex</h3>
-<p>SlowIndex uses the maximum available history and an approximately one-year forecast horizon. It is intended for a longer-horizon comparison with RapidIndex.</p>
+<h2>Shared market index</h2>
+<p>The shared index uses five years of price history and a 30-trading-day forecast horizon. It powers market discovery, cached analysis and the WatchIndex refresh process. Custom analyses can still use different history and forecast ranges without creating a separate index.</p>
 <h3>WatchIndex</h3>
 <p>WatchIndex checks saved watchlists across accounts. It reuses a recent RapidIndex result when one has been indexed within the six-hour cache window and refreshes stale or missing entries otherwise.</p>
 <h2>Important limitations</h2>
