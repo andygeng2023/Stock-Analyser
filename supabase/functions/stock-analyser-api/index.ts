@@ -265,13 +265,15 @@ async function requestAnalysis(req,env) {
     return row?json({id:row.id,status:"completed",ticker:"SCAN",mode,cached:true,cache_created_at:row.created_at}):json({found:false,mode,source:scanSource});
   }
   if(!body.hard_rescan && mode==="analysis" && save!=="none") {
-    const cutoff=new Date(Date.now()-8*3600000).toISOString();
+    const cacheHours=save==="FullIndex"?24:8;
+    const cutoff=new Date(Date.now()-cacheHours*3600000).toISOString();
     const requiredVersion=save==="FullIndex"?"adaptive-full-ensemble-v1":"adaptive-ensemble-v2";
     const cached=await env.DB.prepare("SELECT source_job_id,indexed_at FROM market_index WHERE ticker=? AND period=? AND horizon=? AND indexer=? AND indexed_at>=? AND source_job_id IS NOT NULL AND result LIKE ? LIMIT 1").bind(ticker,period,horizon,save,cutoff,"%"+requiredVersion+"%").first();
     if(cached?.source_job_id)return json({id:cached.source_job_id,status:"completed",ticker,mode,cached:true,cache_source:"market_index",cache_created_at:cached.indexed_at});
   }
   if(!body.hard_rescan && (mode==="scan"||save!=="none")) {
-    const cutoff=new Date(Date.now()-8*3600000).toISOString();
+    const cacheHours=mode==="analysis"&&save==="FullIndex"?24:8;
+    const cutoff=new Date(Date.now()-cacheHours*3600000).toISOString();
     const requiredVersion=mode==="scan"?"adaptive-ensemble-v3":save==="FullIndex"?"adaptive-full-ensemble-v1":"adaptive-ensemble-v2";
     const cached=await env.DB.prepare("SELECT id,created_at FROM analysis_jobs WHERE job_type=? AND scan_source=? AND ticker=? AND period=? AND horizon=? AND save_to_indexer=? AND status='completed' AND result IS NOT NULL AND result LIKE ? AND created_at>=? ORDER BY created_at DESC LIMIT 1").bind(mode,scanSource,ticker,period,horizon,save,"%"+requiredVersion+"%",cutoff).first();
     if(cached)return json({id:cached.id,status:"completed",ticker,mode,cached:true,cache_created_at:cached.created_at});
