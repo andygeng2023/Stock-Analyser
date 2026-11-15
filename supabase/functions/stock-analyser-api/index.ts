@@ -53,9 +53,9 @@ function parseTidbConnection(raw: string, passwordOverride: string) {
     }
   }
 
-  let database = String(options.dbname || options.database || "postgres").replace(/;$/, "");
-  // TiDB Cloud displays <DB> as a placeholder in its PostgreSQL connection template.
-  // The Starter cluster default database is postgres; never send the literal placeholder.
+  let database = String(options.dbname || options.database || "postgres").replace(/;$/, "").replace(/[\'"]+$/g, "").trim();
+  // TiDB Cloud displays <DB> as a placeholder. Some copied connection templates
+  // retain a trailing quote; normalize that before selecting the Starter default.
   if (/^<db>$/i.test(database) || /^%3cdb%3e$/i.test(database)) database = "postgres";
   const sslMode = String(options.sslmode || "verify-full").toLowerCase();
   if (!options.host || !options.user) throw new Error("TiDB connection details are incomplete.");
