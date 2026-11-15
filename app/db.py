@@ -215,3 +215,33 @@ def update_one(table: str, key_column: str, key_value, fields: Mapping[str, Any]
     with connect() as conn, conn.cursor() as cur:
         cur.execute(query, values)
         return cur.rowcount
+
+
+def ensure_indexer_schema():
+    """Add independent catalogue cursors for the two global index pipelines.
+
+    TiDB supports online ADD COLUMN IF NOT EXISTS; keeping this migration
+    idempotent lets either scheduled worker safely run first.
+    """
+    columns = {
+        "preview_last_indexed_at": "VARCHAR(40) NULL",
+        "preview_attempted_at": "VARCHAR(40) NULL",
+        "preview_retry_after": "VARCHAR(40) NULL",
+        "preview_last_error": "VARCHAR(250) NULL",
+        "full_last_indexed_at": "VARCHAR(40) NULL",
+        "full_attempted_at": "VARCHAR(40) NULL",
+        "full_retry_after": "VARCHAR(40) NULL",
+        "full_last_error": "VARCHAR(250) NULL",
+    }
+    with connect() as conn, conn.cursor() as cur:
+        for name, column_type in columns.items():
+            cur.execute(
+                f"ALTER TABLE market_index_catalog "
+                f"ADD COLUMN IF NOT EXISTS {name} {column_type}"
+            )
+        # Preserve existing cache rows while switching future writes to the
+        # public PreviewIndex name. Colliding legacy rows are left untouched.
+        cur.execute(
+            """UPDATE analysis_jobs SET save_to_indexer='previewIndex'
+               WHERE save_to_indexer='rapidIndex'"""
+        )
