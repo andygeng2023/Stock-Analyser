@@ -61,7 +61,7 @@ jobs:
         run: |
           status=$(curl --silent --show-error --max-time 30 -o analysis-request.json -w '%{http_code}' \
             -X POST -H "apikey: $API_KEY" -H "Content-Type: application/json" \
-            --data '{"ticker":"AAPL","period":"5y","horizon":30,"save_to_indexer":"rapidIndex"}' "$API_URL" || true)
+            --data '{"ticker":"AAPL","period":"5y","horizon":30,"save_to_indexer":"previewIndex"}' "$API_URL" || true)
           echo "Analysis request: HTTP $status"
           cat analysis-request.json
           echo
