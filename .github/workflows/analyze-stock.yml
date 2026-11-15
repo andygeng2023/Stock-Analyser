@@ -1,9 +1,9 @@
 name: Analyse stock queue
 on:
   schedule:
-    # Start a replacement every six hours, leaving a buffer after the
-    # 350-minute hosted-runner limit.
-    - cron: '43 */6 * * *'
+    # Keep a worker available when the queue becomes active. Scheduled runs
+    # wait behind a healthy worker and never cancel it.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,6 @@ permissions:
 
 concurrency:
   group: stock-analysis-queue
-  # Never cancel a healthy worker just because another trigger arrives.
   cancel-in-progress: false
 
 jobs:
