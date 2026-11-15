@@ -6,7 +6,7 @@ on:
       - "app/**"
       - "requirements.txt"
       - "tests/test_worker_config.py"
-      - ".github/workflows/index-market.yml"
+      - ".github/workflows/**"
   schedule:
     - cron: '13 */6 * * *'
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
             });
             for (const run of runs) {
               if (run.id === context.runId) continue;
-              core.info(`Cancelling superseded market-index run ${run.id}`);
+              core.info(`Cancelling superseded PreviewIndex run ${run.id}`);
               await github.rest.actions.cancelWorkflowRun({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
