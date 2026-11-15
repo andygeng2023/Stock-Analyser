@@ -18,7 +18,6 @@ class WorkerIndexMetadataTests(unittest.TestCase):
         worker.upsert_market_index(
             "job-1", "MSFT", "5y", 30,
             {"fundamentals": {}, "market_summary": {}},
-            "rapidIndex",
         )
 
         self.assertEqual(fetch_one.call_count, 2)
@@ -45,7 +44,6 @@ class WorkerIndexMetadataTests(unittest.TestCase):
                 "fundamentals": {"market_cap": 15_000_000_000},
                 "market_summary": {"average_dollar_volume": 60_000_000},
             },
-            "rapidIndex",
         )
 
         market_row = upsert_one.call_args_list[0].args[1]
