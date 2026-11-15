@@ -254,9 +254,9 @@ async function dispatchWorkflow(env,workflow) {
 }
 async function requestAnalysis(req,env) {
   const body=await req.json(), mode=body.mode==="scan"?"scan":"analysis", ticker=mode==="scan"?"SCAN":String(body.ticker||"").trim().toUpperCase();
-  const period=mode==="scan"?"5y":String(body.period||"5y"), horizon=mode==="scan"?30:Number(body.horizon||30);
   const scanSource=mode==="scan"?String(body.source||"both").toLowerCase():"both";
   const save=mode==="scan"?"none":String(body.save_to_indexer||"previewIndex");
+  const period=mode==="scan"?"5y":save==="FullIndex"?"10y":String(body.period||"5y"), horizon=mode==="scan"?30:Number(body.horizon||30);
   if(mode==="analysis"&&!validTicker(ticker))return json({error:"Enter a valid stock ticker."},400);
   if(!["1y","2y","5y","10y","max"].includes(period)||!Number.isInteger(horizon)||horizon<1||horizon>504)return json({error:"Invalid analysis period or forecast horizon."},400);
   if(!["yfinance","nasdaq","both"].includes(scanSource)||!["previewIndex","FullIndex","none"].includes(save))return json({error:"Invalid analysis options."},400);
