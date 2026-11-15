@@ -295,13 +295,14 @@ async function marketFeed(req,env,url) {
     const rows=await env.DB.prepare("SELECT ticker,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' LIMIT 1500").all();
     return json({suggestions:rows.results.map(r=>{const x=parse(r.result)||{};return {ticker:r.ticker,company:x.company||r.ticker,exchange:x.exchange||null,type:"Indexed stock"};}).filter(x=>x.ticker.toLowerCase().includes(q.toLowerCase())||x.company.toLowerCase().includes(q.toLowerCase())).slice(0,9)});
   }
-  // Read the large JSON index in small independent queries. A single 1,500-row
-  // result can exceed TiDB Starter transaction memory and make the entire feed fail.
+  // TiDB Starter has a strict per-transaction memory ceiling. The result column
+  // contains sizeable JSON histories, so keep each response small and cap the
+  // feed scan to the newest 500 rows rather than loading 1,500 large records.
   const indexedRows=[];
-  for(let offset=0;offset<1500;offset+=250){
-    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' ORDER BY indexed_at DESC LIMIT 250 OFFSET ?").bind(offset).all();
+  for(let offset=0;offset<500;offset+=50){
+    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' ORDER BY indexed_at DESC LIMIT 50 OFFSET ?").bind(offset).all();
     indexedRows.push(...batch.results);
-    if(batch.results.length<250)break;
+    if(batch.results.length<50)break;
   }
   const stocks=indexedRows.map(row=>{const r=parse(row.result)||{},s=r.market_summary||{},f=r.fundamentals||{},m=r.model?.metrics?.backtest||{},num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d,optional=v=>v==null?null:num(v,null);
     const market_cap=num(row.market_cap||f.market_cap),avg_dollar_volume=num(row.avg_dollar_volume||s.average_dollar_volume),return_1m=num(s.return_1m),return_1y=num(s.return_1y),vol=num(s.annualized_volatility,100),draw=num(s.max_drawdown,-100),profit=num(f.profit_margin,-1),roe=num(f.return_on_equity,-1),accuracy=optional(m.test_accuracy??m.ensemble?.directional_accuracy??r.model?.metrics?.hybrid?.directional_accuracy);
