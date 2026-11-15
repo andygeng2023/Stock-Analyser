@@ -48,7 +48,7 @@ jobs:
               """)
               found = {row["table_name"] for row in cur.fetchall()}
           expected = {"users", "sessions", "watchlist_items", "analysis_jobs",
-                      "market_index", "market_index_catalog", "api_rate_limits"}
+                      "market_index", "market_index_catalog", "api_rate_limits", "model_learning_state"}
           missing = expected - found
           if missing:
               raise SystemExit("Missing TiDB tables: " + ", ".join(sorted(missing)))
