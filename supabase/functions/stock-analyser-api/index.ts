@@ -240,13 +240,22 @@ async function watchlist(req,env) {
   const tickers=items.results.map(x=>x.ticker);
   if(!tickers.length) return json({items:[]});
   const placeholders=tickers.map(()=>"?").join(",");
-  const indexed=await env.DB.prepare("SELECT ticker,result,indexed_at FROM market_index WHERE period='5y' AND horizon=30 AND indexer='previewIndex' AND ticker IN ("+placeholders+")").bind(...tickers).all();
-  const map=new Map(indexed.results.map(row=>[row.ticker,row]));
-  const cutoff=Date.now()-6*3600000;
-  const stale=tickers.filter(t=>{const r=map.get(t);return !r?.indexed_at||Date.parse(r.indexed_at)<cutoff;});
+  const fullIndexed=await env.DB.prepare("SELECT ticker,result,indexed_at,indexer FROM market_index WHERE period='10y' AND horizon=30 AND indexer='FullIndex' AND ticker IN ("+placeholders+")").bind(...tickers).all();
+  const fullMap=new Map(fullIndexed.results.map(row=>[row.ticker,row]));
+  const missing=tickers.filter(t=>!fullMap.has(t));
+  const missingPlaceholders=missing.map(()=>"?").join(",");
+  const previewIndexed=missing.length?await env.DB.prepare("SELECT ticker,result,indexed_at,indexer FROM market_index WHERE period='5y' AND horizon=30 AND indexer='previewIndex' AND ticker IN ("+missingPlaceholders+")").bind(...missing).all():{results:[]};
+  const map=new Map(previewIndexed.results.map(row=>[row.ticker,row]));
+  for(const row of fullIndexed.results)map.set(row.ticker,row);
+  const stale=tickers.filter(t=>{
+    const row=map.get(t);
+    if(!row?.indexed_at)return true;
+    const maxAge=row.indexer==="FullIndex"?24*3600000:6*3600000;
+    return Date.now()-Date.parse(row.indexed_at)>maxAge;
+  });
   // WatchIndex is scheduled by GitHub Actions; no outbound GitHub credential is needed here.
   const compact=(raw,at)=>{const r=parse(raw);if(!r)return null;const sample=(v,n)=>{if(!Array.isArray(v))return[];const a=v.map(Number).filter(Number.isFinite);return a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);};return {company:r.company||r.ticker,currency:r.currency||"USD",price:r.price??null,change_percent:r.change_percent??null,as_of:r.as_of??null,indexed_at:at,history_preview:sample(r.history?.close,72),forecast_preview:["adaptive-ensemble-v2","adaptive-full-ensemble-v1"].includes(r.model?.model_version)?sample(r.forecast?.hybrid,30):[],market_summary:r.market_summary||{},fundamentals:{market_cap:r.fundamentals?.market_cap??null,sector:r.fundamentals?.sector??null,industry:r.fundamentals?.industry??null,profit_margin:r.fundamentals?.profit_margin??null,return_on_equity:r.fundamentals?.return_on_equity??null},model:{metrics:{hybrid:r.model?.metrics?.hybrid||{}}},forecast:{horizon:r.forecast?.horizon||30,expected_change_percent:r.forecast?.expected_change_percent??null}};};
-  return json({items:items.results.map(item=>{const row=map.get(item.ticker);return {ticker:item.ticker,added_at:item.created_at,analysis:compact(row?.result,row?.indexed_at||null),indexed_at:row?.indexed_at||null,index_fresh:Boolean(row?.indexed_at&&Date.parse(row.indexed_at)>=cutoff),awaiting_watchindex:stale.includes(item.ticker)};}),refreshing:stale.length>0});
+  return json({items:items.results.map(item=>{const row=map.get(item.ticker);return {ticker:item.ticker,added_at:item.created_at,indexer:row?.indexer||null,analysis:compact(row?.result,row?.indexed_at||null),indexed_at:row?.indexed_at||null,index_fresh:Boolean(row?.indexed_at&&!stale.includes(item.ticker)),awaiting_watchindex:stale.includes(item.ticker)};}),refreshing:stale.length>0});
 }
 async function dispatchWorkflow(env,workflow) {
   const res=await fetch("https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/"+workflow+"/dispatches",{method:"POST",headers:{"Accept":"application/vnd.github+json","Authorization":"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"},body:JSON.stringify({ref:"main"})});
