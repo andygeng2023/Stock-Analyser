@@ -57,7 +57,7 @@ class WorkerIndexMetadataTests(unittest.TestCase):
 
     @patch("app.worker.update_job")
     @patch("app.worker.upsert_market_index")
-    @patch("app.worker.analyze_ticker")
+    @patch("app.worker.analyze_and_learn")
     def test_job_is_not_marked_complete_before_index_write(self, analyze, index, update):
         events = []
         analyze.return_value = {"ticker": "MSFT"}
