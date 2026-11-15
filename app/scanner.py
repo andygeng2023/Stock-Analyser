@@ -1,15 +1,18 @@
 """Two-stage market scan: fast universe filter, then the existing ARIMA–SVR model."""
 import csv
 import io
+import json
 import math
 import re
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
 from .training import analyze_and_learn
+from .db import fetch_all
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
@@ -244,19 +247,60 @@ def fast_filter(symbols, progress_callback=None):
     return ranked, len(ranked)
 
 
+def _load_fresh_indexed_analyses(tickers, max_age_hours=6):
+    """Reuse recent shared RapidIndex analyses before spending compute on a rescan."""
+    symbols = list(dict.fromkeys(str(ticker).upper() for ticker in tickers if ticker))
+    if not symbols:
+        return {}
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    placeholders = ",".join(["%s"] * len(symbols))
+    try:
+        rows = fetch_all(
+            f"""SELECT ticker,result,indexed_at FROM market_index
+                WHERE ticker IN ({placeholders})
+                  AND period=%s AND horizon=%s AND indexer=%s AND indexed_at>=%s""",
+            tuple(symbols) + ("5y", 30, "rapidIndex", cutoff),
+        )
+    except Exception as exc:
+        # The scanner remains functional if the shared cache is temporarily
+        # unavailable; it simply falls back to fresh analysis.
+        print(f"Indexed analysis lookup unavailable; using fresh analysis: {str(exc)[:160]}")
+        return {}
+    cached = {}
+    for row in rows or []:
+        result = row.get("result")
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except (TypeError, ValueError):
+                continue
+        if isinstance(result, dict) and result.get("forecast"):
+            cached[row["ticker"]] = result
+    return cached
+
+
 def run_market_scan(source="both", progress_callback=None):
     symbols = load_universe(source, progress_callback)
     candidates, eligible_count = fast_filter(symbols, progress_callback)
     candidates = candidates[:FAST_CANDIDATES]
     refined = []
     failures = []
+    indexed_cache = _load_fresh_indexed_analyses([item["ticker"] for item in candidates])
+    reused_count = 0
     for candidate_index, item in enumerate(candidates, start=1):
         ticker = item["ticker"]
         if progress_callback:
             progress_callback(60 + int(35 * (candidate_index - 1) / max(1, len(candidates))), "ARIMA–SVR refinement", f"Refining candidate {candidate_index}/{len(candidates)}: {ticker}.")
         try:
-            # Keep the detailed model identical to the Search screen's baseline.
-            analysis = analyze_and_learn(ticker, period="5y", horizon=30, progress_callback=lambda p, stage, detail: progress_callback(60 + int(0.35 * p), stage, f"{ticker}: {detail}") if progress_callback else None)
+            # Prefer a recent shared indexed analysis. This avoids repeating
+            # expensive model work and upstream data requests for the same ticker.
+            analysis = indexed_cache.get(ticker)
+            if analysis is not None:
+                reused_count += 1
+                analysis_source = "rapidIndex"
+            else:
+                analysis = analyze_and_learn(ticker, period="5y", horizon=30, progress_callback=lambda p, stage, detail: progress_callback(60 + int(0.35 * p), stage, f"{ticker}: {detail}") if progress_callback else None)
+                analysis_source = "fresh"
             metrics = analysis.get("model", {}).get("metrics", {}).get("hybrid", {})
             forecast = analysis.get("forecast", {}).get("expected_change_percent")
             if forecast is None or not math.isfinite(float(forecast)):
@@ -292,6 +336,7 @@ def run_market_scan(source="both", progress_callback=None):
                 "max_drawdown": max_drawdown,
                 "risk_score": risk_score,
                 "risk_level": risk_level,
+                "analysis_source": analysis_source,
                 "fast_score": round(item["fast_score"], 6),
                 "as_of": analysis.get("as_of"),
             })
@@ -311,6 +356,8 @@ def run_market_scan(source="both", progress_callback=None):
         "universe_size": len(symbols),
         "eligible_after_fast_filter": eligible_count,
         "arima_svr_refined": len(refined),
+        "indexed_analyses_reused": reused_count,
+        "fresh_analyses_computed": len(refined) - reused_count,
         "failed_refinements": len(failures),
         "as_of": pd.Timestamp.utcnow().strftime("%Y-%m-%d"),
         "results": refined[:FINAL_RESULTS],
