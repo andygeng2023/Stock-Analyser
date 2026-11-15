@@ -304,7 +304,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
         volume_change=float(full_features["volume_change"].iloc[-1])
         forecast_rejection_counts={}
         forecast_member_counts=[]
-        component_return_paths={name:[] for name in ensemble_weights}
+        component_price_paths={name:[] for name in ensemble_weights}
+        component_prices={name:float(close.iloc[-1]) for name in ensemble_weights}
         for i in range(horizon):
             row={
                 **{f"r{j}":recent[-j] for j in range(1,6)},
@@ -341,9 +342,16 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             for model_name in rejected_members:
                 forecast_rejection_counts[model_name]=forecast_rejection_counts.get(model_name,0)+1
             forecast_member_counts.append(len(active_members))
-            for model_name,value in candidate_returns.items():
-                if model_name in component_return_paths:
-                    component_return_paths[model_name].append(float(value))
+            active_set=set(active_members)
+            for model_name in ensemble_weights:
+                value=candidate_returns.get(model_name)
+                if value is not None and model_name in active_set:
+                    component_prices[model_name]*=float(np.exp(value))
+                    component_price_paths[model_name].append(round(component_prices[model_name],4))
+                else:
+                    # Keep every model series aligned to forecast dates. Null
+                    # marks a step where the adaptive ensemble rejected that model.
+                    component_price_paths[model_name].append(None)
 
             # Compatibility component paths remain available to existing charts.
             svr_return=float(arima_return+correction)
@@ -453,7 +461,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 "sector":info.get("sector"),"industry":info.get("industry"),
             },
             "model":{
-                "model_version":"adaptive-ensemble-v1",
+                "model_version":"adaptive-ensemble-v2",
                 "model_family":"ARIMA + 10-model adaptive ML ensemble",
                 "ensemble":ensemble_report,
                 "learning_state":learning_state_out,
@@ -466,6 +474,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             "forecast":{
                 "horizon":horizon,
                 "dates":[date.strftime("%Y-%m-%d") for date in forecast_dates],
+                "components":component_price_paths,
                 "arima":[round(value,4) for value in arima_path],
                 "arima_svr":[round(float(value),4) for value in arima_svr_price_path],
                 "svr":[round(float(value),4) for value in svr_direct_price_path],
