@@ -139,7 +139,7 @@ const now = () => new Date().toISOString();
 async function allowRate(env, req, bucket, limit, windowMs) {
   const ip=(req.headers.get("x-forwarded-for")||req.headers.get("x-real-ip")||"unknown").split(",")[0].trim();
   const key=await sha(bucket+":"+ip), current=Date.now(), cutoff=current-windowMs;
-  const row=await env.DB.prepare("INSERT INTO api_rate_limits(bucket_key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET attempts=CASE WHEN window_start<=? THEN 1 ELSE attempts+1 END,window_start=CASE WHEN window_start<=? THEN ? ELSE window_start END RETURNING attempts").bind(key,current,cutoff,cutoff,current).first();
+  const row=await env.DB.prepare("INSERT INTO api_rate_limits(bucket_key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET attempts=CASE WHEN api_rate_limits.window_start<=? THEN 1 ELSE api_rate_limits.attempts+1 END,window_start=CASE WHEN api_rate_limits.window_start<=? THEN ? ELSE api_rate_limits.window_start END RETURNING attempts").bind(key,current,cutoff,cutoff,current).first();
   return Number(row?.attempts||0)<=limit;
 }
 const validTicker = value => /^[A-Z0-9.^=-]{1,20}$/.test(String(value || ""));
