@@ -104,7 +104,7 @@ def _metrics(actual,predicted):
         "directional_accuracy":round(float(np.mean(np.sign(actual)==np.sign(predicted))*100),2),
     }
 
-def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning_state=None):
+def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning_state=None,model_profile="preview"):
     ticker=ticker.strip().upper()
     if not ticker or len(ticker)>20 or not all(c.isalnum() or c in ".-^=" for c in ticker):
         raise AnalysisError("Enter a valid ticker.")
@@ -186,7 +186,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
 
         # Train a diverse set of models on the same causal feature window.
         # Each candidate is judged independently on the untouched chronological holdout.
-        model_factories=build_regressors()
+        model_factories=build_regressors(profile=model_profile)
         candidate_predictions={"arima":predicted_arima}
         validation_models={}
         model_fit_errors={}
@@ -240,6 +240,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 "start":str(validation_dates[0].date()),
                 "end":str(validation_dates[-1].date()),
                 "test_accuracy":ensemble_metrics["directional_accuracy"],
+                "accuracy_target_percent":70,
+                "accuracy_target_met":bool(ensemble_metrics["directional_accuracy"] >= 70.0),
                 "ensemble":ensemble_metrics,
                 "zero_return_baseline_rmse":round(float(baseline_rmse),7),
             },
@@ -426,6 +428,10 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
         drawdown=close/close.cummax()-1
         annual_vol=float(returns.tail(252).std()*np.sqrt(252)*100)
         chart=history
+        # Keep indexed JSON compact. Model fitting above still uses all available rows.
+        max_chart_points = 480 if model_profile == "full" else 360
+        if len(chart) > max_chart_points:
+            chart = chart.iloc[np.linspace(0, len(chart) - 1, max_chart_points, dtype=int)]
         forecast_dates=pd.bdate_range(close.index[-1]+pd.offsets.BDay(1),periods=horizon)
 
         return {
@@ -461,8 +467,10 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 "sector":info.get("sector"),"industry":info.get("industry"),
             },
             "model":{
-                "model_version":"adaptive-ensemble-v2",
-                "model_family":"ARIMA + 10-model adaptive ML ensemble",
+                "model_version":"adaptive-full-ensemble-v1" if model_profile == "full" else "adaptive-ensemble-v2",
+                "model_profile":model_profile,
+                "accuracy_target_percent":70,
+                "model_family":f"ARIMA + {len(model_factories)}-model adaptive ML ensemble" + (" · extended history" if model_profile == "full" else ""),
                 "ensemble":ensemble_report,
                 "learning_state":learning_state_out,
                 "arima_order":list(full_order),
@@ -492,6 +500,8 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 "expected_change_percent":round((forecast_path[-1]/float(close.iloc[-1])-1)*100,2),
             },
             "history":{
+                "sampled":len(chart) < len(history),
+                "source_observations":int(len(history)),
                 "dates":[date.strftime("%Y-%m-%d") for date in chart.index],
                 "close":[round(float(value),4) for value in chart["Close"]],
             },
