@@ -125,7 +125,7 @@ let watchlistItems = [];
 let watchlistLoaded = false;
 let watchlistLoading = false;
 let watchlistRefreshTimer = null;
-const rapidIndexQueuePending = new Set();
+const previewIndexQueuePending = new Set();
 
 async function watchlistRequest(action, ticker) {
   if (!authClient) throw new Error("Authentication is unavailable. Reload the app and try again.");
@@ -664,7 +664,7 @@ function rows(obj) {
   ).join("");
 }
 
-async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardRescan = false, latestOnly = false, saveToIndexer = "rapidIndex") {
+async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardRescan = false, latestOnly = false, saveToIndexer = "previewIndex") {
   const payload = mode === "scan"
     ? { mode: "scan", source: "both", hard_rescan: hardRescan, latest_only: latestOnly }
     : { ticker, period, horizon, hard_rescan: hardRescan, save_to_indexer: saveToIndexer };
@@ -756,7 +756,7 @@ function stockSparkline(stock) {
   }
   const tone = Number(stock.expected_change_percent) < 0 ? "negative" : "positive";
   return '<svg class="stock-sparkline" viewBox="0 0 280 54" preserveAspectRatio="none" role="img" aria-label="' +
-    (forecast.length ? 'Historical prices and RapidIndex forecast' : 'Historical prices') + '">' +
+    (forecast.length ? 'Historical prices and PreviewIndex forecast' : 'Historical prices') + '">' +
     '<path class="stock-history-line" d="' + historyPath + '"></path>' +
     (forecastPath ? '<path class="stock-forecast-line ' + tone + '" d="' + forecastPath + '"></path>' : '') +
     '</svg>';
@@ -942,7 +942,7 @@ async function loadWatchlist(force = false) {
     const pending = watchlistItems.filter(item => !item.analysis || item.index_fresh === false).length;
     $("watchlist-status").textContent = pending
       ? pending + " stock" + (pending === 1 ? " is" : "s are") + " being refreshed by WatchIndex. Cached results remain visible; Yahoo Finance history fills gaps."
-      : "Your RapidIndex data is up to date.";
+      : "Your PreviewIndex data is up to date.";
     if (pending) scheduleWatchlistRefresh();
     else if (watchlistRefreshTimer) { clearTimeout(watchlistRefreshTimer); watchlistRefreshTimer = null; }
   } catch (error) {
@@ -1158,28 +1158,28 @@ async function refreshVisibleMarketCards(force = false) {
       }
     }
 
-    // First fetch only the shared RapidIndex records. No Yahoo request can delay these charts.
+    // First fetch only the shared PreviewIndex records. No Yahoo request can delay these charts.
     await requestCardMarketMode("indexed", indexRefresh, (ticker, item) => {
       indexedCardDataCache.set(ticker, item);
       indexedCardDataCacheAt.set(ticker, Date.now());
       applyCardChart(ticker, item, cardsByTicker);
 
-      const hasRapidIndex = Array.isArray(item.forecast_preview) && item.forecast_preview.length > 0;
+      const hasPreviewIndex = Array.isArray(item.forecast_preview) && item.forecast_preview.length > 0;
       const isWatchlistCard = (cardsByTicker.get(ticker) || []).every(card => card.matches(".watchlist-v2-item"));
-      if (!isWatchlistCard && !hasRapidIndex && !rapidIndexQueuePending.has(ticker)) {
-        rapidIndexQueuePending.add(ticker);
-        requestAnalysis(ticker, "5y", 30, "analysis", false, false, "rapidIndex")
+      if (!isWatchlistCard && !hasPreviewIndex && !previewIndexQueuePending.has(ticker)) {
+        previewIndexQueuePending.add(ticker);
+        requestAnalysis(ticker, "5y", 30, "analysis", false, false, "previewIndex")
           .then(job => {
             if (job?.id && job.status !== "completed") trackJob({
-              id: job.id, ticker, type: "analysis", status: job.status || "queued", stage: "Queued for RapidIndex"
+              id: job.id, ticker, type: "analysis", status: job.status || "queued", stage: "Queued for PreviewIndex"
             });
           })
-          .catch(error => console.warn("Could not queue RapidIndex for " + ticker + ":", error))
-          .finally(() => rapidIndexQueuePending.delete(ticker));
+          .catch(error => console.warn("Could not queue PreviewIndex for " + ticker + ":", error))
+          .finally(() => previewIndexQueuePending.delete(ticker));
       }
     });
 
-    // Only request Yahoo historical prices when the RapidIndex/shared result has no chart.
+    // Only request Yahoo historical prices when the PreviewIndex/shared result has no chart.
     const fallbackTickers = tickers.filter(ticker => {
       const indexed = indexedCardDataCache.get(ticker);
       if (indexed?.history_preview?.length) return false;
@@ -1530,7 +1530,7 @@ async function openStockDetails(ticker, options = {}) {
   try {
     const request = options.jobId
       ? { id: options.jobId, status: "queued", reused: true }
-      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, options.saveToIndexer || "rapidIndex");
+      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, options.saveToIndexer || "previewIndex");
     trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
