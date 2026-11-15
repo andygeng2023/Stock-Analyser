@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from .training import analyze_and_learn
-from .db import fetch_all, insert_one, verify_database
+from .db import fetch_all, insert_one, verify_database, ensure_indexer_schema
 from .worker import request_json, upsert_market_index
 
 PERIOD, HORIZON = "5y", 30
@@ -20,7 +20,7 @@ def watchlist_tickers():
     return [r["ticker"] for r in rows if isinstance(r.get("ticker"), str) and r["ticker"]]
 
 
-def recent_rapid_index(tickers):
+def recent_preview_index(tickers):
     if not tickers:
         return {}
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=RECENT_HOURS)).isoformat()
@@ -29,7 +29,7 @@ def recent_rapid_index(tickers):
         f"""SELECT ticker,indexed_at FROM market_index
             WHERE ticker IN ({marks}) AND period=%s AND horizon=%s
               AND indexer=%s AND indexed_at >= %s""",
-        (*tickers, PERIOD, HORIZON, "rapidIndex", cutoff),
+        (*tickers, PERIOD, HORIZON, "previewIndex", cutoff),
     )
     return {r["ticker"]: r.get("indexed_at") for r in rows}
 
@@ -38,12 +38,12 @@ def save_analysis(ticker, result):
     now, job_id = datetime.now(timezone.utc).isoformat(), str(uuid.uuid4())
     insert_one("analysis_jobs", {
         "id": job_id, "ticker": ticker, "period": PERIOD, "horizon": HORIZON,
-        "job_type": "analysis", "scan_source": "both", "save_to_indexer": "rapidIndex",
-        "status": "completed", "result": result, "error": None,
+        "job_type": "analysis", "scan_source": "both", "save_to_indexer": "previewIndex",
+        "status": "completed", "result": None, "error": None,
         "client_ip_hash": "watch-indexer", "attempts": 1, "progress": 100,
         "stage": "Completed by WatchIndex", "created_at": now, "updated_at": now,
     })
-    upsert_market_index(job_id, ticker, PERIOD, HORIZON, result, "rapidIndex")
+    upsert_market_index(job_id, ticker, PERIOD, HORIZON, result, "previewIndex")
 
 
 def run_once(failed_until):
@@ -51,9 +51,9 @@ def run_once(failed_until):
     if not tickers:
         print("No authenticated watchlists currently contain stocks.")
         return 0
-    recent = recent_rapid_index(tickers)
+    recent = recent_preview_index(tickers)
     pending = [t for t in tickers if t not in recent and failed_until.get(t, 0) <= time.monotonic()]
-    print(f"Watchlist stocks={len(tickers)}; fresh RapidIndex={len(recent)}; pending={len(pending)}.")
+    print(f"Watchlist stocks={len(tickers)}; fresh PreviewIndex={len(recent)}; pending={len(pending)}.")
     completed = 0
     for i, ticker in enumerate(pending, 1):
         print(f"[{i}/{len(pending)}] WatchIndex analysing {ticker}.")
@@ -82,6 +82,7 @@ def main():
     if not os.environ.get("DATABASE_URL") or not os.environ.get("GITHUB_TOKEN"):
         raise RuntimeError("DATABASE_URL and GITHUB_TOKEN are required.")
     print("Database preflight:", verify_database())
+    ensure_indexer_schema()
     started, failed_until = time.monotonic(), {}
     print("WatchIndex worker started against TiDB.")
     while time.monotonic() - started < MAX_RUNTIME_SECONDS:
