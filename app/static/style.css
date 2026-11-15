@@ -2703,28 +2703,11 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
 }
 
 
-/* Risk-ranked market scan cards: consistent across Home and Discover. */
-.scan-rank-card{flex:0 0 232px;min-width:0;min-height:220px;display:flex;flex-direction:column;gap:12px;padding:15px;text-align:left;color:inherit;background:#141f32;border:1px solid #263650;border-radius:13px;scroll-snap-align:start;cursor:pointer}
-.scan-rank-card:hover{background:#192840;border-color:#48618a}
-.scan-rank-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.scan-rank-number{font-size:11px;font-weight:750;color:#91a0b8}
-.scan-risk{font-size:10px;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid currentColor}
-.scan-risk-low{color:#5bd6a1}.scan-risk-medium{color:#e6b75d}.scan-risk-high{color:#f08b8b}
-.scan-rank-identity{display:flex;flex-direction:column;gap:3px;min-width:0}
-.scan-rank-identity strong{font-size:19px;line-height:1.15}
-.scan-rank-identity small{font-size:10px;color:#91a0b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.scan-rank-return{display:flex;flex-direction:column;gap:2px;font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
-.scan-rank-return small{font-size:9px;font-weight:550;color:#91a0b8}
-.scan-rank-riskline{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid #263650;font-size:10px;color:#91a0b8}
-.scan-rank-riskline strong{color:#e8eef9;font-variant-numeric:tabular-nums}
-.scan-rank-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
-.scan-rank-stats span{display:flex;flex-direction:column;gap:2px;min-width:0}
-.scan-rank-stats small{font-size:8px;color:#91a0b8}
-.scan-rank-stats strong{font-size:10px;font-variant-numeric:tabular-nums}
-html[data-theme="light"] .scan-rank-card{background:#fff;color:#172235;border-color:#dce3ed}
-html[data-theme="light"] .scan-rank-card:hover{background:#f7f9fc;border-color:#aebbd0}
-html[data-theme="light"] .scan-rank-identity small,html[data-theme="light"] .scan-rank-return small,html[data-theme="light"] .scan-rank-riskline{color:#64748b}
-html[data-theme="light"] .scan-rank-riskline{border-color:#e2e8f0}
-html[data-theme="light"] .scan-rank-riskline strong{color:#172235}
-@media(max-width:700px){.scan-rank-card{flex-basis:218px;min-height:218px;padding:14px}}
-@media(max-width:380px){.scan-rank-card{flex-basis:208px}}
+.stock-card-heading-right{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex:none;min-width:0}
+.stock-risk-label{display:inline-flex;align-items:center;white-space:nowrap;padding:3px 6px;border:1px solid currentColor;border-radius:999px;font-size:8px;font-weight:700;line-height:1.2}
+.stock-risk-label.risk-lower{color:#5bd6a1}
+.stock-risk-label.risk-moderate{color:#e6b75d}
+.stock-risk-label.risk-higher,.stock-risk-label.risk-unrated{color:#f08b8b}
+html[data-theme="light"] .stock-risk-label.risk-lower{color:#16865a}
+html[data-theme="light"] .stock-risk-label.risk-moderate{color:#95630b}
+html[data-theme="light"] .stock-risk-label.risk-higher,html[data-theme="light"] .stock-risk-label.risk-unrated{color:#b33d3d}
