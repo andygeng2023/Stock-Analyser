@@ -9,7 +9,7 @@ from sklearn.ensemble import (
     HistGradientBoostingRegressor,
     RandomForestRegressor,
 )
-from sklearn.linear_model import BayesianRidge, ElasticNet, HuberRegressor, Ridge
+from sklearn.linear_model import BayesianRidge, ElasticNet, HuberRegressor, LinearRegression, Ridge
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import make_pipeline
@@ -70,14 +70,10 @@ def build_regressors(profile="preview"):
                 estimator=DecisionTreeRegressor(max_depth=2, min_samples_leaf=5),
                 n_estimators=120, learning_rate=0.025, loss="linear", random_state=42,
             ),
-            "random_forest_deep": lambda: RandomForestRegressor(
-                n_estimators=240, max_depth=8, min_samples_leaf=6,
-                max_features=0.75, max_samples=0.85, random_state=43, n_jobs=1,
+            "decision_tree": lambda: DecisionTreeRegressor(
+                max_depth=5, min_samples_leaf=8, random_state=43,
             ),
-            "extra_trees_deep": lambda: ExtraTreesRegressor(
-                n_estimators=240, max_depth=8, min_samples_leaf=6,
-                max_features=0.75, random_state=43, n_jobs=1,
-            ),
+            "linear_regression": lambda: make_pipeline(StandardScaler(), LinearRegression()),
         })
     return models
 
@@ -121,7 +117,7 @@ def build_hybrid_predictions(predictions):
         "hybrid_arima_xgb": lambda: blend(["arima", "xgboost"], [0.5, 0.5]),
         "hybrid_tree_consensus": lambda: mean([
             "random_forest", "extra_trees", "gradient_boosting",
-            "hist_gradient_boosting", "xgboost", "random_forest_deep",
+            "hist_gradient_boosting", "xgboost", "ada_boost",
         ]),
         "hybrid_linear_consensus": lambda: mean([
             "ridge", "elastic_net", "bayesian_ridge", "huber",
