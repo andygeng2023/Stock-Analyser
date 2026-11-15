@@ -298,7 +298,7 @@ async function marketFeed(req,env,url) {
   // Avoid wide scans, sorts, joins and IN-list hash joins on TiDB Starter.
   // Fetch a small ticker list, then use primary-key lookups for one JSON record
   // at a time in bounded parallel batches.
-  const tickerRows=await env.DB.prepare("SELECT ticker FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' LIMIT 60").all();
+  const tickerRows=await env.DB.prepare("SELECT ticker FROM market_index_catalog WHERE last_indexed_at IS NOT NULL LIMIT 60").all();
   const indexedRows=[];
   for(let offset=0;offset<tickerRows.results.length;offset+=10){
     const tickers=tickerRows.results.slice(offset,offset+10).map(row=>row.ticker);
