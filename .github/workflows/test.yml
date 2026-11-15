@@ -35,4 +35,4 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
-        run: python -c "from app.db import verify_database; print('Live database verification passed:', verify_database())"
+        run: python -c "from app.db import verify_database, ensure_indexer_schema; print('Live database verification passed:', verify_database()); ensure_indexer_schema(); print('PreviewIndex and FullIndex schema verified.')"
