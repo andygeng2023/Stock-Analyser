@@ -6,7 +6,7 @@ on:
       - "app/**"
       - "requirements.txt"
       - "tests/test_worker_config.py"
-      - ".github/workflows/index-market.yml"
+      - ".github/workflows/**"
   schedule:
     - cron: '43 */6 * * *'
   workflow_dispatch:
@@ -26,13 +26,13 @@ jobs:
             const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: "index-market.yml",
+              workflow_id: "index-full.yml",
               status: "in_progress",
               per_page: 100
             });
             for (const run of runs) {
               if (run.id === context.runId) continue;
-              core.info(`Cancelling superseded market-index run ${run.id}`);
+              core.info(`Cancelling superseded FullIndex run ${run.id}`);
               await github.rest.actions.cancelWorkflowRun({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
