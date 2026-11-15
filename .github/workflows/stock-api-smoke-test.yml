@@ -32,3 +32,24 @@ jobs:
           done
           echo "API health check did not pass."
           exit 1
+
+      - name: Verify market feed endpoint
+        env:
+          API_URL: https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api/market-feed
+          API_KEY: sb_publishable_-Ty9nayZpJSDo9YwKVzEdw_dG5bD6Kz
+        run: |
+          status=$(curl --silent --show-error --max-time 30 -o market-feed.json -w '%{http_code}' \
+            -H "apikey: $API_KEY" -H "Accept: application/json" "$API_URL" || true)
+          echo "Market feed: HTTP $status"
+          if [ -f market-feed.json ]; then
+            python - <<'PY'
+          import json
+          with open("market-feed.json") as f:
+              data = json.load(f)
+          print("Response fields:", ", ".join(sorted(data.keys())))
+          print("Indexed stocks:", data.get("indexed_count", "not reported"))
+          print("Recommended:", len(data.get("recommended", [])))
+          print("Trending:", len(data.get("trending", [])))
+          PY
+          fi
+          test "$status" = "200"
