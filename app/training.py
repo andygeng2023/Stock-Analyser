@@ -203,18 +203,9 @@ def analyze_and_learn(
 
     now = datetime.now(timezone.utc).isoformat()
     state = (result.get("model") or {}).get("learning_state")
-    if isinstance(state, dict):
-        state = dict(state)
-        state["analyses_seen"] = int(local_state.get("analyses_seen", 0) or 0) + 1
-        state["last_trained_at"] = now
-        state["last_data_date"] = result.get("as_of")
-        try:
-            _store_profile(symbol, indexer, state)
-        except Exception as exc:
-            print(f"Could not persist ticker learning memory for {symbol}: {str(exc)[:160]}")
 
-    # Avoid counting the same ticker/history/horizon repeatedly when workers
-    # or users request an analysis before Yahoo Finance has supplied new prices.
+    # Do not count repeated analysis requests against unchanged source data as
+    # independent training observations.
     model_meta = result.get("model") or {}
     signature = "|".join((
         str(model_meta.get("model_version") or indexer),
@@ -223,8 +214,17 @@ def analyze_and_learn(
         str(result.get("as_of") or ""),
     ))
     is_new_observation = local_state.get("last_training_signature") != signature
+
     if isinstance(state, dict):
+        state = dict(state)
+        state["analyses_seen"] = int(local_state.get("analyses_seen", 0) or 0) + (1 if is_new_observation else 0)
+        state["last_trained_at"] = now
+        state["last_data_date"] = result.get("as_of")
         state["last_training_signature"] = signature
+        try:
+            _store_profile(symbol, indexer, state)
+        except Exception as exc:
+            print(f"Could not persist ticker learning memory for {symbol}: {str(exc)[:160]}")
     updated_global = (
         _update_global_profile(indexer, result, global_state)
         if is_new_observation else global_state
