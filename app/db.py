@@ -19,6 +19,7 @@ REQUIRED_TABLES = frozenset({
     "market_index",
     "market_index_catalog",
     "api_rate_limits",
+    "model_learning_state",
 })
 
 
