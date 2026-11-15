@@ -7,17 +7,17 @@ def main():
     print("Database preflight:", verify_database())
     now = datetime.now(timezone.utc)
     rapid = (now - timedelta(hours=8)).isoformat()
-    slow = (now - timedelta(days=30)).isoformat()
+    legacy_cutoff = (now - timedelta(days=30)).isoformat()
     rate_limit_cutoff = int(now.timestamp() * 1000) - 86400000
     with connect() as conn, conn.cursor() as cur:
         cur.execute("""DELETE FROM market_index
-                       WHERE (indexer='SlowIndex' AND indexed_at<%s)
-                          OR (indexer<>'SlowIndex' AND indexed_at<%s)""", (slow, rapid))
+                       WHERE (indexer='rapidIndex' AND indexed_at<%s)
+                          OR (indexer<>'rapidIndex' AND indexed_at<%s)""", (rapid, legacy_cutoff))
         index_rows = cur.rowcount
         cur.execute("""DELETE FROM analysis_jobs WHERE status='completed'
-                       AND ((save_to_indexer='SlowIndex' AND created_at<%s)
-                         OR (save_to_indexer<>'SlowIndex' AND created_at<%s))""",
-                    (slow, rapid))
+                       AND ((save_to_indexer='rapidIndex' AND created_at<%s)
+                         OR (save_to_indexer<>'rapidIndex' AND created_at<%s))""",
+                    (rapid, legacy_cutoff))
         job_rows = cur.rowcount
         cur.execute("DELETE FROM api_rate_limits WHERE window_start<%s", (rate_limit_cutoff,))
         rate_rows = cur.rowcount
