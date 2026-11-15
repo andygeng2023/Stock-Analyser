@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 import yfinance as yf
 
-from .analyzer import analyze_ticker
+from .training import analyze_and_learn
 from .scanner import load_universe, fast_filter
 from .db import fetch_all, insert_one, upsert_many, upsert_one, verify_database
 from .worker import request_json
@@ -276,7 +276,7 @@ def run(shard, indexer="rapidIndex"):
                 retry_field: (attempted_dt + timedelta(minutes=ATTEMPT_LEASE_MINUTES)).isoformat(),
                 error_field: None, "updated_at": attempted_at,
             }, ("ticker",))
-            result = analyze_ticker(ticker, period=period, horizon=horizon)
+            result = analyze_and_learn(ticker, period=period, horizon=horizon)
             job = insert_one("analysis_jobs", {
                 "id": __import__("uuid").uuid4().hex,
                 "ticker": ticker, "period": period, "horizon": horizon,
