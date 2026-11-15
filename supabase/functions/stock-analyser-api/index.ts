@@ -136,9 +136,9 @@ const json = (body, status = 200, extra = {}) => new Response(JSON.stringify(bod
   status, headers: { ...cors, "Cache-Control": "no-store", ...extra },
 });
 const now = () => new Date().toISOString();
-async function allowRate(env, req, bucket, limit, windowMs) {
+async function allowRate(env, req, bucket, limit, windowMs, identity = null) {
   const ip=(req.headers.get("x-forwarded-for")||req.headers.get("x-real-ip")||"unknown").split(",")[0].trim();
-  const key=await sha(bucket+":"+ip), current=Date.now(), cutoff=current-windowMs;
+  const key=await sha(bucket+":"+(identity || "ip:"+ip)), current=Date.now(), cutoff=current-windowMs;
   const row=await env.DB.prepare("INSERT INTO api_rate_limits(bucket_key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET attempts=CASE WHEN api_rate_limits.window_start<=? THEN 1 ELSE api_rate_limits.attempts+1 END,window_start=CASE WHEN api_rate_limits.window_start<=? THEN ? ELSE api_rate_limits.window_start END RETURNING attempts").bind(key,current,cutoff,cutoff,current).first();
   return Number(row?.attempts||0)<=limit;
 }
@@ -279,8 +279,11 @@ async function requestAnalysis(req,env) {
   const queued=await env.DB.prepare("SELECT COUNT(*) AS n FROM analysis_jobs WHERE status='queued'").first();
   if(queued.n>=100)return json({error:"The analysis queue is currently full. Please try again shortly."},503);
   // Only count genuinely new jobs. Cache hits and reused queued/running jobs
-  // must not consume a user's hourly submission allowance.
-  if(!await allowRate(env,req,"analysis-request",60,3600000))return json({error:"Analysis request limit reached for this connection. Please try again later."},429);
+  // must not consume an hourly allowance. Authenticated users receive separate
+  // buckets; anonymous requests remain protected by a per-IP bucket.
+  const requester=await authenticate(req,env);
+  const rateIdentity=requester?"user:"+requester.id:null;
+  if(!await allowRate(env,req,"analysis-request-v2",120,3600000,rateIdentity))return json({error:"Analysis request limit reached for this connection. Please try again later."},429);
   const id=crypto.randomUUID(), created=now();
   await env.DB.prepare("INSERT INTO analysis_jobs(id,ticker,period,horizon,job_type,scan_source,save_to_indexer,status,client_ip_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'queued','public',?,?)").bind(id,ticker,period,horizon,mode,scanSource,save,created,created).run();
   // The queue worker polls on a five-minute GitHub Actions schedule. This avoids requiring a GitHub token in the public API Worker.
