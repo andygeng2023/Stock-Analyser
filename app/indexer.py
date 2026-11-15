@@ -15,7 +15,7 @@ import yfinance as yf
 
 from .training import analyze_and_learn
 from .scanner import load_universe, fast_filter
-from .db import fetch_all, insert_one, upsert_many, upsert_one, verify_database
+from .db import fetch_all, insert_one, upsert_many, upsert_one, verify_database, ensure_indexer_schema
 from .worker import request_json
 
 PER_SHARD_LIMIT = int(os.environ.get("INDEX_BATCH_SIZE_PER_SHARD", "100"))
@@ -24,12 +24,26 @@ MARKET_CAP_LOOKUP_WORKERS = 5
 PRIORITY_REFRESH_COUNT = int(os.environ.get("INDEX_PRIORITY_REFRESH_COUNT", "20"))
 REFRESH_AFTER_HOURS = float(os.environ.get("INDEX_REFRESH_AFTER_HOURS", "6.0"))
 ATTEMPT_LEASE_MINUTES = int(os.environ.get("INDEX_ATTEMPT_LEASE_MINUTES", "45"))
-RAPID_PERIOD, RAPID_HORIZON = "5y", 30
+PREVIEW_PERIOD, PREVIEW_HORIZON = "5y", 30
+FULL_PERIOD, FULL_HORIZON = "10y", 30
+FULL_BATCH_LIMIT = int(os.environ.get("FULL_INDEX_BATCH_SIZE_PER_SHARD", "25"))
+INDEXER_SETTINGS = {
+    "previewIndex": {"period": PREVIEW_PERIOD, "horizon": PREVIEW_HORIZON,
+                     "cursor": "preview_last_indexed_at", "refresh_hours": 6.0,
+                     "batch_limit": PER_SHARD_LIMIT, "priority_count": PRIORITY_REFRESH_COUNT,
+                     "profile": "preview"},
+    "FullIndex": {"period": FULL_PERIOD, "horizon": FULL_HORIZON,
+                  "cursor": "full_last_indexed_at", "refresh_hours": 18.0,
+                  "batch_limit": FULL_BATCH_LIMIT,
+                  "priority_count": max(5, PRIORITY_REFRESH_COUNT // 2),
+                  "profile": "full"},
+}
 _UNIVERSE_SNAPSHOT = None
 
 
-def _retry_fields():
-    return "rapid_attempted_at", "rapid_retry_after", "rapid_last_error"
+def _retry_fields(indexer):
+    prefix = "preview" if indexer == "previewIndex" else "full"
+    return f"{prefix}_attempted_at", f"{prefix}_retry_after", f"{prefix}_last_error"
 
 
 def _retry_after_for_failure(error, attempted_at=None):
@@ -96,23 +110,28 @@ def _get_universe_snapshot():
     return _UNIVERSE_SNAPSHOT
 
 
-def run(shard):
+def run(shard, indexer="previewIndex"):
     shard_count = 2
     if shard < 0 or shard >= shard_count:
         raise ValueError("Invalid indexer shard.")
-    period, horizon = RAPID_PERIOD, RAPID_HORIZON
-    cursor_field = "last_indexed_at"
-    attempt_field, retry_field, error_field = _retry_fields()
-    refresh_after_hours = REFRESH_AFTER_HOURS
-    batch_limit = PER_SHARD_LIMIT
-    print(f"rapidIndex shard {shard + 1}/{shard_count} preparing candidates ({period}, {horizon} trading days).")
+    if indexer not in INDEXER_SETTINGS:
+        raise ValueError(f"Unknown indexer: {indexer}")
+    settings = INDEXER_SETTINGS[indexer]
+    period, horizon = settings["period"], settings["horizon"]
+    cursor_field = settings["cursor"]
+    attempt_field, retry_field, error_field = _retry_fields(indexer)
+    refresh_after_hours = settings["refresh_hours"]
+    batch_limit = settings["batch_limit"]
+    priority_count = settings["priority_count"]
+    print(f"{indexer} shard {shard + 1}/{shard_count} preparing candidates ({period}, {horizon} trading days).")
     ranked, universe_size, eligible = _get_universe_snapshot()
     if not ranked:
         print("No eligible stocks found; nothing to index.")
         return 0
 
-    catalog_rows = fetch_all("""SELECT ticker,last_indexed_at,
-        rapid_attempted_at,rapid_retry_after,rapid_last_error,market_cap
+    catalog_rows = fetch_all("""SELECT ticker,last_indexed_at,market_cap,
+        preview_last_indexed_at,preview_attempted_at,preview_retry_after,preview_last_error,
+        full_last_indexed_at,full_attempted_at,full_retry_after,full_last_error
         FROM market_index_catalog""")
     catalog = {row["ticker"]: row for row in catalog_rows or []}
 
@@ -154,6 +173,7 @@ def run(shard):
             "avg_dollar_volume": item.get("dollar_volume"),
             "priority": float(item.get("fast_score") or 0),
             "last_indexed_at": old.get("last_indexed_at"),
+            cursor_field: old.get(cursor_field),
             "updated_at": now,
         })
     for start in range(0, len(metadata), 250):
@@ -162,7 +182,7 @@ def run(shard):
     # Read the live cache separately from the catalogue. The catalogue survives
     # the eight-hour expiry; market_index tells us whether a usable result exists.
     live_rows = fetch_all("""SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority
-        FROM market_index WHERE period=%s AND horizon=%s""", (period, horizon))
+        FROM market_index WHERE period=%s AND horizon=%s AND indexer=%s""", (period, horizon, indexer))
     live_index = {row["ticker"]: row for row in (live_rows or [])}
 
     def parse_time(value):
@@ -214,7 +234,7 @@ def run(shard):
         if _retry_is_available(catalog.get(item["ticker"], {}), now_dt)
     ]
     cooling_down = len(ranked) - len(retry_ready)
-    elite = sorted(retry_ready, key=lambda x: x["_quality"], reverse=True)[:PRIORITY_REFRESH_COUNT]
+    elite = sorted(retry_ready, key=lambda x: x["_quality"], reverse=True)[:priority_count]
     refresh_due = [
         item for item in elite
         if item["_indexed_at"] is None or item["_age_hours"] >= refresh_after_hours
@@ -267,14 +287,14 @@ def run(shard):
                 retry_field: (attempted_dt + timedelta(minutes=ATTEMPT_LEASE_MINUTES)).isoformat(),
                 error_field: None, "updated_at": attempted_at,
             }, ("ticker",))
-            result = analyze_and_learn(ticker, period=period, horizon=horizon)
+            result = analyze_and_learn(ticker, period=period, horizon=horizon, indexer=indexer)
             job = insert_one("analysis_jobs", {
                 "id": __import__("uuid").uuid4().hex,
                 "ticker": ticker, "period": period, "horizon": horizon,
-                "job_type": "analysis", "scan_source": "both", "save_to_indexer": "rapidIndex",
-                "status": "completed", "result": result, "error": None,
+                "job_type": "analysis", "scan_source": "both", "save_to_indexer": indexer,
+                "status": "completed", "result": None, "error": None,
                 "client_ip_hash": "market-indexer", "attempts": 1,
-                "progress": 100, "stage": "Completed by rapidIndex",
+                "progress": 100, "stage": f"Completed by {indexer}",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
@@ -282,7 +302,7 @@ def run(shard):
             cap = item.get("market_cap")
             indexed_at = datetime.now(timezone.utc).isoformat()
             index_row = {
-                "ticker": ticker, "period": period, "horizon": horizon, "indexer": "rapidIndex",
+                "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
                 "result": result, "source_job_id": job_id,
                 "indexed_at": indexed_at,
                 "market_cap": cap, "avg_dollar_volume": item.get("dollar_volume"),
@@ -291,6 +311,7 @@ def run(shard):
             upsert_one("market_index", index_row, ("ticker", "period", "horizon", "indexer"))
             upsert_one("market_index_catalog", {
                 "ticker": ticker, "market_cap": cap,
+                "last_indexed_at": indexed_at,
                 "avg_dollar_volume": item.get("dollar_volume"),
                 "priority": float(item.get("fast_score") or 0),
                 cursor_field: indexed_at, attempt_field: attempted_at,
@@ -316,16 +337,20 @@ def run(shard):
                 f"{str(exc)[:250]}",
                 file=sys.stderr,
             )
-    print(f"rapidIndex shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
+    print(f"{indexer} shard {shard + 1} indexed {completed}/{len(shard_candidates)} stocks.")
     return 0
 
 
-def dispatch_successor():
+def dispatch_successor(indexer="previewIndex"):
     token = os.environ["GITHUB_TOKEN"]
     repository = os.environ["GITHUB_REPOSITORY"]
     ref = os.environ.get("GITHUB_REF_NAME", "main")
+    workflow = os.environ.get(
+        "INDEX_WORKFLOW_FILE",
+        "index-market.yml" if indexer == "previewIndex" else "index-full.yml",
+    )
     request_json(
-        f"https://api.github.com/repos/{repository}/actions/workflows/index-market.yml/dispatches",
+        f"https://api.github.com/repos/{repository}/actions/workflows/{workflow}/dispatches",
         method="POST",
         payload={"ref": ref},
         headers={
@@ -337,10 +362,10 @@ def dispatch_successor():
     print("Successor indexer workflow dispatched for a graceful six-hour hand-off.")
 
 
-def _handoff_after_runtime():
+def _handoff_after_runtime(indexer="previewIndex"):
     time.sleep(340 * 60)
     try:
-        dispatch_successor()
+        dispatch_successor(indexer)
     except Exception as exc:
         print(f"Could not dispatch successor indexer: {exc}", file=sys.stderr)
 
@@ -357,16 +382,17 @@ def parse_index_shard(value):
     return shard
 
 
-def main():
+def main(indexer_name="previewIndex"):
     print("Database preflight:", verify_database())
+    ensure_indexer_schema()
     shard = parse_index_shard(os.environ.get("INDEX_SHARD", "0"))
     # One leader dispatches the next generation; avoid duplicate hand-offs.
     if shard == 0:
-        threading.Thread(target=_handoff_after_runtime, daemon=True).start()
+        threading.Thread(target=_handoff_after_runtime, args=(indexer_name,), daemon=True).start()
     started = time.monotonic()
     while time.monotonic() - started < 345 * 60:
         try:
-            run(shard)
+            run(shard, indexer_name)
         except Exception as exc:
             print(f"Indexing cycle failed: {str(exc)[:300]}", file=sys.stderr)
         if time.monotonic() - started < 345 * 60:
