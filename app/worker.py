@@ -8,7 +8,7 @@ import urllib.request
 from datetime import datetime, timezone, timedelta
 
 from .training import analyze_and_learn
-from .db import connect, fetch_one, update_one, upsert_one, verify_database
+from .db import connect, fetch_one, update_one, upsert_one, verify_database, ensure_indexer_schema
 from .scanner import run_market_scan
 
 POLL_SECONDS = 5
@@ -40,13 +40,13 @@ def _finite_number(value):
     return number if math.isfinite(number) else None
 
 
-def upsert_market_index(job_id, ticker, period, horizon, result):
+def upsert_market_index(job_id, ticker, period, horizon, result, indexer="previewIndex"):
     fundamentals = result.get("fundamentals") or {}
     summary = result.get("market_summary") or {}
     existing_index = fetch_one(
         """SELECT market_cap,avg_dollar_volume,priority FROM market_index
-           WHERE ticker=%s AND period=%s AND horizon=%s AND indexer='rapidIndex'""",
-        (ticker, period, horizon),
+           WHERE ticker=%s AND period=%s AND horizon=%s AND indexer=%s""",
+        (ticker, period, horizon, indexer),
     ) or {}
     existing_catalog = fetch_one(
         "SELECT market_cap,avg_dollar_volume,priority FROM market_index_catalog WHERE ticker=%s",
@@ -75,7 +75,7 @@ def upsert_market_index(job_id, ticker, period, horizon, result):
 
     indexed_at = datetime.now(timezone.utc).isoformat()
     upsert_one("market_index", {
-        "ticker": ticker, "period": period, "horizon": horizon, "indexer": "rapidIndex",
+        "ticker": ticker, "period": period, "horizon": horizon, "indexer": indexer,
         "result": result, "source_job_id": job_id, "indexed_at": indexed_at,
         "market_cap": cap, "avg_dollar_volume": dollar_volume, "priority": priority,
     }, ("ticker", "period", "horizon", "indexer"))
@@ -83,6 +83,7 @@ def upsert_market_index(job_id, ticker, period, horizon, result):
         "ticker": ticker, "market_cap": cap,
         "avg_dollar_volume": dollar_volume, "priority": priority,
         "last_indexed_at": indexed_at,
+        ("preview_last_indexed_at" if indexer == "previewIndex" else "full_last_indexed_at"): indexed_at,
         "updated_at": indexed_at,
     }, ("ticker",))
 
@@ -135,13 +136,22 @@ def process_job(job):
         progress(1, "Starting", "Preparing the requested analysis.")
         if job.get("job_type") == "scan":
             result = run_market_scan(job.get("scan_source") or "both", progress_callback=progress)
+            keep_job_result = True
         else:
-            result = analyze_and_learn(ticker, job["period"], int(job["horizon"]),
-                                    progress_callback=progress)
-        if job.get("job_type") != "scan" and job.get("save_to_indexer", "rapidIndex") == "rapidIndex":
-            upsert_market_index(job_id, ticker, job["period"], int(job["horizon"]), result)
-        update_job(job_id, {"status": "completed", "result": result, "error": None,
-                            "progress": 100, "stage": "Complete"})
+            save_to_indexer = job.get("save_to_indexer") or "previewIndex"
+            indexer = save_to_indexer if save_to_indexer in {"previewIndex", "FullIndex"} else "previewIndex"
+            result = analyze_and_learn(
+                ticker, job["period"], int(job["horizon"]),
+                progress_callback=progress, indexer=indexer,
+            )
+            keep_job_result = save_to_indexer == "none"
+            if save_to_indexer in {"previewIndex", "FullIndex"}:
+                upsert_market_index(
+                    job_id, ticker, job["period"], int(job["horizon"]), result,
+                    indexer=save_to_indexer,
+                )
+        update_job(job_id, {"status": "completed", "result": result if keep_job_result else None,
+                            "error": None, "progress": 100, "stage": "Complete"})
     except Exception as exc:
         try:
             update_job(job_id, {"status": "failed", "error": str(exc)[:500],
@@ -155,6 +165,7 @@ def main():
     if not os.environ.get("DATABASE_URL"):
         raise RuntimeError("DATABASE_URL is missing.")
     print("Database preflight:", verify_database())
+    ensure_indexer_schema()
     started, last_work, completed = time.monotonic(), time.monotonic(), 0
     print("Analysis queue worker started against the verified database.")
     while True:
