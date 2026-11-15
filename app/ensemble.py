@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import numpy as np
 from sklearn.ensemble import (
+    AdaBoostRegressor,
     ExtraTreesRegressor,
     GradientBoostingRegressor,
     HistGradientBoostingRegressor,
     RandomForestRegressor,
 )
-from sklearn.linear_model import ElasticNet, Ridge
+from sklearn.linear_model import BayesianRidge, ElasticNet, HuberRegressor, Ridge
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -16,9 +18,11 @@ from sklearn.svm import SVR
 from xgboost import XGBRegressor
 
 
-def build_regressors():
-    """Return fresh estimators; every analysis fits them against its latest history."""
-    return {
+def build_regressors(profile="preview"):
+    """Return fresh estimators; FullIndex adds slower, complementary learners."""
+    if profile not in {"preview", "full"}:
+        raise ValueError("Unknown model profile.")
+    models = {
         "svr_rbf": lambda: make_pipeline(
             StandardScaler(), SVR(kernel="rbf", C=4.0, epsilon=0.0005, gamma="scale")
         ),
@@ -56,6 +60,30 @@ def build_regressors():
             StandardScaler(), KNeighborsRegressor(n_neighbors=7, weights="distance")
         ),
     }
+    if profile == "full":
+        models.update({
+            "bayesian_ridge": lambda: make_pipeline(StandardScaler(), BayesianRidge()),
+            "huber": lambda: make_pipeline(StandardScaler(), HuberRegressor(
+                epsilon=1.5, alpha=0.0001, max_iter=300
+            )),
+            "ada_boost": lambda: AdaBoostRegressor(
+                estimator=DecisionTreeRegressor(max_depth=2, min_samples_leaf=5),
+                n_estimators=120, learning_rate=0.025, loss="linear", random_state=42,
+            ),
+            "random_forest_deep": lambda: RandomForestRegressor(
+                n_estimators=240, max_depth=8, min_samples_leaf=6,
+                max_features=0.75, max_samples=0.85, random_state=43, n_jobs=1,
+            ),
+            "extra_trees_deep": lambda: ExtraTreesRegressor(
+                n_estimators=240, max_depth=8, min_samples_leaf=6,
+                max_features=0.75, random_state=43, n_jobs=1,
+            ),
+            "gradient_boosting_deep": lambda: GradientBoostingRegressor(
+                n_estimators=180, learning_rate=0.018, max_depth=3,
+                min_samples_leaf=6, loss="huber", random_state=43,
+            ),
+        })
+    return models
 
 
 def _metric_values(actual, predicted):
