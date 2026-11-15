@@ -6,19 +6,22 @@ from .db import connect, verify_database
 def main():
     print("Database preflight:", verify_database())
     now = datetime.now(timezone.utc)
-    short_cache_cutoff = (now - timedelta(hours=8)).isoformat()
+    preview_cutoff = (now - timedelta(hours=8)).isoformat()
+    full_cutoff = (now - timedelta(hours=24)).isoformat()
     legacy_cutoff = (now - timedelta(days=30)).isoformat()
     rate_limit_cutoff = int(now.timestamp() * 1000) - 86400000
     with connect() as conn, conn.cursor() as cur:
         cur.execute("""DELETE FROM market_index
-                       WHERE (indexer IN ('previewIndex','FullIndex') AND indexed_at<%s)
+                       WHERE (indexer='previewIndex' AND indexed_at<%s)
+                          OR (indexer='FullIndex' AND indexed_at<%s)
                           OR (indexer NOT IN ('previewIndex','FullIndex') AND indexed_at<%s)""",
-                    (short_cache_cutoff, legacy_cutoff))
+                    (preview_cutoff, full_cutoff, legacy_cutoff))
         index_rows = cur.rowcount
         cur.execute("""DELETE FROM analysis_jobs WHERE status='completed'
-                       AND ((save_to_indexer IN ('previewIndex','FullIndex','none') AND created_at<%s)
+                       AND ((save_to_indexer IN ('previewIndex','none') AND created_at<%s)
+                         OR (save_to_indexer='FullIndex' AND created_at<%s)
                          OR (save_to_indexer NOT IN ('previewIndex','FullIndex','none') AND created_at<%s))""",
-                    (short_cache_cutoff, legacy_cutoff))
+                    (preview_cutoff, full_cutoff, legacy_cutoff))
         job_rows = cur.rowcount
         cur.execute("DELETE FROM api_rate_limits WHERE window_start<%s", (rate_limit_cutoff,))
         rate_rows = cur.rowcount
