@@ -762,6 +762,33 @@ function stockSparkline(stock) {
     '</svg>';
 }
 
+function marketScanCard(stock, index = 0) {
+  const expected = Number(stock.expected_change_percent);
+  const risk = Number(stock.risk_score);
+  const riskLevel = stock.risk_level || (Number.isFinite(risk) ? (risk < 30 ? "Lower" : risk < 60 ? "Moderate" : "Higher") : "Unrated");
+  const riskTone = riskLevel === "Lower" ? "scan-risk-low" : riskLevel === "Moderate" ? "scan-risk-medium" : "scan-risk-high";
+  const stats = [];
+  if (stock.annualized_volatility != null) stats.push(["Volatility", pct(stock.annualized_volatility)]);
+  if (stock.max_drawdown != null) stats.push(["Max drawdown", pct(stock.max_drawdown)]);
+  if (stock.directional_accuracy != null) stats.push(["Test accuracy", fmt(stock.directional_accuracy, 0) + "%"]);
+  return '<button type="button" class="scan-rank-card" data-ticker="' + esc(stock.ticker) + '" aria-label="Open analysis for ' + esc(stock.ticker) + '">' +
+    '<span class="scan-rank-top"><span class="scan-rank-number">#' + (index + 1) + '</span><span class="scan-risk ' + riskTone + '">' + esc(riskLevel) + ' risk</span></span>' +
+    '<span class="scan-rank-identity"><strong>' + esc(stock.ticker) + '</strong><small>' + esc(stock.company || stock.ticker) + '</small></span>' +
+    '<span class="scan-rank-return ' + (Number.isFinite(expected) && expected < 0 ? "negative" : "positive") + '">' +
+      (Number.isFinite(expected) ? esc(pct(expected)) : "—") + '<small>Expected 30D return</small></span>' +
+    '<span class="scan-rank-riskline"><span>Risk score</span><strong>' + (Number.isFinite(risk) ? esc(fmt(risk, 0)) + ' / 100' : "Unrated") + '</strong></span>' +
+    '<span class="scan-rank-stats">' + stats.map(([label, value]) => '<span><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></span>').join("") + '</span>' +
+  '</button>';
+}
+
+function sortMarketScanResults(results) {
+  return [...(Array.isArray(results) ? results : [])].sort((a, b) => {
+    const returnDiff = Number(b.expected_change_percent ?? -Infinity) - Number(a.expected_change_percent ?? -Infinity);
+    if (Number.isFinite(returnDiff) && returnDiff !== 0) return returnDiff;
+    return Number(a.risk_score ?? 100) - Number(b.risk_score ?? 100);
+  });
+}
+
 function stockCard(stock) {
   const company = stock.company || stock.name || stock.ticker;
   const dailyChange = stock.change_percent;
@@ -1216,9 +1243,9 @@ function renderMarketFeed(data, options = {}) {
     ? (marketFeedFromCache ? "Saved snapshot · " : "Updated ") + updated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : (marketFeedFromCache ? "Saved snapshot" : "");
 
-  const latest = data.latest_scan?.results || [];
+  const latest = sortMarketScanResults(data.latest_scan?.results || []);
   $("home-latest-scan").innerHTML = latest.length
-    ? latest.slice(0, 6).map(stockCard).join("")
+    ? latest.slice(0, 6).map(marketScanCard).join("")
     : '<div class="empty-feed">No completed background scan is available yet. The section will populate after the next shared scan finishes.</div>';
   bindStockButtons($("home-latest-scan"));
 
@@ -1769,12 +1796,12 @@ function render(data) {
 }
 
 function renderScan(data) {
-  const results = data.results || [];
+  const results = sortMarketScanResults(data.results || []);
   $("scan-meta").textContent =
     "Universe: " + fmt(data.universe_size, 0) +
     " stocks · " + fmt(data.eligible_after_fast_filter, 0) +
     " passed the fast filter · " + fmt(data.arima_svr_refined, 0) +
-    " refined with ARIMA–SVR · " + results.length + " ranked results";
+    " refined · ranked by expected 30D return, then lower estimated risk";
 
   const indexedStocks = [
     ...(marketFeed?.recommended || []),
@@ -1784,8 +1811,8 @@ function renderScan(data) {
     ...(marketFeed?.smaller_companies || []),
   ];
   const indexedByTicker = new Map(indexedStocks.map(stock => [stock.ticker, stock]));
-  $("scan-list").innerHTML = results.map(item =>
-    stockCard({ ...(indexedByTicker.get(item.ticker) || {}), ...item })
+  $("scan-list").innerHTML = results.map((item, index) =>
+    marketScanCard({ ...(indexedByTicker.get(item.ticker) || {}), ...item }, index)
   ).join("");
   $("scan-results").hidden = results.length === 0;
   bindStockButtons($("scan-list"));
