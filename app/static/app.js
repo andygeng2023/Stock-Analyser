@@ -99,7 +99,6 @@ let currentScreen = "home";
 let currentTab = "home";
 let detailReturnScreen = "home";
 let currentDetailTicker = "";
-let currentDetailIndexer = "rapidIndex";
 let marketFeed = null;
 let marketFeedLoadedAt = 0;
 let marketFeedFromCache = false;
@@ -1511,11 +1510,8 @@ async function openStockDetails(ticker, options = {}) {
   if (!symbol) return;
   currentDetailTicker = symbol;
   updateDetailWatchlistButton();
-  const indexer = options.indexer === "SlowIndex" ? "SlowIndex" : "rapidIndex";
-  currentDetailIndexer = indexer;
-  const period = options.customPeriod || (indexer === "SlowIndex" ? "max" : "5y");
-  const horizon = Number(options.customHorizon || (indexer === "SlowIndex" ? 252 : 30));
-  updateDetailIndexerSwitch();
+  const period = options.customPeriod || "5y";
+  const horizon = Number(options.customHorizon || 30);
   if (!config.apiBaseUrl) {
     switchScreen("detail");
     $("detail-status").textContent = "The Stock Analyser API is not configured. The API endpoint has not been configured for this deployment.";
@@ -1534,7 +1530,7 @@ async function openStockDetails(ticker, options = {}) {
   try {
     const request = options.jobId
       ? { id: options.jobId, status: "queued", reused: true }
-      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, options.saveToIndexer || indexer);
+      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, options.saveToIndexer || "rapidIndex");
     trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
@@ -1568,23 +1564,6 @@ async function openStockDetails(ticker, options = {}) {
 }
 
 $("search").addEventListener("submit", event => event.preventDefault());
-function updateDetailIndexerSwitch() {
-  document.querySelectorAll("#detail-indexer-switch [data-indexer]").forEach(button => {
-    const selected = button.dataset.indexer === currentDetailIndexer;
-    button.classList.toggle("active", selected);
-    button.setAttribute("aria-pressed", String(selected));
-  });
-}
-
-$("detail-indexer-switch").addEventListener("click", event => {
-  const button = event.target.closest("[data-indexer]");
-  if (!button || button.dataset.indexer === currentDetailIndexer || !currentDetailTicker) return;
-  openStockDetails(currentDetailTicker, {
-    returnScreen: detailReturnScreen,
-    indexer: button.dataset.indexer
-  });
-});
-
 const hardRerunMenu = $("hard-rerun-menu");
 function setHardRerunMenu(open) {
   hardRerunMenu.hidden = !open;
@@ -1595,13 +1574,6 @@ $("detail-hard-rerun").addEventListener("click", () => {
   setHardRerunMenu(hardRerunMenu.hidden);
 });
 hardRerunMenu.addEventListener("click", event => {
-  const choice = event.target.closest("[data-rerun-indexer]");
-  if (choice) {
-    const indexer = choice.dataset.rerunIndexer;
-    setHardRerunMenu(false);
-    openStockDetails(currentDetailTicker, { returnScreen: detailReturnScreen, indexer, hardRescan: true, saveToIndexer: indexer });
-    return;
-  }
   if (event.target.closest("[data-rerun-custom]")) $("hard-rerun-custom").hidden = false;
 });
 $("hard-rerun-custom").addEventListener("submit", event => {
@@ -1609,11 +1581,9 @@ $("hard-rerun-custom").addEventListener("submit", event => {
   const period = $("rerun-history").value;
   const horizon = Number($("rerun-horizon").value);
   const saveToIndexer = $("rerun-save").value;
-  const displayIndexer = period === "max" && horizon === 252 ? "SlowIndex" :
-    period === "5y" && horizon === 30 ? "rapidIndex" : currentDetailIndexer;
   setHardRerunMenu(false);
   openStockDetails(currentDetailTicker, {
-    returnScreen: detailReturnScreen, indexer: displayIndexer,
+    returnScreen: detailReturnScreen,
     customPeriod: period, customHorizon: horizon, hardRescan: true, saveToIndexer
   });
 });
