@@ -78,10 +78,6 @@ def build_regressors(profile="preview"):
                 n_estimators=240, max_depth=8, min_samples_leaf=6,
                 max_features=0.75, random_state=43, n_jobs=1,
             ),
-            "gradient_boosting_deep": lambda: GradientBoostingRegressor(
-                n_estimators=180, learning_rate=0.018, max_depth=3,
-                min_samples_leaf=6, loss="huber", random_state=43,
-            ),
         })
     return models
 
