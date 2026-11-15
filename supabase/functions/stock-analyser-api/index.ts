@@ -320,10 +320,20 @@ async function marketFeed(req,env,url) {
   const trending=unique.filter(s=>s.return_1m>0&&s.avg_dollar_volume>=2e6).sort((a,b)=>b.return_1m-a.return_1m).slice(0,8);
   const popular=unique.filter(s=>s.market_cap>0&&s.avg_dollar_volume>0).sort((a,b)=>(Math.log10(b.market_cap)*.55+Math.log10(b.avg_dollar_volume)*.45)-(Math.log10(a.market_cap)*.55+Math.log10(a.avg_dollar_volume)*.45)).slice(0,8);
   const opportunities=healthy.sort((a,b)=>b.quality_score-a.quality_score).slice(0,8), smallerCompanies=smaller.sort((a,b)=>b.quality_score-a.quality_score).slice(0,12);
-  // The full background-scan JSON can be substantially larger than a stock card
-  // feed and has previously exhausted TiDB's transaction memory. Keep this
-  // endpoint focused on stock cards; the scan panel can load independently.
-  const latest=null;
+  // Fetch only the newest completed scan row, then return a compact shortlist
+  // for Home. Avoid loading or sorting the full scan history into the feed.
+  let latest=null;
+  try {
+    const latestRow=await env.DB.prepare("SELECT result,created_at FROM analysis_jobs WHERE job_type='scan' AND ticker='SCAN' AND period='5y' AND horizon=30 AND scan_source='both' AND status='completed' AND result IS NOT NULL AND result LIKE '%adaptive-ensemble-v3%' ORDER BY created_at DESC LIMIT 1").first();
+    if(latestRow) {
+      const scan=parse(latestRow.result)||{};
+      const scanResults=Array.isArray(scan.results)?scan.results:[];
+      scanResults.sort((a,b)=>Number(b.expected_change_percent??-Infinity)-Number(a.expected_change_percent??-Infinity)||Number(a.risk_score??100)-Number(b.risk_score??100));
+      latest={as_of:scan.as_of||latestRow.created_at,created_at:latestRow.created_at,results:scanResults.slice(0,8),ranking:scan.ranking||null};
+    }
+  } catch(error) {
+    console.warn("Latest market scan could not be attached to Home feed:",error);
+  }
   return json({generated_at:now(),indexed_count:unique.length,small_company_count:smaller.length,quality_small_company_count:healthy.length,latest_scan:latest,recommended,trending,popular,opportunities,smaller_companies:smallerCompanies},200,{"Cache-Control":"public, max-age=60"});
 }
 async function stockMarketData(req,env) {
