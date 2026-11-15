@@ -261,12 +261,23 @@ def run_market_scan(source="both", progress_callback=None):
             forecast = analysis.get("forecast", {}).get("expected_change_percent")
             if forecast is None or not math.isfinite(float(forecast)):
                 continue
-            directional = float(metrics.get("directional_accuracy", 0))
-            rmse = float(metrics.get("rmse", 1))
-            # Forecast return is tempered by validation quality and coarse-screen strength.
-            quality = max(0.0, min(1.0, directional / 100.0))
-            risk_penalty = min(10.0, rmse * 100.0)
-            score = float(forecast) * (0.65 + 0.35 * quality) - risk_penalty
+            directional = float(metrics.get("directional_accuracy", 0) or 0)
+            rmse = float(metrics.get("rmse", 1) or 1)
+            market_risk = analysis.get("market_summary", {})
+            annual_volatility = market_risk.get("annualized_volatility")
+            max_drawdown = market_risk.get("max_drawdown")
+            if annual_volatility is None or max_drawdown is None:
+                # Do not silently present missing risk data as low risk.
+                risk_score = 100.0
+            else:
+                volatility_risk = min(100.0, max(0.0, float(annual_volatility)) / 80.0 * 100.0)
+                drawdown_risk = min(100.0, max(0.0, abs(float(max_drawdown))) / 60.0 * 100.0)
+                validation_error_pct = max(0.0, float(rmse) * 100.0)
+                error_risk = min(100.0, validation_error_pct / 8.0 * 100.0)
+                accuracy_risk = min(100.0, max(0.0, (75.0 - directional) / 35.0 * 100.0))
+                risk_score = 0.45 * volatility_risk + 0.25 * drawdown_risk + 0.20 * error_risk + 0.10 * accuracy_risk
+            risk_score = round(min(100.0, max(0.0, risk_score)), 1)
+            risk_level = "Lower" if risk_score < 30 else "Moderate" if risk_score < 60 else "Higher"
             refined.append({
                 "ticker": ticker,
                 "company": analysis.get("company") or ticker,
@@ -274,20 +285,28 @@ def run_market_scan(source="both", progress_callback=None):
                 "currency": analysis.get("currency", "USD"),
                 "price": analysis.get("price"),
                 "change_percent": analysis.get("change_percent"),
-                "expected_change_percent": forecast,
-                "directional_accuracy": directional,
+                "expected_change_percent": round(float(forecast), 2),
+                "directional_accuracy": round(directional, 2),
                 "validation_rmse": rmse,
+                "annualized_volatility": annual_volatility,
+                "max_drawdown": max_drawdown,
+                "risk_score": risk_score,
+                "risk_level": risk_level,
                 "fast_score": round(item["fast_score"], 6),
-                "score": round(score, 4),
                 "as_of": analysis.get("as_of"),
             })
         except Exception as exc:
             failures.append({"ticker": ticker, "error": str(exc)[:120]})
-    refined.sort(key=lambda item: item["score"], reverse=True)
+    # Expected 30-day return is the primary ranking; lower estimated risk breaks ties.
+    refined.sort(key=lambda item: (
+        -float(item.get("expected_change_percent", -1e9)),
+        float(item.get("risk_score", 100.0)),
+        -float(item.get("directional_accuracy", 0.0)),
+    ))
     if progress_callback: progress_callback(100, "Ranking complete", f"Ranked {min(len(refined), FINAL_RESULTS)} results from {len(refined)} successful refinements.")
     return {
-        "model_version": "adaptive-ensemble-v2",
-        "scan_type": "two_stage_arima_svr",
+        "model_version": "adaptive-ensemble-v3",
+        "scan_type": "two_stage_adaptive_risk_ranked",
         "source": source,
         "universe_size": len(symbols),
         "eligible_after_fast_filter": eligible_count,
@@ -295,5 +314,6 @@ def run_market_scan(source="both", progress_callback=None):
         "failed_refinements": len(failures),
         "as_of": pd.Timestamp.utcnow().strftime("%Y-%m-%d"),
         "results": refined[:FINAL_RESULTS],
-        "notes": "Experimental model ranking, not investment advice. The fast screen uses momentum, trend, volatility and liquidity; the final ranking uses the existing ARIMA–SVR forecast and chronological validation metrics.",
+        "ranking": {"primary": "expected_change_percent_desc", "secondary": "risk_score_asc", "risk_scale": "0=lower estimated risk, 100=higher estimated risk", "risk_inputs": ["annualized_volatility", "max_drawdown", "validation_rmse", "directional_accuracy"]},
+        "notes": "Experimental model screening, not investment advice. Results are ranked by expected 30-day return, with lower estimated risk used as the secondary sort. Risk scores combine annualised volatility, historical maximum drawdown, chronological validation error and directional accuracy. Forecasts and risk estimates are uncertain and can be wrong.",
     }
