@@ -12,7 +12,7 @@ A responsive stock research dashboard using Yahoo Finance data and a walk-forwar
 
 The browser calls the Edge Function using a public publishable key. TiDB credentials are stored only as Edge Function secrets and GitHub Actions secrets; they are never included in frontend JavaScript.
 
-No old indexed stock data is migrated. The TiDB schema is created cleanly and indexes are rebuilt from Yahoo Finance.
+New index results use PreviewIndex and FullIndex. Legacy rapidIndex cache rows are left untouched and will age out through normal cache maintenance; they are not read by the new API.
 
 ## One-time API secret configuration
 
@@ -23,7 +23,7 @@ In the Supabase project **Stock-Analyser** (`nlaookgsiqojxejwvdsn`), open **Proj
 
 Do not paste either value into the repository or chat. The Edge Function accepts the TiDB PostgreSQL connection string (including the TiDB CLI `psql` format) and uses TLS.
 
-The API health endpoint performs a real TiDB connection and verifies all seven required tables:
+The API health endpoint performs a real TiDB connection and verifies all eight required tables:
 
 `https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api/health`
 
