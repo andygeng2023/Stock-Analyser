@@ -175,6 +175,82 @@ def _update_global_profile(indexer, result, previous_global):
     }
 
 
+
+
+def _claim_ticker_observation(key, indexer, signature, model_state, as_of):
+    """Atomically de-duplicate one ticker/profile/history observation."""
+    now = datetime.now(timezone.utc).isoformat()
+    empty = json.dumps({"version": 2, "profiles": {}}, separators=(",", ":"))
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO model_learning_state(ticker,state,updated_at)
+               VALUES(%s,%s,%s) ON CONFLICT(ticker) DO NOTHING""",
+            (key, empty, now),
+        )
+        cur.execute(
+            "SELECT state FROM model_learning_state WHERE ticker=%s FOR UPDATE",
+            (key,),
+        )
+        row = cur.fetchone() or {}
+        root = _decode_state(row.get("state"))
+        profiles = root.get("profiles") if isinstance(root.get("profiles"), dict) else {}
+        if not profiles and root and key not in GLOBAL_KEYS.values():
+            profiles["previewIndex"] = root
+        previous = profiles.get(indexer) if isinstance(profiles.get(indexer), dict) else {}
+        is_new = previous.get("last_training_signature") != signature
+
+        updated = dict(model_state or {})
+        updated["analyses_seen"] = int(previous.get("analyses_seen", 0) or 0) + (1 if is_new else 0)
+        updated["last_trained_at"] = now
+        updated["last_data_date"] = as_of
+        updated["last_training_signature"] = signature
+        profiles[indexer] = updated
+        payload = json.dumps(
+            {"version": 2, "profiles": profiles},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        cur.execute(
+            "UPDATE model_learning_state SET state=%s,updated_at=%s WHERE ticker=%s",
+            (payload, now, key),
+        )
+    return is_new, updated
+
+
+def _record_global_observation(indexer, result):
+    """Update the deployment-wide model prior under a serialised row lock."""
+    key = GLOBAL_KEYS[indexer]
+    now = datetime.now(timezone.utc).isoformat()
+    empty = json.dumps({"version": 2, "profiles": {}}, separators=(",", ":"))
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO model_learning_state(ticker,state,updated_at)
+               VALUES(%s,%s,%s) ON CONFLICT(ticker) DO NOTHING""",
+            (key, empty, now),
+        )
+        cur.execute(
+            "SELECT state FROM model_learning_state WHERE ticker=%s FOR UPDATE",
+            (key,),
+        )
+        row = cur.fetchone() or {}
+        root = _decode_state(row.get("state"))
+        profiles = root.get("profiles") if isinstance(root.get("profiles"), dict) else {}
+        if not profiles and root and indexer == "previewIndex":
+            profiles["previewIndex"] = root
+        previous = profiles.get(indexer) if isinstance(profiles.get(indexer), dict) else {}
+        updated = _update_global_profile(indexer, result, previous)
+        profiles[indexer] = updated
+        payload = json.dumps(
+            {"version": 2, "profiles": profiles},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        cur.execute(
+            "UPDATE model_learning_state SET state=%s,updated_at=%s WHERE ticker=%s",
+            (payload, now, key),
+        )
+    return updated
+
 def analyze_and_learn(
     ticker,
     period="5y",
@@ -204,8 +280,9 @@ def analyze_and_learn(
     now = datetime.now(timezone.utc).isoformat()
     state = (result.get("model") or {}).get("learning_state")
 
-    # Do not count repeated analysis requests against unchanged source data as
-    # independent training observations.
+    # One unique ticker/profile/period/horizon/data-date is one shared
+    # validation observation. The ticker row lock prevents duplicate jobs from
+    # teaching the global model twice about identical source data.
     model_meta = result.get("model") or {}
     signature = "|".join((
         str(model_meta.get("model_version") or indexer),
@@ -213,34 +290,37 @@ def analyze_and_learn(
         str(int(horizon)),
         str(result.get("as_of") or ""),
     ))
-    is_new_observation = local_state.get("last_training_signature") != signature
-
+    is_new_observation = False
+    saved_state = state
     if isinstance(state, dict):
-        state = dict(state)
-        state["analyses_seen"] = int(local_state.get("analyses_seen", 0) or 0) + (1 if is_new_observation else 0)
-        state["last_trained_at"] = now
-        state["last_data_date"] = result.get("as_of")
-        state["last_training_signature"] = signature
         try:
-            _store_profile(symbol, indexer, state)
+            is_new_observation, saved_state = _claim_ticker_observation(
+                symbol, indexer, signature, state, result.get("as_of")
+            )
         except Exception as exc:
             print(f"Could not persist ticker learning memory for {symbol}: {str(exc)[:160]}")
-    updated_global = (
-        _update_global_profile(indexer, result, global_state)
-        if is_new_observation else global_state
-    )
+            # Do not add global evidence when the duplicate guard could not be
+            # committed; that avoids inflating the shared training sample count.
+
+    updated_global = global_state
     if is_new_observation:
         try:
-            _store_profile(global_key, indexer, updated_global)
+            # Re-read and update the global EWMA while holding its row lock.
+            updated_global = _record_global_observation(indexer, result)
         except Exception as exc:
             print(f"Could not persist global learning memory for {indexer}: {str(exc)[:160]}")
+    else:
+        try:
+            updated_global = _load_profile(global_key, indexer) or global_state
+        except Exception:
+            updated_global = global_state
 
     model = result.setdefault("model", {})
     model["learning"] = {
         "profile": indexer,
         "scope": "shared deployment-wide aggregate validation memory",
         "global_analyses_seen": int(updated_global.get("analyses_seen", 0) or 0),
-        "ticker_analyses_seen": int(state.get("analyses_seen", 0) or 0) if isinstance(state, dict) else 0,
+        "ticker_analyses_seen": int(saved_state.get("analyses_seen", 0) or 0) if isinstance(saved_state, dict) else 0,
         "global_observation_updated": is_new_observation,
         "updated_at": now,
     }
