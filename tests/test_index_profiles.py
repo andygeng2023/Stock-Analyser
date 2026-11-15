@@ -1,6 +1,6 @@
 import unittest
 
-from app.ensemble import build_regressors
+from app.ensemble import build_regressors, build_hybrid_predictions
 from app.indexer import INDEXER_SETTINGS, _retry_is_available
 from app.training import _merge_prior, _update_global_profile
 
@@ -32,8 +32,22 @@ class IndexProfileTests(unittest.TestCase):
         preview = build_regressors("preview")
         full = build_regressors("full")
         self.assertEqual(len(preview), 10)
-        self.assertEqual(len(full), 16)
+        self.assertEqual(len(full), 15)
         self.assertTrue(set(preview).issubset(full))
+
+    def test_full_index_has_ten_hybrids_and_three_meta_hybrids(self):
+        import numpy as np
+        base = {
+            "arima": np.linspace(-0.01, 0.01, 20),
+            **{name: np.linspace(-0.008 + i * 0.0002, 0.009 + i * 0.0002, 20)
+               for i, name in enumerate(build_regressors("full"))},
+        }
+        hybrids = build_hybrid_predictions(base)
+        first_order = [name for name in hybrids if name.startswith("hybrid_")]
+        second_order = [name for name in hybrids if name.startswith("meta_hybrid_")]
+        self.assertEqual(len(first_order), 10)
+        self.assertEqual(len(second_order), 3)
+        self.assertTrue(all(np.asarray(value).shape == (20,) for value in hybrids.values()))
 
     def test_shared_learning_prior_blends_ticker_and_global_scores(self):
         merged = _merge_prior(
