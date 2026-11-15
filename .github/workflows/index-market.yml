@@ -42,7 +42,6 @@ jobs:
 
   index:
     needs: retire-previous
-    needs: retire-legacy
     runs-on: ubuntu-latest
     timeout-minutes: 350
     concurrency:
