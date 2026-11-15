@@ -12,6 +12,7 @@ from sklearn.svm import SVC, SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score
 from xgboost import XGBRegressor
 from .errors import AnalysisError
+from .ensemble import build_regressors, score_ensemble, combine_forecasts
 
 ORDERS = [(1,0,0),(0,0,1),(1,0,1),(2,0,1),(2,0,2)]
 
@@ -103,7 +104,7 @@ def _metrics(actual,predicted):
         "directional_accuracy":round(float(np.mean(np.sign(actual)==np.sign(predicted))*100),2),
     }
 
-def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
+def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning_state=None):
     ticker=ticker.strip().upper()
     if not ticker or len(ticker)>20 or not all(c.isalnum() or c in ".-^=" for c in ticker):
         raise AnalysisError("Enter a valid ticker.")
@@ -167,25 +168,14 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             raise AnalysisError("Not enough clean observations to train the hybrid models.")
 
         def make_svr():
-            return make_pipeline(StandardScaler(),SVR(kernel="rbf",C=10,epsilon=0.001))
+            return make_pipeline(StandardScaler(),SVR(kernel="rbf",C=4.0,epsilon=0.0005))
         def make_svc():
             return make_pipeline(StandardScaler(),SVC(C=1.0,kernel="rbf",class_weight="balanced"))
-        def make_xgb():
-            return XGBRegressor(
-                n_estimators=220,max_depth=3,learning_rate=0.035,
-                subsample=0.85,colsample_bytree=0.85,
-                reg_lambda=2.0,objective="reg:squarederror",
-                random_state=42,n_jobs=2,verbosity=0,
-            )
 
         x_train=train_data[feature_columns]
-        svr_validation=make_svr().fit(x_train,train_data["target_residual"])
-        svr_direct_validation=make_svr().fit(x_train,train_data["target_return"])
+        svr_residual_validation=make_svr().fit(x_train,train_data["target_residual"])
         svc_validation=make_svc().fit(x_train,train_data["target_direction"].astype(int))
-        xgb_validation=make_xgb().fit(x_train,train_data["target_return"])
-        predicted_residuals=svr_validation.predict(test_data[feature_columns])
-        predicted_svr=svr_direct_validation.predict(test_data[feature_columns])
-        predicted_xgb=xgb_validation.predict(test_data[feature_columns])
+        predicted_residuals=svr_residual_validation.predict(test_data[feature_columns])
         predicted_direction=svc_validation.predict(test_data[feature_columns])
         actual_returns=returns.reindex(validation_dates).to_numpy(dtype=float)
         actual_residuals=residuals.reindex(validation_dates).to_numpy(dtype=float)
@@ -193,40 +183,85 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             np.asarray(arima_predictions,dtype=float),
             index=test_returns.index,
         ).reindex(validation_dates).to_numpy(dtype=float)
+
+        # Train a diverse set of models on the same causal feature window.
+        # Each candidate is judged independently on the untouched chronological holdout.
+        model_factories=build_regressors()
+        candidate_predictions={"arima":predicted_arima}
+        validation_models={}
+        model_fit_errors={}
+        for model_name,factory in model_factories.items():
+            try:
+                fitted=factory().fit(x_train,train_data["target_return"])
+                values=np.asarray(fitted.predict(test_data[feature_columns]),dtype=float).reshape(-1)
+                if len(values)!=len(actual_returns) or not np.isfinite(values).all():
+                    raise ValueError("Model returned non-finite or misaligned validation predictions.")
+                validation_models[model_name]=fitted
+                candidate_predictions[model_name]=values
+            except Exception as model_error:
+                model_fit_errors[model_name]=str(model_error)[:180]
+
+        ensemble_predictions,ensemble_weights,model_assessment,baseline_rmse=score_ensemble(
+            candidate_predictions,actual_returns,prior_state=learning_state
+        )
+        predicted_svr=candidate_predictions.get("svr_rbf",predicted_arima)
+        predicted_xgb=candidate_predictions.get("xgboost",predicted_arima)
         svr_hybrid=predicted_arima+predicted_residuals
         arima_xgb_hybrid=0.5*predicted_arima+0.5*predicted_xgb
         svr_xgb_hybrid=0.5*predicted_svr+0.5*predicted_xgb
-        all_model_hybrid=(predicted_arima+predicted_svr+predicted_xgb)/3.0
-        # Fixed blends are defined before the holdout is evaluated; no test-window
-        # optimisation is allowed to leak into the reported backtest.
-        ensemble_predictions=0.5*svr_hybrid+0.5*predicted_xgb
+        all_direct_predictions=np.column_stack(list(candidate_predictions.values()))
+        all_model_hybrid=np.mean(all_direct_predictions,axis=1)
+
+        individual_metrics={
+            name:_metrics(actual_returns,values)
+            for name,values in candidate_predictions.items()
+        }
+        ensemble_metrics=_metrics(actual_returns,ensemble_predictions)
         metrics={
-            "arima":_metrics(actual_returns,predicted_arima),
+            "arima":individual_metrics.get("arima",_metrics(actual_returns,predicted_arima)),
             "svr_residual":_metrics(actual_residuals,predicted_residuals),
             "svm_residual":_metrics(actual_residuals,predicted_residuals),
-            "svr":_metrics(actual_returns,predicted_svr),
-            "xgboost":_metrics(actual_returns,predicted_xgb),
+            "svr":individual_metrics.get("svr_rbf",_metrics(actual_returns,predicted_svr)),
+            "xgboost":individual_metrics.get("xgboost",_metrics(actual_returns,predicted_xgb)),
             "arima_svr":_metrics(actual_returns,svr_hybrid),
             "arima_xgboost":_metrics(actual_returns,arima_xgb_hybrid),
             "svr_xgboost":_metrics(actual_returns,svr_xgb_hybrid),
             "all_model_hybrid":_metrics(actual_returns,all_model_hybrid),
-            "ensemble":_metrics(actual_returns,ensemble_predictions),
-            "hybrid":_metrics(actual_returns,ensemble_predictions),
+            "ensemble":ensemble_metrics,
+            "hybrid":ensemble_metrics,
+            "models":individual_metrics,
+            "model_assessment":model_assessment,
             "svm_directional_accuracy":round(float(accuracy_score(
                 np.where(actual_returns>=0,1,-1),predicted_direction
             )*100),2),
             "backtest":{
-                "method":"expanding-window one-step-ahead",
+                "method":"chronological holdout with train-only fitting",
                 "observations":int(len(actual_returns)),
                 "start":str(validation_dates[0].date()),
                 "end":str(validation_dates[-1].date()),
-                "test_accuracy":_metrics(actual_returns,ensemble_predictions)["directional_accuracy"],
-                "ensemble":_metrics(actual_returns,ensemble_predictions),
+                "test_accuracy":ensemble_metrics["directional_accuracy"],
+                "ensemble":ensemble_metrics,
+                "zero_return_baseline_rmse":round(float(baseline_rmse),7),
             },
         }
 
-        if progress_callback: progress_callback(65, "Training SVM, SVR and XGBoost", "Refitting all model components on the available history.")
-        # Refit both components on all available observations for the live forecast.
+        learning_state_out={
+            "version":1,
+            "analyses_seen":int((learning_state or {}).get("analyses_seen",0) or 0),
+            "training_observations":int(len(train_data)),
+            "models":{
+                name:{
+                    "score":record["score"],
+                    "directional_accuracy":record["directional_accuracy"],
+                    "rmse":record["rmse"],
+                    "eligible":record["eligible"],
+                }
+                for name,record in model_assessment.items()
+            },
+        }
+
+        if progress_callback: progress_callback(65, "Retraining adaptive ensemble", "Refitting eligible models on the complete available history.")
+        # Refit the selected ensemble members on the newest full history for forecasting.
         full_order,full_arima=_select_order(returns)
         full_residuals=pd.Series(np.asarray(full_arima.resid,dtype=float),index=returns.index)
         full_features=_feature_frame(close,volume,returns,full_residuals)
@@ -237,11 +272,25 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         if len(full_data)<45:
             raise AnalysisError("Not enough clean observations for the final hybrid models.")
         full_columns=full_features.columns.tolist()
-        svr=make_svr().fit(full_data[full_columns],full_data["target_residual"])
-        svr_direct=make_svr().fit(full_data[full_columns],full_data["target_return"])
-        svc=make_svc().fit(full_data[full_columns],full_data["target_direction"].astype(int))
-        xgb=make_xgb().fit(full_data[full_columns],full_data["target_return"])
+        full_models={}
+        full_fit_errors={}
+        for model_name in ensemble_weights:
+            if model_name=="arima":
+                continue
+            factory=model_factories.get(model_name)
+            if factory is None:
+                continue
+            try:
+                full_models[model_name]=factory().fit(full_data[full_columns],full_data["target_return"])
+            except Exception as model_error:
+                full_fit_errors[model_name]=str(model_error)[:180]
 
+        # Keep the residual-correction and direction models as separately reported
+        # diagnostics; the actual forecast blend is driven by adaptive member weights.
+        svr_residual=make_svr().fit(full_data[full_columns],full_data["target_residual"])
+        svc=make_svc().fit(full_data[full_columns],full_data["target_direction"].astype(int))
+        if not full_models and "arima" not in ensemble_weights:
+            raise AnalysisError("No eligible ensemble model could be refitted.")
         if progress_callback: progress_callback(80, "Generating forecast", "Calculating the requested forecast horizon.")
         base=np.asarray(full_arima.forecast(horizon),dtype=float)
         recent=list(returns.iloc[-20:].to_numpy(dtype=float))
@@ -253,6 +302,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
         rsi_now=float(full_features["rsi"].iloc[-1])
         macd_now=float(full_features["macd"].iloc[-1])
         volume_change=float(full_features["volume_change"].iloc[-1])
+        forecast_rejection_counts={}
+        forecast_member_counts=[]
+        component_return_paths={name:[] for name in ensemble_weights}
         for i in range(horizon):
             row={
                 **{f"r{j}":recent[-j] for j in range(1,6)},
@@ -264,17 +316,39 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 **{f"e{j}":errors[-j] for j in range(1,4)},
             }
             row_frame=pd.DataFrame([row],columns=full_columns)
-            correction=float(svr.predict(row_frame)[0])
-            svr_direct_return=float(svr_direct.predict(row_frame)[0])
-            xgb_return=float(xgb.predict(row_frame)[0])
+            correction=float(svr_residual.predict(row_frame)[0])
             svm_direction=int(svc.predict(row_frame)[0])
-            arima_path.append(float(close.iloc[-1])*float(np.exp(np.sum(base[:i+1]))))
             arima_return=float(base[i])
-            svr_return=float(base[i]+correction)
+            candidate_returns={"arima":arima_return}
+            for model_name,model in full_models.items():
+                try:
+                    value=float(np.asarray(model.predict(row_frame),dtype=float).reshape(-1)[0])
+                    if np.isfinite(value):
+                        candidate_returns[model_name]=value
+                except Exception:
+                    continue
+
+            available_weights={name:ensemble_weights[name] for name in candidate_returns if name in ensemble_weights}
+            next_return,active_members,rejected_members=combine_forecasts(
+                candidate_returns,
+                available_weights,
+                anomaly_floor=max(float(np.std(recent[-20:]))*0.15,0.0005),
+            )
+            for model_name in rejected_members:
+                forecast_rejection_counts[model_name]=forecast_rejection_counts.get(model_name,0)+1
+            forecast_member_counts.append(len(active_members))
+            for model_name,value in candidate_returns.items():
+                if model_name in component_return_paths:
+                    component_return_paths[model_name].append(float(value))
+
+            # Compatibility component paths remain available to existing charts.
+            svr_return=float(arima_return+correction)
+            svr_direct_return=float(candidate_returns.get("svr_rbf",next_return))
+            xgb_return=float(candidate_returns.get("xgboost",next_return))
             arima_xgb_return=0.5*arima_return+0.5*xgb_return
             svr_xgb_return=0.5*svr_direct_return+0.5*xgb_return
-            all_model_return=(arima_return+svr_direct_return+xgb_return)/3.0
-            next_return=float(0.5*svr_return+0.5*xgb_return)
+            all_model_return=float(np.mean(list(candidate_returns.values())))
+            arima_path.append(float(close.iloc[-1])*float(np.exp(np.sum(base[:i+1]))))
             svr_path.append(svr_return)
             svr_direct_path.append(svr_direct_return)
             xgb_path.append(xgb_return)
@@ -299,6 +373,22 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
             recent.append(next_return)
             errors.append(correction)
 
+        ensemble_report={
+            "method":"adaptive reliability-weighted robust hybrid",
+            "candidate_count":len(model_assessment),
+            "active_models":list(ensemble_weights),
+            "weights":{name:round(float(weight),5) for name,weight in ensemble_weights.items()},
+            "rejected_models":{
+                name:record["rejection_reason"]
+                for name,record in model_assessment.items()
+                if not record["eligible"] or record.get("fallback")
+            },
+            "validation_baseline_rmse":round(float(baseline_rmse),7),
+            "forecast_dynamic_rejections":forecast_rejection_counts,
+            "average_active_models_per_step":round(float(np.mean(forecast_member_counts)),2) if forecast_member_counts else 0,
+            "validation_fit_failures":model_fit_errors,
+            "full_refit_failures":full_fit_errors,
+        }
         if progress_callback: progress_callback(90, "Loading company details", "Retrieving available company fundamentals.")
         info={}
         try:
@@ -356,7 +446,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None):
                 "sector":info.get("sector"),"industry":info.get("industry"),
             },
             "model":{
-                "model_family":"ARIMA + SVC + SVR + XGBoost ensemble",
+                "model_family":"ARIMA + 10-model adaptive ML ensemble",
+                "ensemble":ensemble_report,
+                "learning_state":learning_state_out,
                 "arima_order":list(full_order),
                 "adf_p_value":round(float(adfuller(returns)[1]),6),
                 "observations":len(returns),
