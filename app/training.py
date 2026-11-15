@@ -213,11 +213,27 @@ def analyze_and_learn(
         except Exception as exc:
             print(f"Could not persist ticker learning memory for {symbol}: {str(exc)[:160]}")
 
-    updated_global = _update_global_profile(indexer, result, global_state)
-    try:
-        _store_profile(global_key, indexer, updated_global)
-    except Exception as exc:
-        print(f"Could not persist global learning memory for {indexer}: {str(exc)[:160]}")
+    # Avoid counting the same ticker/history/horizon repeatedly when workers
+    # or users request an analysis before Yahoo Finance has supplied new prices.
+    model_meta = result.get("model") or {}
+    signature = "|".join((
+        str(model_meta.get("model_version") or indexer),
+        str(period),
+        str(int(horizon)),
+        str(result.get("as_of") or ""),
+    ))
+    is_new_observation = local_state.get("last_training_signature") != signature
+    if isinstance(state, dict):
+        state["last_training_signature"] = signature
+    updated_global = (
+        _update_global_profile(indexer, result, global_state)
+        if is_new_observation else global_state
+    )
+    if is_new_observation:
+        try:
+            _store_profile(global_key, indexer, updated_global)
+        except Exception as exc:
+            print(f"Could not persist global learning memory for {indexer}: {str(exc)[:160]}")
 
     model = result.setdefault("model", {})
     model["learning"] = {
@@ -225,6 +241,7 @@ def analyze_and_learn(
         "scope": "shared deployment-wide aggregate validation memory",
         "global_analyses_seen": int(updated_global.get("analyses_seen", 0) or 0),
         "ticker_analyses_seen": int(state.get("analyses_seen", 0) or 0) if isinstance(state, dict) else 0,
+        "global_observation_updated": is_new_observation,
         "updated_at": now,
     }
     return result
