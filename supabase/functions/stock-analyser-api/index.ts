@@ -3,7 +3,9 @@ import postgres from "npm:postgres@3.4.7";
 function parseTidbConnection(raw: string, passwordOverride: string) {
   let dsn = String(raw || "").trim();
   if (!dsn) throw new Error("DATABASE_URL is missing.");
-  dsn = dsn.replace(/^\\+psql\s+/i, "");
+  // TiDB CLI connection details may be copied as: psql 'postgresql://...'.
+  // Remove the command wrapper before parsing the underlying connection URL.
+  dsn = dsn.replace(/^(?:\\\\)?psql\\s+/i, "");
   if ((dsn.startsWith("'") && dsn.endsWith("'")) || (dsn.startsWith('"') && dsn.endsWith('"'))) {
     dsn = dsn.slice(1, -1);
   }
