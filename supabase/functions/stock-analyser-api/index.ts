@@ -299,7 +299,7 @@ async function marketFeed(req,env,url) {
   // result can exceed TiDB Starter transaction memory and make the entire feed fail.
   const indexedRows=[];
   for(let offset=0;offset<1500;offset+=250){
-    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' undefined").bind(offset).all();
+    const batch=await env.DB.prepare("SELECT ticker,indexed_at,market_cap,avg_dollar_volume,priority,result FROM market_index WHERE period='5y' AND horizon=30 AND indexer='rapidIndex' ORDER BY indexed_at DESC LIMIT 250 OFFSET ?").bind(offset).all();
     indexedRows.push(...batch.results);
     if(batch.results.length<250)break;
   }
