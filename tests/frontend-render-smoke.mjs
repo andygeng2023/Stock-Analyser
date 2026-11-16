@@ -148,6 +148,13 @@ test("queue reopens and resumes a market scan instead of only changing tabs", ()
   assert.match(appSource, /if \(job\) resumeQueuedScan\(job\)/);
 });
 
+test("the worker runs after worker changes as well as on its five-minute schedule", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/analyze-stock.yml", import.meta.url), "utf8");
+  assert.match(workflow, /push:[\s\S]*app\/worker\.py/);
+  assert.match(workflow, /cron: ["']?\*\/5 \* \* \* \*["']?/);
+  assert.match(workflow, /cancel-in-progress:\s*false/);
+});
+
 
 test("queue tracker initialises safely and keeps completed progress visible", () => {
   const queueStart = appSource.indexOf('const QUEUE_KEY = "stock-analyser-active-jobs";');
