@@ -1751,9 +1751,11 @@ function render(data) {
   }
   const ensemble = model.ensemble || {};
   const architecture = ensemble.architecture || {};
-  const architectureLabel = Number(architecture.first_order_hybrids || 0) > 0
-    ? `${fmt(architecture.original_models, 0)} original models + ${fmt(architecture.first_order_hybrids, 0)} hybrids + ${fmt(architecture.hybrids_of_hybrids, 0)} meta-hybrids`
-    : `${fmt(architecture.original_models, 0)} original models`;
+  const architectureLabel = Number.isFinite(Number(architecture.original_models))
+    ? (Number(architecture.first_order_hybrids || 0) > 0
+      ? `${fmt(architecture.original_models, 0)} original models + ${fmt(architecture.first_order_hybrids, 0)} hybrids + ${fmt(architecture.hybrids_of_hybrids, 0)} meta-hybrids`
+      : `${fmt(architecture.original_models, 0)} original models`)
+    : (model.model_family || "Adaptive ensemble");
   const assessment = metrics.model_assessment || {};
   const weights = ensemble.weights || {};
   const activeCount = Object.keys(weights).length;
