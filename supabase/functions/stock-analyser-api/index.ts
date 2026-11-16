@@ -124,7 +124,7 @@ function makeStatement(query: string, values: unknown[] = []) {
   };
 }
 
-const env = { DB: { prepare: (query: string) => makeStatement(query) } };
+const env = { DB: { prepare: (query: string) => makeStatement(query) }, GITHUB_TOKEN: Deno.env.get("GITHUB_TOKEN") || "" };
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -258,8 +258,16 @@ async function watchlist(req,env) {
   return json({items:items.results.map(item=>{const row=map.get(item.ticker);return {ticker:item.ticker,added_at:item.created_at,indexer:row?.indexer||null,analysis:compact(row?.result,row?.indexed_at||null),indexed_at:row?.indexed_at||null,index_fresh:Boolean(row?.indexed_at&&!stale.includes(item.ticker)),awaiting_watchindex:stale.includes(item.ticker)};}),refreshing:stale.length>0});
 }
 async function dispatchWorkflow(env,workflow) {
-  const res=await fetch("https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/"+workflow+"/dispatches",{method:"POST",headers:{"Accept":"application/vnd.github+json","Authorization":"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"},body:JSON.stringify({ref:"main"})});
-  if(!res.ok) throw new Error("GitHub workflow dispatch failed: "+res.status);
+  if(!env.GITHUB_TOKEN) throw new Error("GitHub Actions dispatch is not configured; scheduled queue polling remains enabled.");
+  const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),8000);
+  try {
+    const res=await fetch("https://api.github.com/repos/andygeng2023/Stock-Analyser/actions/workflows/"+workflow+"/dispatches",{
+      method:"POST",signal:controller.signal,
+      headers:{"Accept":"application/vnd.github+json","Authorization":"Bearer "+env.GITHUB_TOKEN,"X-GitHub-Api-Version":"2022-11-28","Content-Type":"application/json"},
+      body:JSON.stringify({ref:"main"})
+    });
+    if(!res.ok) throw new Error("GitHub workflow dispatch failed: "+res.status);
+  } finally { clearTimeout(timeout); }
 }
 async function requestAnalysis(req,env) {
   const body=await req.json(), mode=body.mode==="scan"?"scan":"analysis", ticker=mode==="scan"?"SCAN":String(body.ticker||"").trim().toUpperCase();
@@ -298,9 +306,17 @@ async function requestAnalysis(req,env) {
   const rateIdentity=requester?"user:"+requester.id:null;
   if(!await allowRate(env,req,"analysis-request-v2",120,3600000,rateIdentity))return json({error:"Analysis request limit reached for this connection. Please try again later."},429);
   const id=crypto.randomUUID(), created=now();
-  await env.DB.prepare("INSERT INTO analysis_jobs(id,ticker,period,horizon,job_type,scan_source,save_to_indexer,status,client_ip_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'queued','public',?,?)").bind(id,ticker,period,horizon,mode,scanSource,save,created,created).run();
-  // The queue worker polls on a five-minute GitHub Actions schedule. This avoids requiring a GitHub token in the public API Worker.
-  return json({id,status:"queued",ticker,mode},202);
+  await env.DB.prepare("INSERT INTO analysis_jobs(id,ticker,period,horizon,job_type,scan_source,save_to_indexer,status,client_ip_hash,created_at,updated_at,progress,stage) VALUES(?,?,?,?,?,?,?,'queued','public',?,?,0,'Waiting for a shared worker')").bind(id,ticker,period,horizon,mode,scanSource,save,created,created).run();
+  // Wake the queue immediately when the backlog was empty and a scoped Actions token is configured.
+  // Scheduled five-minute polling remains the recovery path if dispatch is unavailable.
+  let workerWake="scheduled";
+  if(env.GITHUB_TOKEN && Number(queued.n || 0) === 0) {
+    try { await dispatchWorkflow(env,"analyze-stock.yml"); workerWake="dispatched"; }
+    catch(error) { console.warn("Could not dispatch the queue worker; scheduled polling will recover:",error); }
+  } else if(Number(queued.n || 0) > 0) {
+    workerWake="already-queued";
+  }
+  return json({id,status:"queued",ticker,mode,period,horizon,save_to_indexer:save,progress:0,stage:"Waiting for a shared worker",worker_wake:workerWake},202);
 }
 async function marketFeed(req,env,url) {
   const q=(url.searchParams.get("q")||"").trim().slice(0,60);
@@ -436,13 +452,18 @@ Deno.serve(async (req) => {
     if (path === "/api/analysis-status" && req.method === "GET") {
       const id = url.searchParams.get("id") || "";
       if (!/^(?:[0-9a-f]{32}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/i.test(id)) return json({ error: "Invalid analysis ID." }, 400);
-      const row = await env.DB.prepare("SELECT id,ticker,status,result,error,created_at,updated_at,progress,stage FROM analysis_jobs WHERE id=?").bind(id).first();
+      const row = await env.DB.prepare("SELECT id,ticker,status,result,error,created_at,updated_at,progress,stage,attempts,period,horizon,save_to_indexer FROM analysis_jobs WHERE id=?").bind(id).first();
       if (!row) return json({ error: "Analysis request not found." }, 404);
       row.result = parse(row.result);
       if(!row.result && row.status==="completed") {
         const indexed=await env.DB.prepare("SELECT result FROM market_index WHERE source_job_id=? LIMIT 1").bind(id).first();
         row.result=parse(indexed?.result);
       }
+      row.progress = row.status === "completed" ? 100 : Number(row.progress || 0);
+      row.attempts = Number(row.attempts || 0);
+      row.stage = row.stage || (row.status === "queued" ? "Waiting for a shared worker" :
+        row.status === "running" ? "Worker is processing this request" :
+        row.status === "completed" ? "Complete" : row.status === "failed" ? "Failed" : "Updating status");
       return json(row);
     }
     if (path === "/api/market-feed" && req.method === "GET") return await marketFeed(req, env, url);
