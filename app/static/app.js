@@ -1938,9 +1938,12 @@ function render(data) {
           '" stroke-linecap="round" stroke-linejoin="round" opacity=".95"></path>'
         : "";
     }).join("");
+    const chartDescription = usable.map(trace => String(trace.name || "")).filter(Boolean).join(", ")
+      .replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[char]));
     target.innerHTML = '<svg class="chart-fallback" viewBox="0 0 800 280" role="img" aria-label="' +
       (targetId === "history" ? "Historical price chart" : "Forecast chart") +
-      '" preserveAspectRatio="none"><path d="M10 265 H790" stroke="currentColor" opacity=".16" fill="none"></path>' +
+      '" preserveAspectRatio="none"><title>' + chartDescription +
+      '</title><path d="M10 265 H790" stroke="currentColor" opacity=".16" fill="none"></path>' +
       paths + '</svg>';
   };
   const drawPlot = (targetId, traces) => {
