@@ -636,8 +636,8 @@ function renderGlobalQueue() {
   list.querySelectorAll("[data-job-id]").forEach(el => el.addEventListener("click", () => {
     $("global-queue-popover").hidden = true;
     if (el.dataset.jobType === "scan") {
-      switchScreen("discover");
-      $("scan-status").textContent = "Opening your tracked market scan…";
+      const job = trackedJobs.find(item => item.id === el.dataset.jobId);
+      if (job) resumeQueuedScan(job);
       return;
     }
     openStockDetails(el.dataset.jobTicker, {
@@ -666,6 +666,31 @@ async function refreshGlobalQueue() {
     saveTrackedJobs();
   } finally { queueRefreshBusy = false; }
 }
+const scanResumeInFlight = new Set();
+async function resumeQueuedScan(job) {
+  switchScreen("discover");
+  $("scan-progress").hidden = false;
+  if (locallyPollingJobIds.has(job.id) || scanResumeInFlight.has(job.id)) {
+    $("scan-status").textContent = "This scan is already being monitored.";
+    return;
+  }
+  scanResumeInFlight.add(job.id);
+  try {
+    $("scan-status").textContent = "Rejoining the shared market scan…";
+    const result = await waitForResult(job.id, $("scan-status"), "scan");
+    if (!result) throw Error("The completed scan did not return its result.");
+    renderScan(result);
+    latestScanLoaded = false;
+    latestScanId = job.id;
+    $("scan-status").textContent = "Market scan complete · " + (result.as_of || "");
+    loadMarketFeed(true);
+  } catch (error) {
+    $("scan-status").textContent = error.message;
+  } finally {
+    scanResumeInFlight.delete(job.id);
+  }
+}
+
 function setGlobalQueueOpen(open) {
   const toggle = $("global-queue-toggle");
   const popover = $("global-queue-popover");
