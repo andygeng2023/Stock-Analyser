@@ -1505,32 +1505,58 @@ $("quick-search").addEventListener("submit", event => event.preventDefault());
 attachStockAutocomplete("quick-ticker", "quick-suggestions", "home");
 attachStockAutocomplete("ticker", "search-suggestions", "search");
 
-async function openStockDetails(ticker, options = {}) {
-  const symbol = String(ticker || "").trim().toUpperCase();
-  if (!symbol) return;
-  currentDetailTicker = symbol;
-  updateDetailWatchlistButton();
-  const period = options.customPeriod || "5y";
-  const horizon = Number(options.customHorizon || 30);
-  if (!config.apiBaseUrl) {
-    switchScreen("detail");
-    $("detail-status").textContent = "The Stock Analyser API is not configured. The API endpoint has not been configured for this deployment.";
+async function getIndexAvailability(ticker) {
+  const response = await fetchWithRetry(api("index-availability") + "?ticker=" + encodeURIComponent(ticker), {
+    headers: { "Content-Type": "application/json" }
+  }, { timeoutMs: 10000, attempts: 2 });
+  const data = await response.json();
+  if (!response.ok) throw Error(data.error || "Could not check indexed data.");
+  return data;
+}
+
+function showIndexAvailability(indexes, mode = "auto") {
+  const panel = $("detail-index-choice");
+  const controls = $("detail-index-choice-controls");
+  const title = $("detail-index-choice-title");
+  const description = $("detail-index-choice-description");
+  const select = $("detail-index-select");
+  panel.hidden = false;
+  controls.hidden = true;
+  if (mode === "custom") {
+    title.textContent = "Index destination";
+    description.textContent = "This analysis will use the destination selected in Hard rerun.";
     return;
   }
+  if (indexes.length > 1) {
+    title.textContent = "Two indexed versions are available";
+    description.textContent = "Choose which shared analysis to load. FullIndex uses the extended history and model ensemble.";
+    select.innerHTML = indexes.map(item =>
+      '<option value="' + esc(item.id) + '">' + esc(item.label) + (item.indexed_at ? " · " + esc(new Date(item.indexed_at).toLocaleString()) : "") + '</option>'
+    ).join("");
+    select.value = indexes.some(item => item.id === "FullIndex") ? "FullIndex" : indexes[0].id;
+    controls.hidden = false;
+    return;
+  }
+  if (indexes.length === 1) {
+    title.textContent = indexes[0].label + " available";
+    description.textContent = "Using the available shared index · updated " + new Date(indexes[0].indexed_at).toLocaleString() + ".";
+  } else {
+    title.textContent = "No current indexed result";
+    description.textContent = "A fresh PreviewIndex analysis will be generated.";
+  }
+}
 
-  detailReturnScreen = options.returnScreen || (currentScreen === "detail" ? detailReturnScreen : currentScreen);
-  $("ticker").value = symbol;
-  switchScreen("detail");
-
-  $("results").hidden = true;
-  $("search-progress").hidden = true;
-  $("detail-status").textContent = "Preparing analysis for " + symbol + "…";
+async function runStockDetails(symbol, options = {}, selectedIndex = "previewIndex") {
+  const period = options.customPeriod || "5y";
+  const horizon = Number(options.customHorizon || 30);
+  $("detail-index-choice-controls").hidden = true;
   $("detail-hard-rerun").disabled = true;
-
+  $("detail-status").textContent = "Preparing analysis for " + symbol + "…";
   try {
+    const destination = options.saveToIndexer || selectedIndex;
     const request = options.jobId
       ? { id: options.jobId, status: "queued", reused: true }
-      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, options.saveToIndexer || "previewIndex");
+      : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, destination);
     trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
     let result;
     if (request.status === "completed" && request.cached) {
@@ -1543,7 +1569,7 @@ async function openStockDetails(ticker, options = {}) {
       updateProgress("search", {
         status: "completed",
         progress: 100,
-        stage: "Shared cached analysis · " + new Date(request.cache_created_at).toLocaleString()
+        stage: "Shared cached analysis · generated " + new Date(request.cache_created_at).toLocaleString()
       });
     } else {
       result = await waitForResult(request.id, $("detail-status"), "search");
@@ -1552,14 +1578,58 @@ async function openStockDetails(ticker, options = {}) {
     $("results").hidden = false;
     render(result);
     $("detail-status").textContent = "Analysis complete · " + (result.as_of || "");
-    if (window.Plotly) {
-      Plotly.Plots.resize($("history"));
-      Plotly.Plots.resize($("forecast"));
-    }
   } catch (error) {
     $("detail-status").textContent = error.message;
   } finally {
     $("detail-hard-rerun").disabled = false;
+  }
+}
+
+$("detail-index-continue").addEventListener("click", () => {
+  const symbol = currentDetailTicker;
+  const selected = $("detail-index-select").value || "previewIndex";
+  runStockDetails(symbol, {}, selected);
+});
+
+async function openStockDetails(ticker, options = {}) {
+  const symbol = String(ticker || "").trim().toUpperCase();
+  if (!symbol) return;
+  currentDetailTicker = symbol;
+  updateDetailWatchlistButton();
+  if (!config.apiBaseUrl) {
+    switchScreen("detail");
+    $("detail-status").textContent = "The Stock Analyser API is not configured. The API endpoint has not been configured for this deployment.";
+    return;
+  }
+  detailReturnScreen = options.returnScreen || (currentScreen === "detail" ? detailReturnScreen : currentScreen);
+  $("ticker").value = symbol;
+  switchScreen("detail");
+  $("results").hidden = true;
+  $("search-progress").hidden = true;
+  $("detail-index-choice").hidden = true;
+  $("detail-status").textContent = "Checking available indexed data for " + symbol + "…";
+  if (options.jobId) {
+    showIndexAvailability([], "custom");
+    return runStockDetails(symbol, options, "previewIndex");
+  }
+  if (options.saveToIndexer || options.hardRescan) {
+    showIndexAvailability([], "custom");
+    return runStockDetails(symbol, options, options.saveToIndexer || "previewIndex");
+  }
+  try {
+    const availability = await getIndexAvailability(symbol);
+    const indexes = availability.indexes || [];
+    showIndexAvailability(indexes);
+    if (indexes.length > 1) {
+      $("detail-status").textContent = "Select the indexed version to continue.";
+      return;
+    }
+    return runStockDetails(symbol, options, indexes[0]?.id || "previewIndex");
+  } catch (error) {
+    showIndexAvailability([]);
+    $("detail-index-choice-title").textContent = "Index availability could not be checked";
+    $("detail-index-choice-description").textContent = "Continuing with a new PreviewIndex analysis. " + error.message;
+    return runStockDetails(symbol, options, "previewIndex");
   }
 }
 
