@@ -1898,10 +1898,72 @@ function render(data) {
 
   const components = forecast.components || {};
 
-  Plotly.react("history", [{
+  const drawFallbackChart = (targetId, traces) => {
+    const target = $(targetId);
+    const usable = traces.filter(trace => Array.isArray(trace.y) &&
+      trace.y.some(value => value != null && Number.isFinite(Number(value))));
+    const allValues = usable.flatMap(trace => trace.y.map(value =>
+      value == null || !Number.isFinite(Number(value)) ? null : Number(value)
+    ).filter(value => value != null));
+    if (!allValues.length) {
+      target.innerHTML = '<div class="stock-chart-placeholder">Chart data unavailable</div>';
+      return;
+    }
+    const minY = Math.min(...allValues), maxY = Math.max(...allValues);
+    const rangeY = maxY - minY || Math.max(Math.abs(maxY) * 0.01, 1);
+    const allTimes = usable.flatMap(trace => (trace.x || []).map(value => Date.parse(value)).filter(Number.isFinite));
+    const minX = allTimes.length ? Math.min(...allTimes) : 0;
+    const maxX = allTimes.length ? Math.max(...allTimes) : 0;
+    const colors = ["#8aa5ff", "#39c99a", "#e7b45f", "#b48cff", "#6fc9cc"];
+    const paths = usable.map((trace, seriesIndex) => {
+      let path = "", drawing = false;
+      const values = trace.y;
+      values.forEach((raw, index) => {
+        const value = raw == null ? NaN : Number(raw);
+        if (!Number.isFinite(value)) { drawing = false; return; }
+        const dateValue = Date.parse((trace.x || [])[index]);
+        const x = Number.isFinite(dateValue) && maxX > minX
+          ? 10 + ((dateValue - minX) / (maxX - minX)) * 780
+          : 10 + (index / Math.max(1, values.length - 1)) * 780;
+        const y = 265 - ((value - minY) / rangeY) * 250;
+        path += (drawing ? "L" : "M") + x.toFixed(2) + "," + y.toFixed(2) + " ";
+        drawing = true;
+      });
+      const label = String(trace.name || "");
+      const color = /primary adaptive/i.test(label) ? "#39c99a"
+        : /historical/i.test(label) ? "#8aa5ff" : colors[seriesIndex % colors.length];
+      return path
+        ? '<path d="' + path.trim() + '" fill="none" stroke="' + color +
+          '" stroke-width="' + (/primary adaptive/i.test(label) ? "3.2" : "1.8") +
+          '" stroke-linecap="round" stroke-linejoin="round" opacity=".95"></path>'
+        : "";
+    }).join("");
+    target.innerHTML = '<svg class="chart-fallback" viewBox="0 0 800 280" role="img" aria-label="' +
+      (targetId === "history" ? "Historical price chart" : "Forecast chart") +
+      '" preserveAspectRatio="none"><path d="M10 265 H790" stroke="currentColor" opacity=".16" fill="none"></path>' +
+      paths + '</svg>';
+  };
+  const drawPlot = (targetId, traces) => {
+    const fallback = () => drawFallbackChart(targetId, traces);
+    try {
+      if (typeof Plotly === "undefined" || typeof Plotly.react !== "function") {
+        throw new Error("Plotly is not available.");
+      }
+      const rendered = Plotly.react(targetId, traces, layout, { responsive: true, displayModeBar: false });
+      Promise.resolve(rendered).catch(error => {
+        console.warn("Plotly chart render failed; using SVG fallback:", error);
+        fallback();
+      });
+    } catch (error) {
+      console.warn("Plotly chart unavailable; using SVG fallback:", error);
+      fallback();
+    }
+  };
+
+  drawPlot("history", [{
     x: history.dates, y: history.close, type: "scatter", mode: "lines",
     line: { color: "#8aa5ff", width: 2 }, name: "Historical adjusted close"
-  }], layout, { responsive: true, displayModeBar: false });
+  }]);
 
   const forecastTraces = [{
     x: history.dates.slice(-100), y: history.close.slice(-100),
@@ -1948,7 +2010,7 @@ function render(data) {
       { x: dates, y: forecast.lower, type: "scatter", mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(57,201,154,.12)", name: "Forecast interval", hoverinfo: "skip" }
     );
   }
-  Plotly.react("forecast", forecastTraces, layout, { responsive: true, displayModeBar: false });
+  drawPlot("forecast", forecastTraces);
 }
 
 function renderScan(data) {
