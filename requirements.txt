@@ -1,7 +1,6 @@
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
 yfinance==0.2.61
-yahooquery==2.4.1
 pandas==2.2.3
 numpy==2.2.5
 statsmodels==0.14.4
