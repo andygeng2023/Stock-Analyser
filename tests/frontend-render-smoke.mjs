@@ -200,3 +200,89 @@ test("queue tracker initialises safely and keeps completed progress visible", ()
   assert.ok(Number.isFinite(jobs[0].finishedAt));
   assert.ok(storage.has("stock-analyser-active-jobs"));
 });
+
+
+test("detail charts use an SVG fallback when Plotly is missing", () => {
+  const elements = new Map();
+  const getElement = id => {
+    if (!elements.has(id)) elements.set(id, {
+      id, innerHTML: "", textContent: "", hidden: false, style: {}
+    });
+    return elements.get(id);
+  };
+  const context = {
+    $: getElement,
+    cash: value => value == null ? "—" : "$" + Number(value).toFixed(2),
+    pct: value => value == null ? "—" : Number(value).toFixed(2) + "%",
+    fmt: (value, digits = 2) => value == null || !Number.isFinite(Number(value))
+      ? "—" : Number(value).toFixed(digits),
+    esc: value => String(value ?? ""),
+    rows: object => Object.entries(object || {}).map(([key, value]) => key + ": " + String(value ?? "—")).join(", "),
+    document: { documentElement: { dataset: { theme: "dark" } } },
+    console: { warn() {} },
+    Date,
+    Math,
+    Number,
+    Object,
+    Array,
+    String,
+    Promise
+  };
+  vm.createContext(context);
+  vm.runInContext(renderSource + "\nglobalThis.__renderDetail = render;", context);
+  context.__renderDetail(makeSampleAnalysis());
+  assert.match(getElement("history").innerHTML, /<svg class="chart-fallback"/);
+  assert.match(getElement("forecast").innerHTML, /<svg class="chart-fallback"/);
+  assert.match(getElement("forecast").innerHTML, /Primary adaptive hybrid forecast/);
+});
+
+test("index selector keeps both choices available and marks the active one", () => {
+  const start = appSource.indexOf("function showIndexAvailability(");
+  const end = appSource.indexOf("\nasync function runStockDetails", start);
+  assert.ok(start >= 0 && end > start);
+  const elements = new Map();
+  const getElement = id => {
+    if (!elements.has(id)) elements.set(id, { hidden: true, innerHTML: "", textContent: "" });
+    return elements.get(id);
+  };
+  const context = {
+    availableIndexOptions: [],
+    selectedIndexId: "",
+    $: getElement,
+    esc: value => String(value ?? "")
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    "let availableIndexOptions = []; let selectedIndexId = '';\n" +
+    appSource.slice(start, end) +
+    "\nglobalThis.__showAvailability = showIndexAvailability;",
+    context
+  );
+  const choices = [
+    { id: "previewIndex", label: "PreviewIndex" },
+    { id: "FullIndex", label: "FullIndex" }
+  ];
+  context.__showAvailability(choices);
+  assert.equal(getElement("detail-index-choice-controls").hidden, false);
+  assert.equal((getElement("detail-index-choice-controls").innerHTML.match(/data-index-choice=/g) || []).length, 2);
+  context.__showAvailability(choices, "selected", "FullIndex");
+  assert.equal(getElement("detail-index-choice-title").textContent, "Using FullIndex");
+  const buttons = getElement("detail-index-choice-controls").innerHTML;
+  assert.match(buttons, /data-index-choice="FullIndex" aria-pressed="true"/);
+  assert.match(buttons, /data-index-choice="previewIndex" aria-pressed="false"/);
+});
+
+test("home-card sparkline draws historical data without a forecast", () => {
+  const start = appSource.indexOf("function stockSparkline(stock) {");
+  const end = appSource.indexOf("\nfunction riskLabelMarkup", start);
+  assert.ok(start >= 0 && end > start);
+  const context = { Math, Number };
+  vm.createContext(context);
+  vm.runInContext(appSource.slice(start, end) + "\nglobalThis.__sparkline = stockSparkline;", context);
+  const svg = context.__sparkline({
+    history_preview: [98, 99, 100, 101],
+    forecast_preview: []
+  });
+  assert.match(svg, /<svg class="stock-sparkline"/);
+  assert.match(svg, /stock-history-line/);
+});
