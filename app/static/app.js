@@ -99,6 +99,9 @@ let currentScreen = "home";
 let currentTab = "home";
 let detailReturnScreen = "home";
 let currentDetailTicker = "";
+let detailRequestSequence = 0;
+let availableIndexOptions = [];
+let selectedIndexId = "";
 let marketFeed = null;
 let marketFeedLoadedAt = 0;
 let marketFeedFromCache = false;
@@ -125,7 +128,6 @@ let watchlistItems = [];
 let watchlistLoaded = false;
 let watchlistLoading = false;
 let watchlistRefreshTimer = null;
-const previewIndexQueuePending = new Set();
 
 async function watchlistRequest(action, ticker) {
   if (!authClient) throw new Error("Authentication is unavailable. Reload the app and try again.");
@@ -555,42 +557,66 @@ function renderWatchlistSignedOut() {
 }
 
 const QUEUE_KEY = "stock-analyser-active-jobs";
+const TERMINAL_JOB_RETENTION_MS = 3 * 60 * 1000;
 let trackedJobs = loadTrackedJobs();
 let queueRefreshBusy = false;
 const locallyPollingJobIds = new Set();
+const isTerminalJob = job => ["completed", "failed"].includes(String(job?.status || "").toLowerCase());
 
 function loadTrackedJobs() {
   try {
     const saved = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-    // Completed/failed requests are not queue entries; discard any left by older versions.
-    return Array.isArray(saved) ? saved.filter(job => job && job.id && !["completed", "failed"].includes(job.status)) : [];
+    const cutoff = Date.now() - TERMINAL_JOB_RETENTION_MS;
+    return Array.isArray(saved)
+      ? saved.filter(job => job && job.id && (!isTerminalJob(job) || Number(job.finishedAt || 0) >= cutoff))
+      : [];
   } catch { return []; }
 }
 function saveTrackedJobs() {
-  trackedJobs = trackedJobs.filter(job => job && job.id && !["completed", "failed"].includes(job.status)).slice(0, 30);
+  const cutoff = Date.now() - TERMINAL_JOB_RETENTION_MS;
+  trackedJobs = trackedJobs
+    .filter(job => job && job.id && (!isTerminalJob(job) || Number(job.finishedAt || 0) >= cutoff))
+    .slice(0, 100);
   try { localStorage.setItem(QUEUE_KEY, JSON.stringify(trackedJobs)); } catch {}
   renderGlobalQueue();
 }
 function trackJob(job) {
   if (!job?.id) return;
-  trackedJobs = trackedJobs.filter(item => item.id !== job.id);
-  trackedJobs.unshift({ id: job.id, ticker: job.ticker || "Market scan", type: job.type || "analysis",
-    status: job.status || "queued", progress: Number(job.progress) || 0, stage: job.stage || "Waiting for a worker…" });
+  const existing = trackedJobs.find(item => item.id === job.id);
+  const next = {
+    ...(existing || {}),
+    ...job,
+    progress: job.progress == null ? Number(existing?.progress || 0) : Math.max(0, Math.min(100, Number(job.progress) || 0)),
+    stage: job.stage || existing?.stage || "Waiting for a shared worker…",
+    createdAt: existing?.createdAt || job.createdAt || Date.now()
+  };
+  if (isTerminalJob(next)) {
+    next.progress = next.status === "completed" ? 100 : next.progress;
+    next.finishedAt = existing?.finishedAt || job.finishedAt || Date.now();
+  } else delete next.finishedAt;
+  trackedJobs = [next, ...trackedJobs.filter(item => item.id !== job.id)];
   saveTrackedJobs();
 }
 function updateTrackedJob(id, data) {
   const item = trackedJobs.find(job => job.id === id);
   if (!item) return;
-  Object.assign(item, { status: data.status || item.status, progress: Math.max(0, Math.min(100, Number(data.progress) || 0)),
-    stage: data.stage || item.stage, error: data.error || null });
-  // Remove terminal jobs immediately from the dropdown, count, and persisted queue.
-  if (["completed", "failed"].includes(item.status)) {
-    trackedJobs = trackedJobs.filter(job => job.id !== id);
-  }
+  const previousStatus = item.status;
+  Object.assign(item, {
+    status: data.status || item.status,
+    progress: data.progress == null
+      ? (item.status === "completed" ? 100 : Number(item.progress || 0))
+      : Math.max(0, Math.min(100, Number(data.progress) || 0)),
+    stage: data.stage || item.stage,
+    error: data.error || null
+  });
+  if (item.status === "completed") item.progress = 100;
+  if (isTerminalJob(item) && !item.finishedAt) item.finishedAt = Date.now();
+  if (!isTerminalJob(item)) delete item.finishedAt;
+  if (previousStatus !== item.status && isTerminalJob(item)) item.finishedAt = Date.now();
   saveTrackedJobs();
 }
 function renderGlobalQueue() {
-  const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status));
+  const active = trackedJobs.filter(job => !isTerminalJob(job));
   const button = $("global-queue-toggle");
   const count = $("global-queue-count");
   const list = $("global-queue-list");
@@ -598,11 +624,15 @@ function renderGlobalQueue() {
   count.textContent = active.length ? String(active.length) : "";
   button.classList.toggle("has-jobs", active.length > 0);
   list.innerHTML = trackedJobs.length ? trackedJobs.map(job => {
-    const pctValue = Math.max(0, Math.min(100, Number(job.progress) || 0));
+    const pctValue = job.status === "completed" ? 100 : Math.max(0, Math.min(100, Number(job.progress) || 0));
+    const status = job.status === "completed" ? "Complete"
+      : job.status === "failed" ? "Failed"
+      : job.status === "running" ? "Running" : "Queued";
+    const stage = job.error || job.stage || "Waiting for a shared worker…";
     return '<button type="button" class="queue-job" data-job-id="' + esc(job.id) + '" data-job-type="' + esc(job.type) + '" data-job-ticker="' + esc(job.ticker) + '">' +
-      '<span class="queue-job-top"><strong>' + esc(job.ticker) + '</strong><small>' + esc(job.status) + ' · ' + pctValue + '%</small></span>' +
-      '<span class="queue-track"><span style="width:' + pctValue + '%"></span></span><small class="queue-stage">' + esc(job.stage) + '</small></button>';
-  }).join("") : '<p class="queue-empty">No recent analysis requests.</p>';
+      '<span class="queue-job-top"><strong>' + esc(job.ticker) + '</strong><small>' + status + ' · ' + pctValue + '%</small></span>' +
+      '<span class="queue-track"><span style="width:' + pctValue + '%"></span></span><small class="queue-stage">' + esc(stage) + '</small></button>';
+  }).join("") : '<p class="queue-empty">No recent requests.</p>';
   list.querySelectorAll("[data-job-id]").forEach(el => el.addEventListener("click", () => {
     $("global-queue-popover").hidden = true;
     if (el.dataset.jobType === "scan") {
@@ -617,7 +647,7 @@ async function refreshGlobalQueue() {
   if (queueRefreshBusy || !config.apiBaseUrl) return;
   queueRefreshBusy = true;
   try {
-    const active = trackedJobs.filter(job => !["completed", "failed"].includes(job.status) && !locallyPollingJobIds.has(job.id));
+    const active = trackedJobs.filter(job => !isTerminalJob(job) && !locallyPollingJobIds.has(job.id));
     await Promise.all(active.map(async job => {
       try {
         const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(job.id), {
@@ -625,9 +655,12 @@ async function refreshGlobalQueue() {
         }, { timeoutMs: 10000, attempts: 2 });
         const data = await response.json();
         if (response.ok) updateTrackedJob(job.id, data);
+        else if (response.status === 404) updateTrackedJob(job.id, {
+          status: "failed", progress: job.progress, stage: "This request is no longer available.",
+          error: data.error || "Request not found."
+        });
       } catch {}
     }));
-    trackedJobs = trackedJobs.filter(job => !job.finishedAt || Date.now() - job.finishedAt < 10 * 60 * 1000);
     saveTrackedJobs();
   } finally { queueRefreshBusy = false; }
 }
@@ -656,7 +689,6 @@ renderGlobalQueue();
 refreshGlobalQueue();
 setInterval(refreshGlobalQueue, 5000);
 
-
 function rows(obj) {
   return Object.entries(obj || {}).map(([k, v]) =>
     '<div class="row"><span>' + esc(k.replaceAll("_", " ")) + '</span><strong>' +
@@ -680,43 +712,50 @@ async function requestAnalysis(ticker, period, horizon, mode = "analysis", hardR
 
 function updateProgress(prefix, data) {
   const wrap = $(prefix + "-progress");
+  const fill = $(prefix + "-progress-fill");
+  const percent = $(prefix + "-progress-percent");
+  const label = $(prefix + "-progress-label");
+  const stage = $(prefix + "-progress-stage");
+  if (!wrap || !fill || !percent || !label || !stage) return;
   wrap.hidden = false;
-  const value = Math.max(0, Math.min(100, Number(data.progress) || 0));
-  $(prefix + "-progress-fill").style.width = value + "%";
-  $(prefix + "-progress-percent").textContent = value + "%";
-  $(prefix + "-progress-label").textContent =
-    data.status === "queued" ? "Queued" :
-    data.status === "completed" ? "Complete" :
-    data.status === "failed" ? "Failed" : "Processing";
-  $(prefix + "-progress-stage").textContent =
-    data.stage || (data.status === "queued" ? "Waiting for a worker…" : "Working…");
+  const value = data.progress == null ? 0 : Math.max(0, Math.min(100, Number(data.progress) || 0));
+  fill.style.width = value + "%";
+  percent.textContent = value + "%";
+  label.textContent = data.status === "queued" ? "Queued"
+    : data.status === "running" ? "Running"
+    : data.status === "completed" ? "Complete"
+    : data.status === "failed" ? "Failed" : "Processing";
+  stage.textContent = data.stage || (data.status === "queued" ? "Waiting for a worker…" : "Working…");
 }
 
-async function waitForResult(id, statusElement, prefix = "search") {
+async function waitForResult(id, statusElement, prefix = "search", isCurrent = () => true) {
   locallyPollingJobIds.add(id);
   try {
-    const started = Date.now();
-    while (Date.now() - started < 15 * 60 * 1000) {
+    const deadline = Date.now() + 6 * 60 * 60 * 1000;
+    while (Date.now() < deadline) {
       const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(id), {
         headers: { "Content-Type": "application/json" }
       }, { timeoutMs: 12000, attempts: 3 });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve analysis status.");
-      updateProgress(prefix, data);
       updateTrackedJob(id, data);
+      if (isCurrent()) {
+        updateProgress(prefix, data);
+        if (statusElement) {
+          statusElement.textContent = data.status === "running" ? "The worker is processing this job…"
+            : data.status === "queued" ? "Queued; waiting for the shared worker…"
+            : data.stage || "Processing…";
+        }
+      }
       if (data.status === "completed") return data.result;
       if (data.status === "failed") throw Error(data.error || "The analysis failed.");
-      statusElement.textContent = data.status === "running"
-        ? "The worker is processing this job…"
-        : "Queued; waiting for the shared GitHub Actions worker…";
-      await wait(2500);
+      await wait(3000);
     }
-    throw Error("This analysis is taking longer than expected. Its job may still finish; try again later.");
+    throw Error("This request has exceeded the six-hour worker window. Its status remains visible in the request queue.");
   } finally {
     locallyPollingJobIds.delete(id);
   }
 }
-
 function stockSparkline(stock) {
   const historySource = Array.isArray(stock.history_preview) && stock.history_preview.length
     ? stock.history_preview : (stock.history?.close || []);
@@ -1164,19 +1203,8 @@ async function refreshVisibleMarketCards(force = false) {
       indexedCardDataCacheAt.set(ticker, Date.now());
       applyCardChart(ticker, item, cardsByTicker);
 
-      const hasPreviewIndex = Array.isArray(item.forecast_preview) && item.forecast_preview.length > 0;
-      const isWatchlistCard = (cardsByTicker.get(ticker) || []).every(card => card.matches(".watchlist-v2-item"));
-      if (!isWatchlistCard && !hasPreviewIndex && !previewIndexQueuePending.has(ticker)) {
-        previewIndexQueuePending.add(ticker);
-        requestAnalysis(ticker, "5y", 30, "analysis", false, false, "previewIndex")
-          .then(job => {
-            if (job?.id && job.status !== "completed") trackJob({
-              id: job.id, ticker, type: "analysis", status: job.status || "queued", stage: "Queued for PreviewIndex"
-            });
-          })
-          .catch(error => console.warn("Could not queue PreviewIndex for " + ticker + ":", error))
-          .finally(() => previewIndexQueuePending.delete(ticker));
-      }
+      // Keep cards read-only: the shared indexers provide forecasts in the background.
+      // Do not enqueue one full analysis for every visible card on each screen refresh.
     });
 
     // Only request Yahoo historical prices when the PreviewIndex/shared result has no chart.
@@ -1514,46 +1542,70 @@ async function getIndexAvailability(ticker) {
   return data;
 }
 
-function showIndexAvailability(indexes, mode = "auto") {
+function showIndexAvailability(indexes, mode = "auto", selectedId = "") {
   const panel = $("detail-index-choice");
   const controls = $("detail-index-choice-controls");
   const title = $("detail-index-choice-title");
   const description = $("detail-index-choice-description");
+  availableIndexOptions = Array.isArray(indexes)
+    ? indexes.filter(item => item && ["previewIndex", "FullIndex"].includes(item.id)) : [];
+  selectedIndexId = selectedId || (mode === "selected" ? selectedIndexId : "");
   panel.hidden = false;
-  controls.hidden = true;
   controls.innerHTML = "";
   if (mode === "custom") {
-    title.textContent = "Using selected index";
-    description.textContent = "This analysis will use the destination selected in Hard rerun.";
+    controls.hidden = true;
+    title.textContent = selectedId ? "Using " + (selectedId === "FullIndex" ? "FullIndex" : "PreviewIndex") : "Using selected index";
+    description.textContent = "This analysis will use the index selected in the rerun settings.";
     return;
   }
-  if (indexes.length > 1) {
-    title.textContent = "Choose an index";
-    description.textContent = "Both indexed versions are available.";
-    controls.innerHTML = '<button type="button" class="secondary-button" data-index-choice="previewIndex">PreviewIndex</button><button type="button" class="secondary-button" data-index-choice="FullIndex">FullIndex</button>';
+  if (availableIndexOptions.length > 1) {
+    const activeId = selectedId || selectedIndexId;
+    title.textContent = activeId
+      ? "Using " + (activeId === "FullIndex" ? "FullIndex" : "PreviewIndex")
+      : "Choose an index";
+    description.textContent = activeId
+      ? "Both indexes are available. Select the other version to switch."
+      : "Both indexed versions are available. Choose which history and model index to view.";
+    controls.innerHTML = availableIndexOptions.map(item =>
+      '<button type="button" class="secondary-button" data-index-choice="' + esc(item.id) +
+      '" aria-pressed="' + String(item.id === activeId) + '">' + esc(item.label) + '</button>'
+    ).join("");
     controls.hidden = false;
     return;
   }
-  if (indexes.length === 1) {
-    title.textContent = "Using " + indexes[0].label;
-    description.textContent = "This is the available indexed version.";
+  controls.hidden = true;
+  if (availableIndexOptions.length === 1) {
+    selectedIndexId = availableIndexOptions[0].id;
+    title.textContent = "Using " + availableIndexOptions[0].label;
+    description.textContent = "This is the only currently available indexed version.";
   } else {
-    title.textContent = "Using PreviewIndex";
-    description.textContent = "No current indexed result is available, so a fresh PreviewIndex analysis will be generated.";
+    selectedIndexId = selectedId || "previewIndex";
+    title.textContent = "Using " + (selectedIndexId === "FullIndex" ? "FullIndex" : "PreviewIndex");
+    description.textContent = "No current indexed result is available, so a fresh analysis will be generated.";
   }
 }
 async function runStockDetails(symbol, options = {}, selectedIndex = "previewIndex") {
-  const period = options.customPeriod || "5y";
+  const requestToken = options.detailRequestSequence ?? detailRequestSequence;
+  const isCurrent = () => requestToken === detailRequestSequence &&
+    currentDetailTicker === symbol && currentScreen === "detail";
+  const period = options.customPeriod || (selectedIndex === "FullIndex" ? "10y" : "5y");
   const horizon = Number(options.customHorizon || 30);
-  $("detail-index-choice-controls").hidden = true;
+  const destination = options.saveToIndexer || selectedIndex;
+  if (availableIndexOptions.length > 1 && availableIndexOptions.some(item => item.id === destination)) {
+    showIndexAvailability(availableIndexOptions, "selected", destination);
+  }
   $("detail-hard-rerun").disabled = true;
-  $("detail-status").textContent = "Preparing analysis for " + symbol + "…";
+  $("detail-status").textContent = "Preparing analysis for " + symbol + " using " +
+    (destination === "FullIndex" ? "FullIndex" : "PreviewIndex") + "…";
   try {
-    const destination = options.saveToIndexer || selectedIndex;
     const request = options.jobId
       ? { id: options.jobId, status: "queued", reused: true }
       : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, destination);
-    trackJob({ id: request.id, ticker: symbol, type: "analysis", status: request.status || "queued", progress: request.progress, stage: request.stage });
+    trackJob({
+      id: request.id, ticker: symbol, type: "analysis",
+      status: request.status || "queued", progress: request.progress, stage: request.stage
+    });
+    if (!isCurrent()) return;
     let result;
     if (request.status === "completed" && request.cached) {
       const response = await fetchWithRetry(api("analysis-status") + "?id=" + encodeURIComponent(request.id), {
@@ -1562,35 +1614,32 @@ async function runStockDetails(symbol, options = {}, selectedIndex = "previewInd
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Could not retrieve cached analysis.");
       result = data.result;
-      updateProgress("search", {
-        status: "completed",
-        progress: 100,
-        stage: "Shared cached analysis · generated " + new Date(request.cache_created_at).toLocaleString()
-      });
+      const cachedStage = "Shared cached analysis · generated " +
+        (request.cache_created_at ? new Date(request.cache_created_at).toLocaleString() : "previously");
+      updateTrackedJob(request.id, { status: "completed", progress: 100, stage: cachedStage });
+      if (isCurrent()) updateProgress("search", { status: "completed", progress: 100, stage: cachedStage });
     } else {
-      result = await waitForResult(request.id, $("detail-status"), "search");
+      result = await waitForResult(request.id, $("detail-status"), "search", isCurrent);
     }
-    if (!result) throw Error("The analysis returned no result.");
+    if (!isCurrent()) return;
+    if (!result) throw Error("The analysis returned no result. The worker may have saved only the shared indexed record.");
     $("results").hidden = false;
     render(result);
     $("detail-status").textContent = "Analysis complete · " + (result.as_of || "");
   } catch (error) {
-    $("detail-status").textContent = error.message;
+    if (isCurrent()) $("detail-status").textContent = error.message;
   } finally {
-    $("detail-hard-rerun").disabled = false;
+    if (isCurrent()) $("detail-hard-rerun").disabled = false;
   }
 }
-
-$("detail-index-choice-controls").addEventListener("click", event => {
-  const button = event.target.closest("[data-index-choice]");
-  if (!button) return;
-  runStockDetails(currentDetailTicker, {}, button.dataset.indexChoice);
-});
 
 async function openStockDetails(ticker, options = {}) {
   const symbol = String(ticker || "").trim().toUpperCase();
   if (!symbol) return;
+  const requestToken = ++detailRequestSequence;
   currentDetailTicker = symbol;
+  availableIndexOptions = [];
+  selectedIndexId = "";
   updateDetailWatchlistButton();
   if (!config.apiBaseUrl) {
     switchScreen("detail");
@@ -1606,28 +1655,42 @@ async function openStockDetails(ticker, options = {}) {
   $("detail-status").textContent = "Checking available indexed data for " + symbol + "…";
   if (options.jobId) {
     showIndexAvailability([], "custom");
-    return runStockDetails(symbol, options, "previewIndex");
+    return runStockDetails(symbol, { ...options, detailRequestSequence: requestToken }, "previewIndex");
   }
   if (options.saveToIndexer || options.hardRescan) {
-    showIndexAvailability([], "custom");
-    return runStockDetails(symbol, options, options.saveToIndexer || "previewIndex");
+    const destination = options.saveToIndexer || "previewIndex";
+    showIndexAvailability([], "custom", destination);
+    return runStockDetails(symbol, { ...options, detailRequestSequence: requestToken }, destination);
   }
   try {
     const availability = await getIndexAvailability(symbol);
+    if (requestToken !== detailRequestSequence || currentDetailTicker !== symbol || currentScreen !== "detail") return;
     const indexes = availability.indexes || [];
     showIndexAvailability(indexes);
     if (indexes.length > 1) {
       $("detail-status").textContent = "Select the indexed version to continue.";
       return;
     }
-    return runStockDetails(symbol, options, indexes[0]?.id || "previewIndex");
+    const destination = indexes[0]?.id || "previewIndex";
+    return runStockDetails(symbol, { ...options, detailRequestSequence: requestToken }, destination);
   } catch (error) {
+    if (requestToken !== detailRequestSequence || currentDetailTicker !== symbol || currentScreen !== "detail") return;
     showIndexAvailability([]);
     $("detail-index-choice-title").textContent = "Index availability could not be checked";
     $("detail-index-choice-description").textContent = "Continuing with a new PreviewIndex analysis. " + error.message;
-    return runStockDetails(symbol, options, "previewIndex");
+    return runStockDetails(symbol, { ...options, detailRequestSequence: requestToken }, "previewIndex");
   }
 }
+
+$("detail-index-choice-controls").addEventListener("click", event => {
+  const button = event.target.closest("[data-index-choice]");
+  if (!button || !availableIndexOptions.some(item => item.id === button.dataset.indexChoice)) return;
+  const symbol = currentDetailTicker;
+  const requestToken = ++detailRequestSequence;
+  const selected = button.dataset.indexChoice;
+  showIndexAvailability(availableIndexOptions, "selected", selected);
+  runStockDetails(symbol, { detailRequestSequence: requestToken }, selected);
+});
 
 $("search").addEventListener("submit", event => event.preventDefault());
 const hardRerunMenu = $("hard-rerun-menu");
@@ -1687,75 +1750,6 @@ function render(data) {
 
   const forecast = data.forecast || {};
   const model = data.model || {};
-  $("forecast-summary").innerHTML = [
-    ["Expected change", pct(forecast.expected_change_percent)],
-    ["Horizon", (forecast.horizon ?? "—") + " trading days"],
-    ["Model architecture", architectureLabel || model.model_family || "Adaptive ensemble"],
-    ["ARIMA order", Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—"]
-  ].map(([label, value]) =>
-    '<div class="card"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></div>'
-  ).join("");
-
-  const metrics = model.metrics || {};
-  const backtest = metrics.backtest || {};
-  const modelLabels = {
-    arima: "ARIMA",
-    svr_residual: "SVR residual correction",
-    svr: "SVR",
-    svr_rbf: "RBF SVR",
-    svr_linear: "Linear SVR",
-    ridge: "Ridge",
-    elastic_net: "Elastic Net",
-    random_forest: "Random Forest",
-    extra_trees: "Extra Trees",
-    gradient_boosting: "Gradient Boosting",
-    hist_gradient_boosting: "Histogram Gradient Boosting",
-    xgboost: "XGBoost",
-    knn: "K-nearest neighbours",
-    bayesian_ridge: "Bayesian Ridge",
-    huber: "Huber regression",
-    ada_boost: "AdaBoost",
-    decision_tree: "Decision Tree",
-    linear_regression: "Linear Regression",
-    hybrid_arima_svr: "ARIMA + SVR hybrid",
-    hybrid_arima_xgb: "ARIMA + XGBoost hybrid",
-    hybrid_tree_consensus: "Tree-model consensus",
-    hybrid_linear_consensus: "Linear-model consensus",
-    hybrid_kernel_consensus: "Kernel-model consensus",
-    hybrid_statistical_consensus: "Statistical consensus",
-    hybrid_robust_median: "Robust median hybrid",
-    hybrid_trimmed_mean: "Trimmed-mean hybrid",
-    hybrid_family_balance: "Balanced family hybrid",
-    hybrid_diversified: "Diversified hybrid",
-    meta_hybrid_median: "Meta-hybrid median",
-    meta_hybrid_trimmed: "Meta-hybrid trimmed mean",
-    meta_hybrid_family_blend: "Meta-hybrid family blend",
-    arima_svr: "ARIMA + SVR",
-    arima_xgboost: "ARIMA + XGBoost",
-    svr_xgboost: "SVR + XGBoost",
-    all_model_hybrid: "All-model hybrid",
-    ensemble: "Primary hybrid ensemble",
-    hybrid: "Primary hybrid ensemble"
-  };
-  const individualMetrics = { ...metrics, ...(metrics.models || {}) };
-  const metricRows = Object.entries(individualMetrics)
-    .filter(([name, value]) => !["backtest", "models", "model_assessment", "svm_residual", "svr_residual", "hybrid"].includes(name) &&
-      value && typeof value === "object" && Number.isFinite(Number(value.directional_accuracy)))
-    .map(([name, value]) =>
-      '<tr><td>' + esc(modelLabels[name] || name) + '</td><td>' + fmt(value.mae, 6) + '</td><td>' +
-      fmt(value.rmse, 6) + '</td><td>' + fmt(value.directional_accuracy, 2) + '%</td></tr>'
-    );
-  if (Number.isFinite(Number(metrics.svm_directional_accuracy))) {
-    metricRows.push('<tr><td>SVC direction classifier</td><td>—</td><td>—</td><td>' +
-      fmt(metrics.svm_directional_accuracy, 2) + '%</td></tr>');
-  }
-  const ensemble = model.ensemble || {};
-  const architecture = ensemble.architecture || {};
-  const architectureLabel = Number.isFinite(Number(architecture.original_models))
-    ? (Number(architecture.first_order_hybrids || 0) > 0
-      ? `${fmt(architecture.original_models, 0)} original models + ${fmt(architecture.first_order_hybrids, 0)} hybrids + ${fmt(architecture.hybrids_of_hybrids, 0)} meta-hybrids`
-      : `${fmt(architecture.original_models, 0)} original models`)
-    : (model.model_family || "Adaptive ensemble");
   const assessment = metrics.model_assessment || {};
   const weights = ensemble.weights || {};
   const activeCount = Object.keys(weights).length;
