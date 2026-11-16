@@ -1690,6 +1690,7 @@ function render(data) {
   $("forecast-summary").innerHTML = [
     ["Expected change", pct(forecast.expected_change_percent)],
     ["Horizon", (forecast.horizon ?? "—") + " trading days"],
+    ["Model architecture", architectureLabel || model.model_family || "Adaptive ensemble"],
     ["ARIMA order", Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—"]
   ].map(([label, value]) =>
     '<div class="card"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></div>'
@@ -1711,6 +1712,24 @@ function render(data) {
     hist_gradient_boosting: "Histogram Gradient Boosting",
     xgboost: "XGBoost",
     knn: "K-nearest neighbours",
+    bayesian_ridge: "Bayesian Ridge",
+    huber: "Huber regression",
+    ada_boost: "AdaBoost",
+    decision_tree: "Decision Tree",
+    linear_regression: "Linear Regression",
+    hybrid_arima_svr: "ARIMA + SVR hybrid",
+    hybrid_arima_xgb: "ARIMA + XGBoost hybrid",
+    hybrid_tree_consensus: "Tree-model consensus",
+    hybrid_linear_consensus: "Linear-model consensus",
+    hybrid_kernel_consensus: "Kernel-model consensus",
+    hybrid_statistical_consensus: "Statistical consensus",
+    hybrid_robust_median: "Robust median hybrid",
+    hybrid_trimmed_mean: "Trimmed-mean hybrid",
+    hybrid_family_balance: "Balanced family hybrid",
+    hybrid_diversified: "Diversified hybrid",
+    meta_hybrid_median: "Meta-hybrid median",
+    meta_hybrid_trimmed: "Meta-hybrid trimmed mean",
+    meta_hybrid_family_blend: "Meta-hybrid family blend",
     arima_svr: "ARIMA + SVR",
     arima_xgboost: "ARIMA + XGBoost",
     svr_xgboost: "SVR + XGBoost",
@@ -1718,8 +1737,9 @@ function render(data) {
     ensemble: "Primary hybrid ensemble",
     hybrid: "Primary hybrid ensemble"
   };
-  const metricRows = Object.entries(metrics)
-    .filter(([name, value]) => !["backtest", "svm_residual", "svr_residual", "hybrid"].includes(name) &&
+  const individualMetrics = { ...metrics, ...(metrics.models || {}) };
+  const metricRows = Object.entries(individualMetrics)
+    .filter(([name, value]) => !["backtest", "models", "model_assessment", "svm_residual", "svr_residual", "hybrid"].includes(name) &&
       value && typeof value === "object" && Number.isFinite(Number(value.directional_accuracy)))
     .map(([name, value]) =>
       '<tr><td>' + esc(modelLabels[name] || name) + '</td><td>' + fmt(value.mae, 6) + '</td><td>' +
@@ -1730,6 +1750,10 @@ function render(data) {
       fmt(metrics.svm_directional_accuracy, 2) + '%</td></tr>');
   }
   const ensemble = model.ensemble || {};
+  const architecture = ensemble.architecture || {};
+  const architectureLabel = Number(architecture.first_order_hybrids || 0) > 0
+    ? `${fmt(architecture.original_models, 0)} original models + ${fmt(architecture.first_order_hybrids, 0)} hybrids + ${fmt(architecture.hybrids_of_hybrids, 0)} meta-hybrids`
+    : `${fmt(architecture.original_models, 0)} original models`;
   const assessment = metrics.model_assessment || {};
   const weights = ensemble.weights || {};
   const activeCount = Object.keys(weights).length;
@@ -1778,7 +1802,7 @@ function render(data) {
     metricRows.join("") + '</tbody></table></div>';
 
   $("model-note").textContent =
-    (model.model_family || "Forecast ensemble") +
+    (model.model_family || "Forecast ensemble") + " · Version " + (model.model_version || "unknown") +
     " · All model scores use the chronological held-out window. Models are retrained on the latest available history for every fresh analysis. " +
     "ARIMA order: " + (Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—") +
     " · ADF p-value: " + fmt(model.adf_p_value, 6) +
@@ -1828,7 +1852,7 @@ function render(data) {
     });
   });
 
-  // Keep older saved analyses readable while they are replaced by v2 results.
+  // Legacy results remain readable; current versioned results always carry selected components.
   if (!Object.keys(components).length) {
     [
       ["ARIMA", forecast.arima], ["SVR", forecast.svr], ["XGBoost", forecast.xgboost],
@@ -1843,7 +1867,7 @@ function render(data) {
   }
 
   forecastTraces.push({
-    x: dates, y: forecast.hybrid || [], name: "Adaptive hybrid forecast",
+    x: dates, y: forecast.hybrid || [], name: "Primary adaptive hybrid forecast",
     type: "scatter", mode: "lines", line: { color: "#39c99a", width: 3 }
   });
   if (Array.isArray(forecast.upper) && forecast.upper.length &&
