@@ -1750,6 +1750,75 @@ function render(data) {
 
   const forecast = data.forecast || {};
   const model = data.model || {};
+  const ensemble = model.ensemble || {};
+  const architecture = ensemble.architecture || {};
+  const architectureLabel = Number.isFinite(Number(architecture.original_models))
+    ? (Number(architecture.first_order_hybrids || 0) > 0
+      ? `${fmt(architecture.original_models, 0)} original models + ${fmt(architecture.first_order_hybrids, 0)} hybrids + ${fmt(architecture.hybrids_of_hybrids, 0)} meta-hybrids`
+      : `${fmt(architecture.original_models, 0)} original models`)
+    : (model.model_family || "Adaptive ensemble");
+  $("forecast-summary").innerHTML = [
+    ["Expected change", pct(forecast.expected_change_percent)],
+    ["Horizon", (forecast.horizon ?? "—") + " trading days"],
+    ["Model architecture", architectureLabel || model.model_family || "Adaptive ensemble"],
+    ["ARIMA order", Array.isArray(model.arima_order) ? model.arima_order.join(", ") : "—"]
+  ].map(([label, value]) =>
+    '<div class="card"><small>' + esc(label) + '</small><strong>' + esc(value) + '</strong></div>'
+  ).join("");
+
+  const metrics = model.metrics || {};
+  const backtest = metrics.backtest || {};
+  const modelLabels = {
+    arima: "ARIMA",
+    svr_residual: "SVR residual correction",
+    svr: "SVR",
+    svr_rbf: "RBF SVR",
+    svr_linear: "Linear SVR",
+    ridge: "Ridge",
+    elastic_net: "Elastic Net",
+    random_forest: "Random Forest",
+    extra_trees: "Extra Trees",
+    gradient_boosting: "Gradient Boosting",
+    hist_gradient_boosting: "Histogram Gradient Boosting",
+    xgboost: "XGBoost",
+    knn: "K-nearest neighbours",
+    bayesian_ridge: "Bayesian Ridge",
+    huber: "Huber regression",
+    ada_boost: "AdaBoost",
+    decision_tree: "Decision Tree",
+    linear_regression: "Linear Regression",
+    hybrid_arima_svr: "ARIMA + SVR hybrid",
+    hybrid_arima_xgb: "ARIMA + XGBoost hybrid",
+    hybrid_tree_consensus: "Tree-model consensus",
+    hybrid_linear_consensus: "Linear-model consensus",
+    hybrid_kernel_consensus: "Kernel-model consensus",
+    hybrid_statistical_consensus: "Statistical consensus",
+    hybrid_robust_median: "Robust median hybrid",
+    hybrid_trimmed_mean: "Trimmed-mean hybrid",
+    hybrid_family_balance: "Balanced family hybrid",
+    hybrid_diversified: "Diversified hybrid",
+    meta_hybrid_median: "Meta-hybrid median",
+    meta_hybrid_trimmed: "Meta-hybrid trimmed mean",
+    meta_hybrid_family_blend: "Meta-hybrid family blend",
+    arima_svr: "ARIMA + SVR",
+    arima_xgboost: "ARIMA + XGBoost",
+    svr_xgboost: "SVR + XGBoost",
+    all_model_hybrid: "All-model hybrid",
+    ensemble: "Primary hybrid ensemble",
+    hybrid: "Primary hybrid ensemble"
+  };
+  const individualMetrics = { ...metrics, ...(metrics.models || {}) };
+  const metricRows = Object.entries(individualMetrics)
+    .filter(([name, value]) => !["backtest", "models", "model_assessment", "svm_residual", "svr_residual", "hybrid"].includes(name) &&
+      value && typeof value === "object" && Number.isFinite(Number(value.directional_accuracy)))
+    .map(([name, value]) =>
+      '<tr><td>' + esc(modelLabels[name] || name) + '</td><td>' + fmt(value.mae, 6) + '</td><td>' +
+      fmt(value.rmse, 6) + '</td><td>' + fmt(value.directional_accuracy, 2) + '%</td></tr>'
+    );
+  if (Number.isFinite(Number(metrics.svm_directional_accuracy))) {
+    metricRows.push('<tr><td>SVC direction classifier</td><td>—</td><td>—</td><td>' +
+      fmt(metrics.svm_directional_accuracy, 2) + '%</td></tr>');
+  }
   const assessment = metrics.model_assessment || {};
   const weights = ensemble.weights || {};
   const activeCount = Object.keys(weights).length;
