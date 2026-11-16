@@ -1519,33 +1519,29 @@ function showIndexAvailability(indexes, mode = "auto") {
   const controls = $("detail-index-choice-controls");
   const title = $("detail-index-choice-title");
   const description = $("detail-index-choice-description");
-  const select = $("detail-index-select");
   panel.hidden = false;
   controls.hidden = true;
+  controls.innerHTML = "";
   if (mode === "custom") {
-    title.textContent = "Index destination";
+    title.textContent = "Using selected index";
     description.textContent = "This analysis will use the destination selected in Hard rerun.";
     return;
   }
   if (indexes.length > 1) {
-    title.textContent = "Two indexed versions are available";
-    description.textContent = "Choose which shared analysis to load. FullIndex uses the extended history and model ensemble.";
-    select.innerHTML = indexes.map(item =>
-      '<option value="' + esc(item.id) + '">' + esc(item.label) + (item.indexed_at ? " · " + esc(new Date(item.indexed_at).toLocaleString()) : "") + '</option>'
-    ).join("");
-    select.value = indexes.some(item => item.id === "FullIndex") ? "FullIndex" : indexes[0].id;
+    title.textContent = "Choose an index";
+    description.textContent = "Both indexed versions are available.";
+    controls.innerHTML = '<button type="button" class="secondary-button" data-index-choice="previewIndex">PreviewIndex</button><button type="button" class="secondary-button" data-index-choice="FullIndex">FullIndex</button>';
     controls.hidden = false;
     return;
   }
   if (indexes.length === 1) {
-    title.textContent = indexes[0].label + " available";
-    description.textContent = "Using the available shared index · updated " + new Date(indexes[0].indexed_at).toLocaleString() + ".";
+    title.textContent = "Using " + indexes[0].label;
+    description.textContent = "This is the available indexed version.";
   } else {
-    title.textContent = "No current indexed result";
-    description.textContent = "A fresh PreviewIndex analysis will be generated.";
+    title.textContent = "Using PreviewIndex";
+    description.textContent = "No current indexed result is available, so a fresh PreviewIndex analysis will be generated.";
   }
 }
-
 async function runStockDetails(symbol, options = {}, selectedIndex = "previewIndex") {
   const period = options.customPeriod || "5y";
   const horizon = Number(options.customHorizon || 30);
@@ -1585,10 +1581,10 @@ async function runStockDetails(symbol, options = {}, selectedIndex = "previewInd
   }
 }
 
-$("detail-index-continue").addEventListener("click", () => {
-  const symbol = currentDetailTicker;
-  const selected = $("detail-index-select").value || "previewIndex";
-  runStockDetails(symbol, {}, selected);
+$("detail-index-choice-controls").addEventListener("click", event => {
+  const button = event.target.closest("[data-index-choice]");
+  if (!button) return;
+  runStockDetails(currentDetailTicker, {}, button.dataset.indexChoice);
 });
 
 async function openStockDetails(ticker, options = {}) {
