@@ -13,6 +13,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_sc
 from xgboost import XGBRegressor
 from .errors import AnalysisError
 from .ensemble import build_regressors, build_hybrid_predictions, score_ensemble, combine_forecasts
+from .market_data import fetch_history, fetch_company_info, build_market_data_metadata
 
 ORDERS = [(1,0,0),(0,0,1),(1,0,1),(2,0,1),(2,0,2)]
 
@@ -114,7 +115,9 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
         raise AnalysisError("Forecast horizon must be 1–504 trading days.")
     try:
         asset=yf.Ticker(ticker)
-        history=asset.history(period=period,auto_adjust=True)
+        history,query_asset,history_metadata=fetch_history(
+            ticker,period=period,yfinance_asset=asset,minimum_rows=100
+        )
         if history.empty or len(history)<100:
             raise AnalysisError("Insufficient price history. Check the ticker.")
         if progress_callback: progress_callback(8, "Downloading price history", f"Loaded {len(history):,} historical rows.")
@@ -422,11 +425,12 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             "full_refit_failures":full_fit_errors,
         }
         if progress_callback: progress_callback(90, "Loading company details", "Retrieving available company fundamentals.")
-        info={}
-        try:
-            info=asset.get_info() or {}
-        except Exception:
-            pass
+        info,info_provider,query_asset=fetch_company_info(
+            asset,ticker,yahooquery_asset=query_asset
+        )
+        market_data_metadata=build_market_data_metadata(
+            history_metadata,info_provider
+        )
         def val(key):
             value=info.get(key)
             return round(float(value),4) if isinstance(value,(int,float,np.number)) and np.isfinite(value) else None
@@ -455,6 +459,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
             "exchange":info.get("exchange"),
             "currency":info.get("currency") or "USD",
             "as_of":close.index[-1].strftime("%Y-%m-%d"),
+            "market_data":market_data_metadata,
             "price":round(float(close.iloc[-1]),4),
             "change_percent":round(float(close.pct_change().iloc[-1]*100),2),
             "market_summary":{
