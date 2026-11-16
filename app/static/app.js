@@ -629,7 +629,7 @@ function renderGlobalQueue() {
       : job.status === "failed" ? "Failed"
       : job.status === "running" ? "Running" : "Queued";
     const stage = job.error || job.stage || "Waiting for a shared worker…";
-    return '<button type="button" class="queue-job" data-job-id="' + esc(job.id) + '" data-job-type="' + esc(job.type) + '" data-job-ticker="' + esc(job.ticker) + '">' +
+    return '<button type="button" class="queue-job" data-job-id="' + esc(job.id) + '" data-job-type="' + esc(job.type) + '" data-job-ticker="' + esc(job.ticker) + '" data-job-indexer="' + esc(job.indexer || "previewIndex") + '">' +
       '<span class="queue-job-top"><strong>' + esc(job.ticker) + '</strong><small>' + status + ' · ' + pctValue + '%</small></span>' +
       '<span class="queue-track"><span style="width:' + pctValue + '%"></span></span><small class="queue-stage">' + esc(stage) + '</small></button>';
   }).join("") : '<p class="queue-empty">No recent requests.</p>';
@@ -640,7 +640,9 @@ function renderGlobalQueue() {
       $("scan-status").textContent = "Opening your tracked market scan…";
       return;
     }
-    openStockDetails(el.dataset.jobTicker, { jobId: el.dataset.jobId, returnScreen: currentTab });
+    openStockDetails(el.dataset.jobTicker, {
+      jobId: el.dataset.jobId, indexer: el.dataset.jobIndexer || "previewIndex", returnScreen: currentTab
+    });
   }));
 }
 async function refreshGlobalQueue() {
@@ -1590,7 +1592,7 @@ async function runStockDetails(symbol, options = {}, selectedIndex = "previewInd
     currentDetailTicker === symbol && currentScreen === "detail";
   const period = options.customPeriod || (selectedIndex === "FullIndex" ? "10y" : "5y");
   const horizon = Number(options.customHorizon || 30);
-  const destination = options.saveToIndexer || selectedIndex;
+  const destination = options.saveToIndexer || options.indexer || selectedIndex;
   if (availableIndexOptions.length > 1 && availableIndexOptions.some(item => item.id === destination)) {
     showIndexAvailability(availableIndexOptions, "selected", destination);
   }
@@ -1602,7 +1604,7 @@ async function runStockDetails(symbol, options = {}, selectedIndex = "previewInd
       ? { id: options.jobId, status: "queued", reused: true }
       : await requestAnalysis(symbol, period, horizon, "analysis", options.hardRescan === true, false, destination);
     trackJob({
-      id: request.id, ticker: symbol, type: "analysis",
+      id: request.id, ticker: symbol, type: "analysis", indexer: request.save_to_indexer || destination,
       status: request.status || "queued", progress: request.progress, stage: request.stage
     });
     if (!isCurrent()) return;
@@ -1654,8 +1656,11 @@ async function openStockDetails(ticker, options = {}) {
   $("detail-index-choice").hidden = true;
   $("detail-status").textContent = "Checking available indexed data for " + symbol + "…";
   if (options.jobId) {
-    showIndexAvailability([], "custom");
-    return runStockDetails(symbol, { ...options, detailRequestSequence: requestToken }, "previewIndex");
+    const destination = options.indexer || options.saveToIndexer || "previewIndex";
+    showIndexAvailability([], "custom", destination);
+    return runStockDetails(symbol, {
+      ...options, saveToIndexer: destination, detailRequestSequence: requestToken
+    }, destination);
   }
   if (options.saveToIndexer || options.hardRescan) {
     const destination = options.saveToIndexer || "previewIndex";
