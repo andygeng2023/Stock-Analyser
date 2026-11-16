@@ -2695,3 +2695,12 @@ html[data-theme="light"] #settings-screen .settings-v2-account-block {
 html[data-theme="light"] .stock-risk-label.risk-lower{color:#16865a}
 html[data-theme="light"] .stock-risk-label.risk-moderate{color:#95630b}
 html[data-theme="light"] .stock-risk-label.risk-higher,html[data-theme="light"] .stock-risk-label.risk-unrated{color:#b33d3d}
+
+.detail-index-choice{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 14px;padding:13px 15px;border:1px solid var(--border,#263650);border-radius:12px;background:var(--surface,#111a2b)}
+.detail-index-choice-copy{display:grid;gap:4px;min-width:0}
+.detail-index-choice-copy strong{font-size:13px;font-weight:700}
+.detail-index-choice-copy small{font-size:11px;line-height:1.45}
+.detail-index-choice-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.detail-index-choice-controls select{min-width:180px;max-width:100%}
+.detail-index-choice-controls button{white-space:nowrap}
+@media(max-width:600px){.detail-index-choice{align-items:stretch;flex-direction:column}.detail-index-choice-controls{display:grid;grid-template-columns:minmax(0,1fr) auto}.detail-index-choice-controls select{min-width:0;width:100%}}
