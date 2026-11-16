@@ -142,6 +142,12 @@ test("market-card refresh never fans out one analysis request per visible card",
   );
 });
 
+test("queue reopens and resumes a market scan instead of only changing tabs", () => {
+  assert.match(appSource, /async function resumeQueuedScan\(job\)/);
+  assert.match(appSource, /const result = await waitForResult\(job\.id,\s*\$\("scan-status"\),\s*"scan"\)/);
+  assert.match(appSource, /if \(job\) resumeQueuedScan\(job\)/);
+});
+
 
 test("queue tracker initialises safely and keeps completed progress visible", () => {
   const queueStart = appSource.indexOf('const QUEUE_KEY = "stock-analyser-active-jobs";');
