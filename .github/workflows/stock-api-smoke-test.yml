@@ -11,7 +11,7 @@ permissions:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 20
     steps:
       - name: Verify API database connection and required tables
         env:
@@ -108,3 +108,63 @@ jobs:
           print("Available index versions:", data["available"])
           PY
           test "$status" = "200"
+
+      - name: Wait for chart-ready analysis data
+        env:
+          API_URL: https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api/analysis-status
+          API_KEY: sb_publishable_-Ty9nayZpJSDo9YwKVzEdw_dG5bD6Kz
+        run: |
+          JOB_ID=$(python -c "import json; print(json.load(open('analysis-request.json'))['id'])")
+          for attempt in $(seq 1 180); do
+            status=$(curl --silent --show-error --max-time 20 -o completed-analysis.json -w '%{http_code}' \
+              -H "apikey: $API_KEY" -H "Accept: application/json" "$API_URL?id=$JOB_ID" || true)
+            if [ "$status" != "200" ]; then
+              echo "Status API returned HTTP $status on attempt $attempt."
+              sleep 5
+              continue
+            fi
+            state=$(python -c "import json; print(json.load(open('completed-analysis.json')).get('status','unknown'))")
+            progress=$(python -c "import json; print(json.load(open('completed-analysis.json')).get('progress',0))")
+            stage=$(python -c "import json; print(json.load(open('completed-analysis.json')).get('stage',''))")
+            echo "Analysis $state · $progress% · $stage"
+            if [ "$state" = "failed" ]; then
+              python - <<'PY'
+          import json
+          data=json.load(open("completed-analysis.json"))
+          raise SystemExit("Analysis worker failed: "+str(data.get("error") or data.get("stage")))
+          PY
+            fi
+            if [ "$state" = "completed" ]; then
+              python - <<'PY'
+          import json, math
+          data=json.load(open("completed-analysis.json"))
+          result=data.get("result")
+          assert isinstance(result,dict), f"Completed job has no analysis result: {data}"
+          history=result.get("history") or {}
+          forecast=result.get("forecast") or {}
+          history_dates=history.get("dates") or []
+          history_prices=history.get("close") or []
+          forecast_dates=forecast.get("dates") or []
+          forecast_prices=forecast.get("hybrid") or []
+          assert len(history_dates)>=100, f"History graph has too few dates: {len(history_dates)}"
+          assert len(history_dates)==len(history_prices), "Historical dates and prices are misaligned."
+          assert len(forecast_dates)>=1, "Forecast graph has no dates."
+          assert len(forecast_dates)==len(forecast_prices), "Forecast dates and prices are misaligned."
+          assert all(isinstance(v,(int,float)) and math.isfinite(v) for v in history_prices), "Historical prices contain invalid values."
+          assert all(isinstance(v,(int,float)) and math.isfinite(v) for v in forecast_prices), "Forecast prices contain invalid values."
+          model=result.get("model") or {}
+          ensemble=(model.get("ensemble") or {})
+          architecture=ensemble.get("architecture") or {}
+          assert model.get("model_version") in ("adaptive-ensemble-v4","adaptive-full-ensemble-v3"), model.get("model_version")
+          assert architecture.get("original_models",0)>=1, architecture
+          print("Chart-ready analysis verified:",
+                len(history_dates),"historical points,",
+                len(forecast_dates),"forecast points,",
+                "model",model["model_version"])
+          PY
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Analysis did not complete with chart-ready data inside 15 minutes."
+          exit 1
