@@ -416,6 +416,23 @@ Deno.serve(async (req) => {
     }
     if (path === "/api/watchlist" && req.method === "POST") return await watchlist(req, env);
     if (path === "/api/request-analysis" && req.method === "POST") return await requestAnalysis(req, env);
+    if (path === "/api/index-availability" && req.method === "GET") {
+      const ticker = String(url.searchParams.get("ticker") || "").trim().toUpperCase();
+      if (!validTicker(ticker)) return json({ error: "Enter a valid stock ticker." }, 400);
+      const definitions = [
+        { id: "FullIndex", label: "FullIndex", period: "10y", maxAge: 24 * 3600000, version: "adaptive-full-ensemble-v1" },
+        { id: "previewIndex", label: "PreviewIndex", period: "5y", maxAge: 8 * 3600000, version: "adaptive-ensemble-v2" }
+      ];
+      const indexes = [];
+      for (const item of definitions) {
+        const cutoff = new Date(Date.now() - item.maxAge).toISOString();
+        const row = await env.DB.prepare(
+          "SELECT indexed_at FROM market_index WHERE ticker=? AND period=? AND horizon=30 AND indexer=? AND indexed_at>=? AND result LIKE ? ORDER BY indexed_at DESC LIMIT 1"
+        ).bind(ticker, item.period, item.id, cutoff, "%" + item.version + "%").first();
+        if (row) indexes.push({ id: item.id, label: item.label, indexed_at: row.indexed_at });
+      }
+      return json({ ticker, indexes, available: indexes.map(item => item.id), checked_at: now() }, 200, { "Cache-Control": "no-store" });
+    }
     if (path === "/api/analysis-status" && req.method === "GET") {
       const id = url.searchParams.get("id") || "";
       if (!/^(?:[0-9a-f]{32}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/i.test(id)) return json({ error: "Invalid analysis ID." }, 400);
