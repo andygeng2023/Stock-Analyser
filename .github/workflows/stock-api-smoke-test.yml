@@ -74,3 +74,37 @@ jobs:
           print("Analysis job accepted:", data["id"], "status:", data["status"])
           PY
           test "$status" = "200" -o "$status" = "202"
+
+      - name: Verify job status and index availability contracts
+        env:
+          API_URL: https://nlaookgsiqojxejwvdsn.supabase.co/functions/v1/stock-analyser-api/api
+          API_KEY: sb_publishable_-Ty9nayZpJSDo9YwKVzEdw_dG5bD6Kz
+        run: |
+          JOB_ID=$(python -c "import json; print(json.load(open('analysis-request.json'))['id'])")
+          status=$(curl --silent --show-error --max-time 30 -o analysis-status.json -w '%{http_code}' \
+            -H "apikey: $API_KEY" -H "Accept: application/json" "$API_URL/analysis-status?id=$JOB_ID")
+          echo "Analysis status: HTTP $status"
+          python - <<'PY'
+          import json
+          with open("analysis-status.json") as f:
+              data = json.load(f)
+          assert data.get("status") in ("queued", "running", "completed", "failed"), data
+          assert isinstance(data.get("progress"), (int, float)), data
+          assert isinstance(data.get("stage"), str) and data["stage"], data
+          print("Job state:", data["status"], "progress:", data["progress"], "stage:", data["stage"])
+          PY
+          test "$status" = "200"
+
+          status=$(curl --silent --show-error --max-time 30 -o index-availability.json -w '%{http_code}' \
+            -H "apikey: $API_KEY" -H "Accept: application/json" "$API_URL/index-availability?ticker=AAPL")
+          echo "Index availability: HTTP $status"
+          python - <<'PY'
+          import json
+          with open("index-availability.json") as f:
+              data = json.load(f)
+          assert isinstance(data.get("indexes"), list), data
+          assert isinstance(data.get("available"), list), data
+          assert all(item.get("id") in ("previewIndex", "FullIndex") for item in data["indexes"]), data
+          print("Available index versions:", data["available"])
+          PY
+          test "$status" = "200"
