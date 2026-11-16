@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from .market_data import fetch_yahooquery_batch_history
 from .training import analyze_and_learn
 from .db import fetch_all
 
@@ -194,96 +193,56 @@ def _extract_frame(data, symbol):
     return close.astype(float), volume.astype(float)
 
 
-def _candidate_from_history(symbol, extracted):
-    if extracted is None:
-        return None
-    close, volume = extracted
-    if len(close) < 65:
-        return None
-    price = float(close.iloc[-1])
-    dollar_volume = float((close * volume).tail(20).mean())
-    if not math.isfinite(price) or price < 3 or dollar_volume < 2_000_000:
-        return None
-    ret_1m = float(close.iloc[-1] / close.iloc[-22] - 1)
-    ret_3m = float(close.iloc[-1] / close.iloc[-64] - 1)
-    volatility = float(close.pct_change().tail(60).std() * math.sqrt(252))
-    trend = float(close.tail(20).mean() / close.tail(60).mean() - 1)
-    if not all(math.isfinite(x) for x in (ret_1m, ret_3m, volatility, trend)):
-        return None
-    # Momentum/trend with a volatility penalty; this is only a coarse screen.
-    score = 0.40 * ret_3m + 0.25 * ret_1m + 0.20 * trend - 0.15 * volatility
-    return {
-        "ticker": symbol,
-        "price": round(price, 4),
-        "change_percent": round(float(close.pct_change().iloc[-1] * 100), 2),
-        "fast_score": score,
-        "return_1m": ret_1m,
-        "return_3m": ret_3m,
-        "volatility": volatility,
-        "dollar_volume": dollar_volume,
-    }
-
-
 def fast_filter(symbols, progress_callback=None):
-    """Rank the universe with yfinance batches and yahooquery fallback for gaps."""
+    """Rank a broad universe using price history only; no per-company info calls."""
     ranked = []
     chunk_size = 150
     total_batches = max(1, math.ceil(len(symbols) / chunk_size))
     for batch_number, start in enumerate(range(0, len(symbols), chunk_size), start=1):
         batch = symbols[start:start + chunk_size]
-        try:
-            data = yf.download(
-                tickers=" ".join(batch),
-                period="6mo",
-                interval="1d",
-                auto_adjust=True,
-                group_by="ticker",
-                threads=True,
-                progress=False,
-                timeout=45,
-            )
-        except Exception as exc:
-            print(f"yfinance batch {batch_number} failed; trying yahooquery: {str(exc)[:140]}")
-            data = pd.DataFrame()
-
-        missing_symbols = []
+        data = yf.download(
+            tickers=" ".join(batch),
+            period="6mo",
+            interval="1d",
+            auto_adjust=True,
+            group_by="ticker",
+            threads=True,
+            progress=False,
+            timeout=45,
+        )
         for symbol in batch:
             try:
                 extracted = _extract_frame(data, symbol)
-                candidate = _candidate_from_history(symbol, extracted)
-                if candidate is not None:
-                    ranked.append(candidate)
-                else:
-                    missing_symbols.append(symbol)
-            except Exception:
-                missing_symbols.append(symbol)
-
-        # Only symbols absent or invalid in the primary batch are sent to the
-        # secondary client, avoiding duplicate requests for healthy symbols.
-        if missing_symbols:
-            try:
-                fallback = fetch_yahooquery_batch_history(missing_symbols, period="6mo")
-            except Exception as exc:
-                print(f"yahooquery batch {batch_number} fallback failed: {str(exc)[:160]}")
-                fallback = {}
-            for symbol in missing_symbols:
-                try:
-                    candidate = _candidate_from_history(
-                        symbol,
-                        _extract_frame(fallback.get(symbol), symbol),
-                    )
-                    if candidate is not None:
-                        ranked.append(candidate)
-                except Exception:
+                if extracted is None:
                     continue
-
+                close, volume = extracted
+                price = float(close.iloc[-1])
+                dollar_volume = float((close * volume).tail(20).mean())
+                if not math.isfinite(price) or price < 3 or dollar_volume < 2_000_000:
+                    continue
+                ret_1m = float(close.iloc[-1] / close.iloc[-22] - 1)
+                ret_3m = float(close.iloc[-1] / close.iloc[-64] - 1)
+                volatility = float(close.pct_change().tail(60).std() * math.sqrt(252))
+                trend = float(close.tail(20).mean() / close.tail(60).mean() - 1)
+                if not all(math.isfinite(x) for x in (ret_1m, ret_3m, volatility, trend)):
+                    continue
+                # Momentum/trend with a volatility penalty; this is only a coarse screen.
+                score = 0.40 * ret_3m + 0.25 * ret_1m + 0.20 * trend - 0.15 * volatility
+                ranked.append({
+                    "ticker": symbol,
+                    "price": round(price, 4),
+                    "change_percent": round(float(close.pct_change().iloc[-1] * 100), 2),
+                    "fast_score": score,
+                    "return_1m": ret_1m,
+                    "return_3m": ret_3m,
+                    "volatility": volatility,
+                    "dollar_volume": dollar_volume,
+                })
+            except Exception:
+                continue
         if progress_callback:
             progress = 18 + int(42 * batch_number / total_batches)
-            progress_callback(
-                progress,
-                "Fast market filter",
-                f"Downloaded batch {batch_number}/{total_batches}; {len(ranked):,} stocks currently pass liquidity and history checks.",
-            )
+            progress_callback(progress, "Fast market filter", f"Downloaded batch {batch_number}/{total_batches}; {len(ranked):,} stocks currently pass liquidity and history checks.")
     ranked.sort(key=lambda item: item["fast_score"], reverse=True)
     return ranked, len(ranked)
 
