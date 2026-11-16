@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from app import market_data
+from app import market_data, scanner
 
 
 def _history(rows=120, start="2025-01-01"):
@@ -131,6 +131,25 @@ class MarketDataFallbackTests(unittest.TestCase):
         self.assertEqual(info["sector"], "Technology")
         self.assertEqual(provider, "yfinance+yahooquery")
         self.assertIs(returned_query, query)
+
+
+
+
+class ScannerFallbackTests(unittest.TestCase):
+    def test_market_scanner_falls_back_for_symbols_missing_from_yfinance_batch(self):
+        primary = pd.concat({"AAPL": _history(rows=70)}, axis=1)
+        fallback_frame = _history(rows=70)
+
+        with patch.object(scanner.yf, "download", return_value=primary), patch.object(
+            scanner,
+            "fetch_yahooquery_batch_history",
+            return_value={"MISS": fallback_frame},
+        ) as fallback:
+            ranked, count = scanner.fast_filter(["AAPL", "MISS"])
+
+        self.assertEqual(count, 2)
+        self.assertEqual({item["ticker"] for item in ranked}, {"AAPL", "MISS"})
+        fallback.assert_called_once_with(["MISS"], period="6mo")
 
 
 if __name__ == "__main__":
