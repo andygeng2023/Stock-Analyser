@@ -561,7 +561,7 @@ const TERMINAL_JOB_RETENTION_MS = 3 * 60 * 1000;
 let trackedJobs = loadTrackedJobs();
 let queueRefreshBusy = false;
 const locallyPollingJobIds = new Set();
-const isTerminalJob = job => ["completed", "failed"].includes(String(job?.status || "").toLowerCase());
+function isTerminalJob(job) { return ["completed", "failed"].includes(String(job?.status || "").toLowerCase()); }
 
 function loadTrackedJobs() {
   try {
@@ -1651,6 +1651,7 @@ async function openStockDetails(ticker, options = {}) {
   detailReturnScreen = options.returnScreen || (currentScreen === "detail" ? detailReturnScreen : currentScreen);
   $("ticker").value = symbol;
   switchScreen("detail");
+  $("detail-hard-rerun").disabled = false;
   $("results").hidden = true;
   $("search-progress").hidden = true;
   $("detail-index-choice").hidden = true;
