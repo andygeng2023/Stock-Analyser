@@ -2703,3 +2703,5 @@ html[data-theme="light"] .stock-risk-label.risk-higher,html[data-theme="light"] 
 .detail-index-choice-controls{display:flex;align-items:center;gap:8px}
 .detail-index-choice-controls button{white-space:nowrap}
 @media(max-width:600px){.detail-index-choice{align-items:flex-start;flex-direction:column}.detail-index-choice-controls{width:100%}.detail-index-choice-controls button{flex:1}}
+
+.detail-index-choice-controls button[aria-pressed="true"]{border-color:#79a4e8;background:rgba(121,164,232,.16);color:inherit}
