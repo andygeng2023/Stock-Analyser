@@ -105,6 +105,7 @@ def claim_next_job():
         if not selected:
             return None
         cur.execute("""UPDATE analysis_jobs SET status='running',attempts=attempts+1,
+                       progress=GREATEST(COALESCE(progress,0),1),stage='Starting worker',
                        error=NULL,updated_at=%s WHERE id=%s
                        RETURNING id,ticker,period,horizon,job_type,scan_source,save_to_indexer,
                                  status,attempts,progress,stage,created_at,updated_at""",
