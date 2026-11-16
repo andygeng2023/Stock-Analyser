@@ -482,7 +482,7 @@ def analyze_ticker(ticker,period="5y",horizon=30,progress_callback=None,learning
                 "sector":info.get("sector"),"industry":info.get("industry"),
             },
             "model":{
-                "model_version":"adaptive-full-ensemble-v1" if model_profile == "full" else "adaptive-ensemble-v2",
+                "model_version":"adaptive-full-ensemble-v3" if model_profile == "full" else "adaptive-ensemble-v4",
                 "model_profile":model_profile,
                 "accuracy_target_percent":70,
                 "model_family":f"ARIMA + {len(model_factories)}-model adaptive ML ensemble" + (" · extended history" if model_profile == "full" else ""),
