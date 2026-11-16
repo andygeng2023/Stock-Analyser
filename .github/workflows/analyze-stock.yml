@@ -1,5 +1,10 @@
 name: Analyse stock queue
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/worker.py"
+      - ".github/workflows/analyze-stock.yml"
   schedule:
     # Keep a worker available when the queue becomes active. Scheduled runs
     # wait behind a healthy worker and never cancel it.
