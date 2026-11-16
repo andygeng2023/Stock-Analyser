@@ -203,6 +203,9 @@ test("queue tracker initialises safely and keeps completed progress visible", ()
   assert.equal(jobs.length, 1);
   assert.equal(jobs[0].status, "running");
   assert.equal(jobs[0].progress, 38);
+  assert.match(getElement("global-queue-list").innerHTML, /Running · 38%/);
+  assert.match(getElement("global-queue-list").innerHTML, /Fitting models/);
+  assert.equal(getElement("global-queue-count").textContent, "1");
   context.__queue.updateTrackedJob("job-1", {
     status: "completed", progress: 100, stage: "Complete"
   });
@@ -210,6 +213,8 @@ test("queue tracker initialises safely and keeps completed progress visible", ()
   assert.equal(jobs.length, 1, "Completed jobs should remain in recent requests.");
   assert.equal(jobs[0].status, "completed");
   assert.equal(jobs[0].progress, 100);
+  assert.match(getElement("global-queue-list").innerHTML, /Complete · 100%/);
+  assert.equal(getElement("global-queue-count").textContent, "");
   assert.ok(Number.isFinite(jobs[0].finishedAt));
   assert.ok(storage.has("stock-analyser-active-jobs"));
 });
