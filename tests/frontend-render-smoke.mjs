@@ -141,3 +141,62 @@ test("market-card refresh never fans out one analysis request per visible card",
     /requestAnalysis\(ticker,\s*["']5y["'],\s*30,\s*["']analysis["'],\s*false,\s*false,\s*["']previewIndex["']\)/
   );
 });
+
+
+test("queue tracker initialises safely and keeps completed progress visible", () => {
+  const queueStart = appSource.indexOf('const QUEUE_KEY = "stock-analyser-active-jobs";');
+  const queueEnd = appSource.indexOf("\n\nfunction rows(obj)", queueStart);
+  assert.ok(queueStart >= 0 && queueEnd > queueStart, "The global queue module must exist.");
+  const queueSource = appSource.slice(queueStart, queueEnd);
+  const elements = new Map();
+  const getElement = id => {
+    if (!elements.has(id)) {
+      elements.set(id, {
+        id, hidden: true, textContent: "", innerHTML: "",
+        classList: { toggle() {} },
+        setAttribute() {},
+        querySelectorAll() { return []; }
+      });
+    }
+    return elements.get(id);
+  };
+  const storage = new Map();
+  const context = {
+    config: { apiBaseUrl: "" },
+    localStorage: {
+      getItem: key => storage.get(key) || null,
+      setItem: (key, value) => storage.set(key, value)
+    },
+    document: { addEventListener() {} },
+    Element: class Element {},
+    setInterval() {},
+    $: getElement,
+    esc: value => String(value ?? ""),
+    console
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    queueSource + "\nglobalThis.__queue = { trackJob, updateTrackedJob, getJobs: () => trackedJobs };",
+    context
+  );
+  context.__queue.trackJob({
+    id: "job-1", ticker: "AAPL", type: "analysis", status: "queued",
+    progress: 0, stage: "Waiting for a worker"
+  });
+  context.__queue.updateTrackedJob("job-1", {
+    status: "running", progress: 38, stage: "Fitting models"
+  });
+  let jobs = Array.from(context.__queue.getJobs());
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].status, "running");
+  assert.equal(jobs[0].progress, 38);
+  context.__queue.updateTrackedJob("job-1", {
+    status: "completed", progress: 100, stage: "Complete"
+  });
+  jobs = Array.from(context.__queue.getJobs());
+  assert.equal(jobs.length, 1, "Completed jobs should remain in recent requests.");
+  assert.equal(jobs[0].status, "completed");
+  assert.equal(jobs[0].progress, 100);
+  assert.ok(Number.isFinite(jobs[0].finishedAt));
+  assert.ok(storage.has("stock-analyser-active-jobs"));
+});
